@@ -1,15 +1,16 @@
 package com.voxymap.client.map;
 
-/** Chooses a global cut plane that removes only the Nether's top roof layer. */
+/** Chooses the lower edge of the Nether roof/anti-xray shell removed from the map. */
 public final class NetherRoofPolicy {
-    static final float ROOF_MARGIN = 8.0f;
+    static final float ROOF_MARGIN = 32.0f;
 
     private NetherRoofPolicy() {
     }
 
     /**
-     * Voxy stores exposed surfaces, so discarding the top roof geometry is enough to see through the
-     * solid ceiling volume. Keeping the plane near the logical ceiling preserves tall builds below it.
+     * Remote servers can leave several stacked LOD section caps below the literal bedrock layer.
+     * Removing complete quads in the upper 32 blocks clears those caps without fragment-slicing the
+     * anti-xray volume or flattening the map at the player's current height.
      */
     public static float cutoff(int minY, int logicalHeight) {
         // A datapack could keep the "minecraft:the_nether" id while shrinking logicalHeight below the

@@ -11,7 +11,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 ## Features
 
 - Full-screen Voxy terrain view opened with a configurable key, `M` by default.
-- Whole-quad Nether roof removal opens the bedrock shell without slicing anti-xray decoy LODs into a checkerboard.
+- Whole-quad Nether roof removal clears the upper 32-block bedrock/anti-xray shell without slicing decoy LODs into a checkerboard.
 - Mouse dragging, middle-button rotation, cursor-centered zoom, and smooth keyboard movement.
 - Exact player centering plus projected markers and adaptive facing indicators for nearby active players.
 - Optional VanillaSquad global player markers with compact skin heads and clustered territory outlines.
