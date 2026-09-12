@@ -19,6 +19,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 - Stable near terrain: while the map is open, Voxy's cached LODs fill its normal player-centered hand-off zone instead of using Sodium's angle-dependent real-camera visibility set.
 - Optional singleplayer pause and adjustable camera speed.
 - Optional handoff to Xaero's World Map with a return button.
+- Optional HappyGhastScanner route overlay: while that mod is actively scanning, its expanding square-spiral path is drawn on the map with lap numbers, so you can tell exactly which lap to resume from without re-covering already-loaded terrain.
 - English, Russian, Spanish (Spain and Mexico), and Polish translations.
 
 ## Requirements
@@ -29,7 +30,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 - Fabric API.
 - Voxy `0.2.18-beta` exactly. The cutaway shader integration targets this internal shader layout.
 
-Iris and Xaero's World Map are optional integrations. The mod is client-only and does not need to be installed on the server.
+Iris, Xaero's World Map, and HappyGhastScanner are optional integrations. The mod is client-only and does not need to be installed on the server.
 
 ## Controls
 
@@ -63,13 +64,14 @@ The normal non-sources JAR is written to `build/libs/voxy-map-<version>.jar`.
 - Active-player facing indicators collapse to short direction ticks in dense groups. Hovering a marker restores its complete cone and draws that marker last.
 - VoxyMap only displays terrain already available to Voxy; it does not load chunks or reveal unexplored server data.
 - Optional distant VanillaSquad markers come from that server's public web-map endpoints and are disabled by default.
+- The HappyGhastScanner route overlay only draws while that mod reports an active or paused scan; it never appears if the mod is absent, idle, or finished, and it only shows a bounded window of laps around the scanner's current position, not the entire route from the start.
 - Build and package checks do not replace an in-game test with the exact Voxy, Iris, Sodium, and Xaero versions in the target profile.
 
 ## Русский
 
 VoxyMap LTS — поддерживаемый клиентский форк 3D Maps Voxy Addon для Minecraft 26.2. Он открывает полноэкранную трёхмерную карту на данных LOD из Voxy.
 
-Карта открывается клавишей `M`; назначение можно изменить в стандартных настройках управления. ЛКМ перемещает карту, СКМ поворачивает камеру, колесо меняет масштаб, `W/A/S/D` двигают камеру, `Shift` ускоряет, `C` точно возвращает центр к игроку. На карте отображаются отдельная отметка текущего игрока и именные отметки других загруженных игроков. В ближней зоне карта использует уже кэшированные LOD Voxy, поэтому её геометрия не зависит от направления обычной камеры игрока и не вызывает дополнительную загрузку чанков. В Нижнем мире глобально скрывается только верхний слой крыши, поэтому высокие постройки под ней сохраняются целиком; локальная маска дополнительно вскрывает потолок текущего помещения. В настройках можно включить срез замкнутых помещений, удалённых игроков VanillaSquad и контуры территорий по флагам. Настройки сохраняются в `config/voxymap.properties`, рядом хранится резервная копия.
+Карта открывается клавишей `M`; назначение можно изменить в стандартных настройках управления. ЛКМ перемещает карту, СКМ поворачивает камеру, колесо меняет масштаб, `W/A/S/D` двигают камеру, `Shift` ускоряет, `C` точно возвращает центр к игроку. На карте отображаются отдельная отметка текущего игрока и именные отметки других загруженных игроков. В ближней зоне карта использует уже кэшированные LOD Voxy, поэтому её геометрия не зависит от направления обычной камеры игрока и не вызывает дополнительную загрузку чанков. В Нижнем мире глобально скрывается только верхний слой крыши, поэтому высокие постройки под ней сохраняются целиком; локальная маска дополнительно вскрывает потолок текущего помещения. В настройках можно включить срез замкнутых помещений, удалённых игроков VanillaSquad и контуры территорий по флагам. Если установлен мод HappyGhastScanner и он сейчас активно сканирует местность, на карте появляется опция показа его маршрута — расширяющейся квадратной спирали с номерами витков, чтобы сразу понять, с какого витка продолжать облёт. Настройки сохраняются в `config/voxymap.properties`, рядом хранится резервная копия.
 
 ## Credits and license
 

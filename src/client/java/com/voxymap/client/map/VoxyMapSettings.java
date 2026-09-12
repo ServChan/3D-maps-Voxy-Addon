@@ -23,6 +23,7 @@ public final class VoxyMapSettings {
     private static boolean roomCutawayEnabled = true;
     private static boolean vanillaSquadPlayersEnabled = false;
     private static boolean vanillaSquadFlagsEnabled = false;
+    private static boolean ghastScannerRouteEnabled = true;
 
     private VoxyMapSettings() {
     }
@@ -45,6 +46,7 @@ public final class VoxyMapSettings {
         roomCutawayEnabled = readBoolean(properties.getProperty("roomCutawayEnabled"), roomCutawayEnabled);
         vanillaSquadPlayersEnabled = readBoolean(properties.getProperty("vanillaSquadPlayersEnabled"), vanillaSquadPlayersEnabled);
         vanillaSquadFlagsEnabled = readBoolean(properties.getProperty("vanillaSquadFlagsEnabled"), vanillaSquadFlagsEnabled);
+        ghastScannerRouteEnabled = readBoolean(properties.getProperty("ghastScannerRouteEnabled"), ghastScannerRouteEnabled);
     }
 
     public static void save() {
@@ -54,6 +56,7 @@ public final class VoxyMapSettings {
         properties.setProperty("roomCutawayEnabled", Boolean.toString(roomCutawayEnabled));
         properties.setProperty("vanillaSquadPlayersEnabled", Boolean.toString(vanillaSquadPlayersEnabled));
         properties.setProperty("vanillaSquadFlagsEnabled", Boolean.toString(vanillaSquadFlagsEnabled));
+        properties.setProperty("ghastScannerRouteEnabled", Boolean.toString(ghastScannerRouteEnabled));
 
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
@@ -126,6 +129,17 @@ public final class VoxyMapSettings {
     public static void toggleVanillaSquadFlags() {
         load();
         vanillaSquadFlagsEnabled = !vanillaSquadFlagsEnabled;
+        save();
+    }
+
+    public static boolean ghastScannerRouteEnabled() {
+        load();
+        return ghastScannerRouteEnabled;
+    }
+
+    public static void toggleGhastScannerRoute() {
+        load();
+        ghastScannerRouteEnabled = !ghastScannerRouteEnabled;
         save();
     }
 

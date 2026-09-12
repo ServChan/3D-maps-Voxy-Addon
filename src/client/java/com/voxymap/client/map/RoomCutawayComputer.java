@@ -76,6 +76,7 @@ public final class RoomCutawayComputer {
         private int queueTail;
         private int visitedCount;
         private boolean truncated;
+        private boolean seeded;
         private Result result;
 
         private Search(int feetX, int feetY, int feetZ, boolean retainVerifiedPartial) {
@@ -83,8 +84,6 @@ public final class RoomCutawayComputer {
             this.feetY = feetY;
             this.feetZ = feetZ;
             this.retainVerifiedPartial = retainVerifiedPartial;
-            seed(feetX, feetY, feetZ);
-            seed(feetX, feetY + 1, feetZ);
         }
 
         /** Processes at most {@code nodeBudget} queued cells and returns whether the scan finished. */
@@ -94,6 +93,19 @@ public final class RoomCutawayComputer {
             }
             if (nodeBudget <= 0) {
                 return false;
+            }
+
+            if (!seeded) {
+                seeded = true;
+                // The player's own position must pass through the same classifier as every other
+                // cell: never assume it is open air just because the player appears to stand there.
+                if (!seedFeet(classifier, feetX, feetY, feetZ, true)) {
+                    return true;
+                }
+                seedFeet(classifier, feetX, feetY + 1, feetZ, false);
+                if (result != null) {
+                    return true;
+                }
             }
 
             int processed = 0;
@@ -168,13 +180,42 @@ public final class RoomCutawayComputer {
                     : Result.OPEN;
         }
 
-        private void seed(int x, int y, int z) {
+        /**
+         * Classifies and seeds a starting cell (the player's feet, or the headroom cell above them)
+         * through the same classifier as every other cell in the fill, since a stale or clipped
+         * position must never be assumed to be open air. When {@code required} is true, a non-passable
+         * result means the search has no valid starting point at all: {@link #result} is finalized and
+         * {@code false} is returned so the caller stops immediately. When {@code required} is false, a
+         * blocked cell is simply recorded as a boundary (normal ceiling directly above the player) and
+         * an unknown cell is handled exactly like any other cell hit by the main loop.
+         */
+        private boolean seedFeet(CellClassifier classifier, int x, int y, int z, boolean required) {
             int index = index(x, y, z, feetX, feetY, feetZ);
-            if (cells[index] == 0) {
-                cells[index] = REACHABLE;
-                visitedCount++;
-                enqueue(x, y, z);
+            if (cells[index] != 0) {
+                return true;
             }
+            cells[index] = SEEN;
+            int state = classifier.classify(x, y, z);
+            if (state == UNKNOWN) {
+                if (!required && retainVerifiedPartial) {
+                    truncated = true;
+                    return true;
+                }
+                finishUnenclosed();
+                return false;
+            }
+            if (state == BLOCKED) {
+                cells[index] = VERIFIED_BLOCKED;
+                if (required) {
+                    finishUnenclosed();
+                    return false;
+                }
+                return true;
+            }
+            cells[index] = REACHABLE;
+            visitedCount++;
+            enqueue(x, y, z);
+            return true;
         }
 
         private void enqueue(int x, int y, int z) {
@@ -249,6 +290,29 @@ public final class RoomCutawayComputer {
                 return NO_CEILING;
             }
             return topY[gx][gz];
+        }
+
+        /**
+         * Content equality, not identity: every completed search allocates a fresh {@link Result}
+         * even when the room's shape hasn't changed, so callers that only want to re-upload the GPU
+         * texture on an actual change (e.g. the periodic safety-net recompute of an unchanged room)
+         * must compare by value.
+         */
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Result result)) {
+                return false;
+            }
+            return enclosed == result.enclosed && minX == result.minX && minZ == result.minZ
+                    && java.util.Arrays.deepEquals(topY, result.topY);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(enclosed, minX, minZ, java.util.Arrays.deepHashCode(topY));
         }
     }
 }

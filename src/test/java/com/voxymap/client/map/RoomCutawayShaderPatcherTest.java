@@ -3,6 +3,7 @@ package com.voxymap.client.map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -37,6 +38,16 @@ class RoomCutawayShaderPatcherTest {
     void rejectsChangedVoxyShaderLayoutInsteadOfSilentlyProducingWrongGeometry() {
         assertThrows(IllegalStateException.class, () ->
                 RoomCutawayShaderPatcher.patch("voxy:lod/gl46/quads3.vert", "void main() {}"));
+    }
+
+    @Test
+    void patchSafelyDisablesTheFeatureInsteadOfCrashingOnAnIncompatibleShader() {
+        String source = "void main() {}";
+
+        String result = RoomCutawayShaderPatcher.patchSafely("voxy:lod/gl46/quads3.vert", source);
+
+        assertEquals(source, result);
+        assertFalse(RoomCutawayShaderPatcher.isSupported());
     }
 
     @Test

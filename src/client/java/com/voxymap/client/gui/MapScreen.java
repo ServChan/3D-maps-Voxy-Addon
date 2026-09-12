@@ -1,12 +1,14 @@
 package com.voxymap.client.gui;
 
 import com.voxymap.client.VoxyMapClient;
+import com.voxymap.client.integration.HappyGhastScannerBridge;
 import com.voxymap.client.integration.VanillaSquadFlagMapBridge;
 import com.voxymap.client.integration.VanillaSquadPlayerMapBridge;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
 import com.voxymap.client.map.PlayerViewConeGeometry;
 import com.voxymap.client.map.RoomCutawayController;
+import com.voxymap.client.map.SpiralRouteGeometry;
 import com.voxymap.client.map.VoxyBridge;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapGuiRenderer;
@@ -37,6 +39,10 @@ public class MapScreen extends Screen {
     private static final double MAX_DRAG_STEP_BLOCKS = 1536.0;
     private static final double PLAYER_VIEW_CONE_HALF_ANGLE = 32.0;
     private static final double PLAYER_VIEW_CONE_SCREEN_LENGTH = 34.0;
+    // 4 segments per lap: 24 back / 16 ahead covers ~6 already-flown and ~4 upcoming laps around the
+    // scanner's current position, which is the stretch relevant to picking a lap to resume from.
+    private static final int GHAST_ROUTE_LOOKBACK_SEGMENTS = 24;
+    private static final int GHAST_ROUTE_LOOKAHEAD_SEGMENTS = 16;
     private static final double PLAYER_VIEW_CONE_CROWD_DISTANCE = 52.0;
     private static final double PLAYER_MARKER_HOVER_DISTANCE = 12.0;
     private double viewCenterX;
@@ -56,6 +62,7 @@ public class MapScreen extends Screen {
     private long lastFrameNanos = 0L;
     private long openedAtNanos = 0L;
     private boolean openLogged = false;
+    private boolean firstInitDone = false;
     private boolean xaeroTransitionActive = false;
     private long xaeroTransitionStartedAt = 0L;
     private int xaeroButtonX = -1;
@@ -80,6 +87,7 @@ public class MapScreen extends Screen {
     private int cutawayRowY = -1;
     private int vanillaSquadRowY = -1;
     private int vanillaSquadFlagsRowY = -1;
+    private int ghastScannerRowY = -1;
     private static final int SETTINGS_ROW_HEIGHT = 24;
     private static final int SPEED_BUTTON_SIZE = 18;
     private static final int HUD_MARGIN = 12;
@@ -94,17 +102,24 @@ public class MapScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        openedAtNanos = System.nanoTime();
-        lastFrameNanos = 0L;
-        if (minecraft.player != null) {
-            centerOnPlayer();
+        // Vanilla replays init() on this same screen instance for a window resize, GUI-scale change,
+        // or alt-tab, not just on first open. Only the very first call should reset the opening
+        // animation, recenter the view, and (re)open the map renderer - otherwise every resize
+        // restarts the fade-in and snaps the view back to the player, discarding the user's pan/zoom.
+        if (!firstInitDone) {
+            firstInitDone = true;
+            openedAtNanos = System.nanoTime();
+            lastFrameNanos = 0L;
+            if (minecraft.player != null) {
+                centerOnPlayer();
+            }
+            VoxyMapGuiRenderer.open(minecraft);
         }
         capturePlayerMarkers();
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
         RoomCutawayController.tick(minecraft);
-        VoxyMapGuiRenderer.open(minecraft);
         if (!openLogged) {
             VoxyMapClient.LOGGER.info("[VoxyMap] Map opened.");
             openLogged = true;
@@ -195,9 +210,9 @@ public class MapScreen extends Screen {
         double forwardZ = Math.cos(viewYaw) * Math.cos(pitch);
         double rightX = Math.cos(viewYaw);
         double rightZ = Math.sin(viewYaw);
-        double upX = Math.sin(viewYaw) * Math.sin(pitch);
+        double upX = -Math.sin(viewYaw) * Math.sin(pitch);
         double upY = Math.cos(pitch);
-        double upZ = -Math.cos(viewYaw) * Math.sin(pitch);
+        double upZ = Math.cos(viewYaw) * Math.sin(pitch);
 
         double tanY = Math.tan(Math.toRadians(VoxyMapCameraController.fov()) * 0.5);
         double tanX = tanY * width / (double) height;
@@ -351,6 +366,8 @@ public class MapScreen extends Screen {
             VoxyMapSettings.toggleVanillaSquadPlayers();
         } else if (isInsideSettingsRow(mouseX, mouseY, vanillaSquadFlagsRowY)) {
             VoxyMapSettings.toggleVanillaSquadFlags();
+        } else if (isInsideSettingsRow(mouseX, mouseY, ghastScannerRowY)) {
+            VoxyMapSettings.toggleGhastScannerRoute();
         }
         return true;
     }
@@ -418,6 +435,7 @@ public class MapScreen extends Screen {
 
     private void drawWorldViewerOverlay(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         drawFlagMarkers(g);
+        drawGhastScannerRoute(g);
         drawPlayerMarkers(g, mouseX, mouseY);
 
         int slide = (int) ((1.0 - openingProgress()) * 28.0);
@@ -512,21 +530,34 @@ public class MapScreen extends Screen {
         String dimensionId = minecraft.level.dimension().identifier().toString();
         for (VanillaSquadFlagMapBridge.Territory territory : VanillaSquadFlagMapBridge.territoriesInDimension(dimensionId)) {
             List<double[]> vertices = territory.outline();
-            if (vertices.size() < 2) {
+            if (vertices.isEmpty()) {
                 continue;
             }
 
-            ScreenPoint[] outline = new ScreenPoint[vertices.size()];
-            for (int i = 0; i < vertices.size(); i++) {
-                double[] vertex = vertices.get(i);
-                outline[i] = projectToScreen(vertex[0], viewCenterY, vertex[1]);
-            }
-            boolean anyVisible = false;
-            for (int i = 0; i < outline.length; i++) {
-                ScreenPoint a = outline[i];
-                ScreenPoint b = outline[(i + 1) % outline.length];
-                if (a != null && b != null) {
-                    anyVisible |= drawDashedLine(g, a.x, a.y, b.x, b.y, territory.color());
+            boolean anyVisible;
+            if (vertices.size() == 1) {
+                // A named territory with a single banner has no outline to draw, but it must still
+                // show up as a marker - otherwise a lone named flag silently vanishes from the map.
+                double[] vertex = vertices.get(0);
+                ScreenPoint point = projectToScreen(vertex[0], viewCenterY, vertex[1]);
+                anyVisible = point != null;
+                if (anyVisible) {
+                    drawDiamond(g, point.x, point.y, 5, 0xEE0A0A12);
+                    drawDiamond(g, point.x, point.y, 3, territory.color());
+                }
+            } else {
+                ScreenPoint[] outline = new ScreenPoint[vertices.size()];
+                for (int i = 0; i < vertices.size(); i++) {
+                    double[] vertex = vertices.get(i);
+                    outline[i] = projectToScreen(vertex[0], viewCenterY, vertex[1]);
+                }
+                anyVisible = false;
+                for (int i = 0; i < outline.length; i++) {
+                    ScreenPoint a = outline[i];
+                    ScreenPoint b = outline[(i + 1) % outline.length];
+                    if (a != null && b != null) {
+                        anyVisible |= drawDashedLine(g, a.x, a.y, b.x, b.y, territory.color());
+                    }
                 }
             }
             if (!anyVisible) {
@@ -545,6 +576,67 @@ public class MapScreen extends Screen {
             g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, territory.color());
             g.text(minecraft.font, territory.name(), labelX + 4, labelY + 2, 0xFFE9F2FF);
         }
+    }
+
+    /**
+     * Draws HappyGhastScanner's expanding square-spiral scan route as a two-tone polyline - already-
+     * flown segments dim, upcoming segments bright - plus a lap number at the start of each lap visible
+     * in the window and a highlighted marker at the scanner's current waypoint, so the exact point to
+     * resume from is readable against terrain already rendered on the map.
+     */
+    private void drawGhastScannerRoute(GuiGraphicsExtractor g) {
+        if (!VoxyMapCameraController.isActive() || !VoxyMapSettings.ghastScannerRouteEnabled()) {
+            return;
+        }
+        HappyGhastScannerBridge.Route route = HappyGhastScannerBridge.currentRoute();
+        if (route == null) {
+            return;
+        }
+
+        int firstSegment = Math.max(0, route.currentSegment() - GHAST_ROUTE_LOOKBACK_SEGMENTS);
+        int lastSegment = route.currentSegment() + GHAST_ROUTE_LOOKAHEAD_SEGMENTS;
+        List<SpiralRouteGeometry.Waypoint> points = SpiralRouteGeometry.pathSegment(
+                route.centerX(), route.centerZ(), route.step(), firstSegment, lastSegment);
+
+        ScreenPoint previous = projectToScreen(points.get(0).x(), viewCenterY, points.get(0).z());
+        for (int i = 1; i < points.size(); i++) {
+            int segment = firstSegment + i - 1;
+            SpiralRouteGeometry.Waypoint waypoint = points.get(i);
+            ScreenPoint current = projectToScreen(waypoint.x(), viewCenterY, waypoint.z());
+            if (previous != null && current != null) {
+                int color = segment < route.currentSegment() ? 0x996E88A8 : 0xFFFFC94D;
+                drawSolidLine(g, previous.x, previous.y, current.x, current.y, color);
+            }
+            if (current != null && segment % 4 == 0 && segment != route.currentSegment()) {
+                drawGhastLapLabel(g, current, waypoint.lap(), false);
+            }
+            previous = current;
+        }
+
+        SpiralRouteGeometry.Waypoint currentWaypoint =
+                SpiralRouteGeometry.waypointAt(route.centerX(), route.centerZ(), route.step(), route.currentSegment());
+        ScreenPoint here = projectToScreen(currentWaypoint.x(), viewCenterY, currentWaypoint.z());
+        if (here != null) {
+            drawDiamond(g, here.x, here.y, 6, 0xEE0A0A12);
+            drawDiamond(g, here.x, here.y, 4, 0xFFFFC94D);
+            drawGhastLapLabel(g, here, route.currentLap(), true);
+        }
+    }
+
+    private void drawGhastLapLabel(GuiGraphicsExtractor g, ScreenPoint at, int lap, boolean current) {
+        if (at.x < 6 || at.x >= width - 6 || at.y < 12 || at.y >= height - 6) {
+            return;
+        }
+        String text = current
+                ? Component.translatable("overlay.voxymap.ghastscanner.lap", lap).getString()
+                : Integer.toString(lap);
+        int labelWidth = minecraft.font.width(text) + (current ? 8 : 6);
+        int labelX = at.x - labelWidth / 2;
+        int labelY = at.y - (current ? 20 : 16);
+        int accent = current ? 0xFFFFC94D : 0xFF6E88A8;
+        g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, 0xCC030914);
+        g.fill(labelX, labelY, labelX + 2, labelY + 11, accent);
+        g.text(minecraft.font, text, labelX + 4, labelY + 2, current ? 0xFFFFE9B8 : 0xFFC7D8EA);
     }
 
     private boolean drawDashedLine(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int color) {
@@ -568,7 +660,8 @@ public class MapScreen extends Screen {
         return true;
     }
 
-    /** Liang-Barsky clipping bounds work per edge to at most the screen diagonal. */
+    /** Liang-Barsky clipping bounds work per edge to at most the screen diagonal - for two endpoints
+     * that both faithfully represent where their 3D point sits relative to the screen plane. */
     private double[] clipLineToViewport(double x1, double y1, double x2, double y2) {
         double dx = x2 - x1;
         double dy = y2 - y1;
@@ -590,7 +683,23 @@ public class MapScreen extends Screen {
                 t1 = Math.min(t1, ratio);
             }
         }
-        return new double[]{x1 + t0 * dx, y1 + t0 * dy, x1 + t1 * dx, y1 + t1 * dy};
+        double clippedX1 = x1 + t0 * dx;
+        double clippedY1 = y1 + t0 * dy;
+        double clippedX2 = x1 + t1 * dx;
+        double clippedY2 = y1 + t1 * dy;
+        // A world point almost edge-on to the camera (depth just past the near-plane cutoff) still
+        // projects to a technically finite screen coordinate, just a wildly wrong one - projection is
+        // only meaningful for points in front of the camera, and 2D-clipping an already-bad coordinate
+        // cannot recover that. Such a point can still fall inside the padded rectangle above and pass
+        // every check, producing a "clipped" segment that streaks across (and past) the whole screen.
+        // No legitimate on-screen line needs to be longer than a couple of screen diagonals; a fill
+        // loop stepping across one this long - times every such segment drawn that frame - is a severe,
+        // silent frame-time hit rather than the outright freeze an unbounded coordinate would cause.
+        double maxSpan = 2.0 * Math.hypot(width, height) + 64.0;
+        if (Math.abs(clippedX2 - clippedX1) > maxSpan || Math.abs(clippedY2 - clippedY1) > maxSpan) {
+            return null;
+        }
+        return new double[]{clippedX1, clippedY1, clippedX2, clippedY2};
     }
 
     private void drawPlayerMarkers(GuiGraphicsExtractor g, int mouseX, int mouseY) {
@@ -770,7 +879,16 @@ public class MapScreen extends Screen {
         if (!Double.isFinite(screenX) || !Double.isFinite(screenY)) {
             return null;
         }
-        return new ScreenPoint((int) Math.round(screenX), (int) Math.round(screenY));
+        // A point almost edge-on to the camera (depth just above the 0.1 cutoff) can still project to
+        // an astronomically large but finite pixel coordinate. Math.round(double) returns a long, and
+        // narrowing that to int silently wraps around instead of clamping, turning a far off-screen
+        // point into a garbage coordinate that can still look like it is inside the viewport to the
+        // line clipper - producing clipped segments hundreds of millions of pixels "long" and freezing
+        // the per-pixel fill loop that draws them. Clamp far outside any real screen size first so the
+        // narrowing conversion is always exact.
+        double clampedX = Mth.clamp(screenX, -1.0E6, 1.0E6);
+        double clampedY = Mth.clamp(screenY, -1.0E6, 1.0E6);
+        return new ScreenPoint((int) Math.round(clampedX), (int) Math.round(clampedY));
     }
 
     private static void drawDiamond(GuiGraphicsExtractor g, int centerX, int centerY, int radius, int color) {
@@ -807,8 +925,9 @@ public class MapScreen extends Screen {
     }
 
     private void drawSettingsPanel(GuiGraphicsExtractor g, int footerTop) {
+        boolean showGhastScannerRow = HappyGhastScannerBridge.isAvailable();
         settingsPanelW = Math.min(360, width - HUD_MARGIN * 2);
-        settingsPanelH = 166;
+        settingsPanelH = showGhastScannerRow ? 190 : 166;
         settingsPanelX = width - settingsPanelW - HUD_MARGIN;
         settingsPanelY = Math.max(HUD_MARGIN, footerTop - settingsPanelH - HUD_GAP);
         drawGlassPanel(g, settingsPanelX, settingsPanelY, settingsPanelW, settingsPanelH, 0xDD030914, 0xFF3BA4FF);
@@ -826,6 +945,12 @@ public class MapScreen extends Screen {
         drawSettingValue(g, x, cutawayRowY, "screen.voxymap.settings.cutaway", onOff(VoxyMapSettings.roomCutawayEnabled()), 2);
         drawSettingValue(g, x, vanillaSquadRowY, "screen.voxymap.settings.vanillasquad", onOff(VoxyMapSettings.vanillaSquadPlayersEnabled()), 3);
         drawSettingValue(g, x, vanillaSquadFlagsRowY, "screen.voxymap.settings.vanillasquadflags", onOff(VoxyMapSettings.vanillaSquadFlagsEnabled()), 4);
+        if (showGhastScannerRow) {
+            ghastScannerRowY = y + 140;
+            drawSettingValue(g, x, ghastScannerRowY, "screen.voxymap.settings.ghastscanner", onOff(VoxyMapSettings.ghastScannerRouteEnabled()), 5);
+        } else {
+            ghastScannerRowY = -1;
+        }
     }
 
     private void drawSettingValue(GuiGraphicsExtractor g, int x, int y, String labelKey, String value, int row) {
@@ -848,6 +973,8 @@ public class MapScreen extends Screen {
             valueColor = VoxyMapSettings.vanillaSquadPlayersEnabled() ? 0xFF55FF55 : 0xFFFF5555;
         } else if (row == 4) {
             valueColor = VoxyMapSettings.vanillaSquadFlagsEnabled() ? 0xFF55FF55 : 0xFFFF5555;
+        } else if (row == 5) {
+            valueColor = VoxyMapSettings.ghastScannerRouteEnabled() ? 0xFF55FF55 : 0xFFFF5555;
         } else {
             valueColor = 0xFFFFFFFF;
         }

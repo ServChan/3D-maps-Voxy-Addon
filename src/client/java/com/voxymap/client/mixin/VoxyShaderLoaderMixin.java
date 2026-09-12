@@ -11,6 +11,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class VoxyShaderLoaderMixin {
     @Inject(method = "parse", at = @At("RETURN"), cancellable = true)
     private static void voxymap$addRoomCutaway(String resource, CallbackInfoReturnable<String> cir) {
-        cir.setReturnValue(RoomCutawayShaderPatcher.patch(resource, cir.getReturnValue()));
+        cir.setReturnValue(RoomCutawayShaderPatcher.patchSafely(resource, cir.getReturnValue()));
     }
 }

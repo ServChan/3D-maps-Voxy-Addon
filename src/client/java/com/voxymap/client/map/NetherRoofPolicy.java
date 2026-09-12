@@ -12,6 +12,9 @@ public final class NetherRoofPolicy {
      * solid ceiling volume. Keeping the plane near the logical ceiling preserves tall builds below it.
      */
     public static float cutoff(int minY, int logicalHeight) {
-        return minY + logicalHeight - ROOF_MARGIN;
+        // A datapack could keep the "minecraft:the_nether" id while shrinking logicalHeight below the
+        // roof margin. Without this floor the cut plane would fall below minY and remove the entire
+        // dimension instead of just its ceiling.
+        return Math.max(minY, minY + logicalHeight - ROOF_MARGIN);
     }
 }

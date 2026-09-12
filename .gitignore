@@ -3,4 +3,5 @@ build/
 run/
 config/
 exports/
+logs/
 *.log

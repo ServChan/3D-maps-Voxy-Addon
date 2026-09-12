@@ -1,5 +1,7 @@
 package com.voxymap.client.map;
 
+import com.voxymap.client.VoxyMapClient;
+
 /**
  * Patches Voxy's native LOD shaders with a global horizontal cut plane and an optional, more precise
  * local room mask. In the Nether the global plane removes only the top roof layer across the whole
@@ -52,7 +54,30 @@ public final class RoomCutawayShaderPatcher {
                     }
                 }""".formatted(RoomCutawayComputer.GRID_SIZE);
 
+    private static volatile boolean unsupported = false;
+
     private RoomCutawayShaderPatcher() {
+    }
+
+    /** Whether the shaders were successfully patched; false if a Voxy update changed their layout. */
+    public static boolean isSupported() {
+        return !unsupported;
+    }
+
+    /**
+     * Same as {@link #patch}, but never throws: a Voxy update that changes the shader layout must
+     * disable the room-cutaway feature and let the rest of Voxy keep loading, not crash shader
+     * compilation for the whole client.
+     */
+    public static String patchSafely(String resource, String source) {
+        try {
+            return patch(resource, source);
+        } catch (IllegalStateException exception) {
+            unsupported = true;
+            VoxyMapClient.LOGGER.warn(
+                    "[VoxyMap] Voxy shader layout changed; disabling the room-cutaway feature.", exception);
+            return source;
+        }
     }
 
     public static String patch(String resource, String source) {

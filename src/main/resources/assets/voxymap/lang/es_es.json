@@ -12,6 +12,7 @@
   "overlay.voxymap.xaero": "Mapa 2D de Xaero",
   "overlay.voxymap.xaero.transition": "Abriendo Xaero World Map...",
   "overlay.voxymap.return_3d": "VoxyMap 3D",
+  "overlay.voxymap.ghastscanner.lap": "Vuelta #%d",
   "overlay.voxymap.settings": "Ajustes",
   "overlay.voxymap.key.drag.button": "Clic izq.",
   "overlay.voxymap.key.drag": "arrastrar",
@@ -33,6 +34,7 @@
   "screen.voxymap.settings.cutaway": "Revelar salas/cuevas",
   "screen.voxymap.settings.vanillasquad": "Jugadores de VanillaSquad",
   "screen.voxymap.settings.vanillasquadflags": "Banderas de VanillaSquad",
+  "screen.voxymap.settings.ghastscanner": "Ruta de escaneo del ghast",
   "screen.voxymap.settings.on": "Activado",
   "screen.voxymap.settings.off": "Desactivado"
 }

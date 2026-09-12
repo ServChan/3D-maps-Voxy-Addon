@@ -124,6 +124,36 @@ class RoomCutawayComputerTest {
     }
 
     @Test
+    void unknownDataAtThePlayersOwnFeetNeverSeedsTheFillAsOpenAir() {
+        // The player's reported position sits in what would otherwise be a small enclosed room, but
+        // the client has no reliable data for that exact cell (e.g. a teleport landed just ahead of
+        // the chunk data, or a clipped/stale position). The seed cell must go through the same
+        // classifier as every other cell: it must not be silently assumed passable, or an unverified
+        // starting point could still expand into a "confirmed" cutaway.
+        RoomCutawayComputer.Result result = RoomCutawayComputer.compute(0, 0, 0, (x, y, z) -> {
+            if (x == 0 && y == 0 && z == 0) {
+                return RoomCutawayComputer.UNKNOWN;
+            }
+            return passable(x >= -1 && x <= 1 && z >= -1 && z <= 1 && y >= 0 && y <= 2);
+        });
+
+        assertFalse(result.hasCutaway());
+        assertFalse(result.enclosed);
+    }
+
+    @Test
+    void blockedHeadroomAboveThePlayerIsARoofNotABoundaryHit() {
+        // The cell directly above the player's feet (the "headroom" seed) is solid - a perfectly
+        // normal low ceiling - and must not be treated as an unverified boundary. The room is still
+        // enclosed and its ceiling is the floor the player is standing on.
+        RoomCutawayComputer.Result result = RoomCutawayComputer.compute(0, 0, 0, (x, y, z) ->
+                passable(x >= -1 && x <= 1 && z >= -1 && z <= 1 && y == 0));
+
+        assertTrue(result.enclosed);
+        assertEquals(0, result.ceilingAt(0, 0));
+    }
+
+    @Test
     void incrementalSearchHonorsItsPerTickNodeBudget() {
         RoomCutawayComputer.Search search = RoomCutawayComputer.start(0, 0, 0);
 

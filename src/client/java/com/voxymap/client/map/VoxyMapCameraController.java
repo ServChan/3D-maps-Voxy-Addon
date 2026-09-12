@@ -28,7 +28,7 @@ public final class VoxyMapCameraController {
         double desiredRange = Mth.clamp(blocksPerPixel * 210.0, 64.0, 8192.0);
         double range;
         if (endDimension) {
-            pitchDegrees = Mth.clamp((float) (28.0 + pitchControl * 34.0), 30.0f, 62.0f);
+            pitchDegrees = Mth.clamp((float) (30.0 + pitchControl * 32.0), 30.0f, 62.0f);
             range = Math.max(512.0, desiredRange);
             fov = Mth.clamp((float) (70.0 * desiredRange / range), 14.0f, 70.0f);
         } else {

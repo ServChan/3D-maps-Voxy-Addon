@@ -59,7 +59,7 @@ public final class RoomCutawayController {
 
         cuttingSomething = result.hasCutaway() || netherRoofCutoff != RoomCutawayTexture.NO_CUT_VALUE;
         if (cuttingSomething) {
-            if (!RoomCutawayTexture.isEnabled() || uploadedResult != result) {
+            if (!RoomCutawayTexture.isEnabled() || !result.equals(uploadedResult)) {
                 RoomCutawayTexture.update(result, netherRoofCutoff);
                 uploadedResult = result;
             } else if (uploadedGlobalCutoff != netherRoofCutoff) {

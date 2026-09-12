@@ -47,7 +47,8 @@ public abstract class MDICSectionRendererMixin {
     }
 
     private static int voxymap$setCutawayUniforms(Shader shader) {
-        boolean enabled = RoomCutawayController.isActive() && RoomCutawayTexture.isEnabled();
+        boolean enabled = RoomCutawayShaderPatcher.isSupported()
+                && RoomCutawayController.isActive() && RoomCutawayTexture.isEnabled();
         GL41C.glProgramUniform1i(shader.id(), RoomCutawayShaderPatcher.ENABLED_UNIFORM_LOCATION, enabled ? 1 : 0);
         if (enabled) {
             GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.ORIGIN_X_UNIFORM_LOCATION, RoomCutawayTexture.originX());
