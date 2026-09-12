@@ -12,7 +12,9 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 
 - Full-screen Voxy terrain view opened with a configurable key, `M` by default.
 - Mouse dragging, middle-button rotation, cursor-centered zoom, and smooth keyboard movement.
-- Player centering, optional singleplayer pause, and adjustable camera speed.
+- Exact player centering plus projected markers for the local player and other loaded players.
+- Seamless near terrain: vanilla chunks fill Voxy's player-centered LOD exclusion zone.
+- Optional singleplayer pause and adjustable camera speed.
 - Optional handoff to Xaero's World Map with a return button.
 - English, Russian, Spanish (Spain and Mexico), and Polish translations.
 
@@ -61,13 +63,14 @@ Run the default build last. The normal non-sources JAR is written to `build/libs
 
 - The Nether is intentionally disabled by the upstream map design.
 - VoxyMap only displays terrain already available to Voxy; it does not load chunks or reveal unexplored server data.
+- Multiplayer markers are limited to players whose entities are currently available to the client; a client-only mod cannot obtain hidden or distant coordinates from the server.
 - Build and package checks do not replace an in-game test with the exact Voxy, Iris, Sodium, and Xaero versions in the target profile.
 
 ## Русский
 
 VoxyMap LTS — поддерживаемый клиентский форк 3D Maps Voxy Addon. Он открывает полноэкранную трёхмерную карту на данных LOD из Voxy и собирается одним JAR для Minecraft 26.1.2 и 26.2.
 
-Карта открывается клавишей `M`; назначение можно изменить в стандартных настройках управления. ЛКМ перемещает карту, СКМ поворачивает камеру, колесо меняет масштаб, `W/A/S/D` двигают камеру, `Shift` ускоряет, `C` возвращает центр к игроку. Настройки сохраняются в `config/voxymap.properties`, рядом хранится резервная копия.
+Карта открывается клавишей `M`; назначение можно изменить в стандартных настройках управления. ЛКМ перемещает карту, СКМ поворачивает камеру, колесо меняет масштаб, `W/A/S/D` двигают камеру, `Shift` ускоряет, `C` точно возвращает центр к игроку. На карте отображаются отдельная отметка текущего игрока и именные отметки других загруженных игроков. Настройки сохраняются в `config/voxymap.properties`, рядом хранится резервная копия.
 
 ## Credits and license
 

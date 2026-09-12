@@ -13,7 +13,11 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.Player;
 import org.lwjgl.glfw.GLFW;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class MapScreen extends Screen {
 
@@ -21,7 +25,6 @@ public class MapScreen extends Screen {
 
     private static final long OPEN_ANIMATION_NANOS = 850_000_000L;
     private static final long XAERO_TRANSITION_NANOS = 380_000_000L;
-    private static final double MAP_VIEW_LEVEL = 320.0;
     private static final double MAX_KEYBOARD_CAMERA_SPEED = 640.0;
     private static final double MAX_DRAG_STEP_BLOCKS = 1536.0;
     private double viewCenterX;
@@ -37,6 +40,7 @@ public class MapScreen extends Screen {
     private double lastMouseY = Double.NaN;
     private double moveVelocityX = 0.0;
     private double moveVelocityZ = 0.0;
+    private List<PlayerMarker> playerMarkers = List.of();
     private long lastFrameNanos = 0L;
     private long openedAtNanos = 0L;
     private boolean openLogged = false;
@@ -79,11 +83,10 @@ public class MapScreen extends Screen {
         super.init();
         openedAtNanos = System.nanoTime();
         lastFrameNanos = 0L;
-        viewCenterY = MAP_VIEW_LEVEL;
         if (minecraft.player != null) {
-            viewCenterX = minecraft.player.getX();
-            viewCenterZ = minecraft.player.getZ();
+            centerOnPlayer();
         }
+        capturePlayerMarkers();
         if (!isUnsupportedDimension()) {
             VoxyBridge.suppressEnvironmentalFogForMap();
             MapRenderSettingsGuard.applyForMap(minecraft);
@@ -244,6 +247,7 @@ public class MapScreen extends Screen {
 
     @Override
     public void tick() {
+        capturePlayerMarkers();
         if (!isUnsupportedDimension()) {
             syncWorldCamera();
         }
@@ -429,6 +433,8 @@ public class MapScreen extends Screen {
     }
 
     private void drawWorldViewerOverlay(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        drawPlayerMarkers(g);
+
         int slide = (int) ((1.0 - openingProgress()) * 28.0);
         int topX = HUD_MARGIN;
         int topY = HUD_MARGIN - slide;
@@ -464,6 +470,104 @@ public class MapScreen extends Screen {
         g.fill(x, y, x + 2, y + h, accent);
         g.fill(x, y, x + w, y + 1, 0x33FFFFFF);
         g.fill(x, y + h - 1, x + w, y + h, 0x55000000);
+    }
+
+    private void capturePlayerMarkers() {
+        if (minecraft == null || minecraft.level == null || minecraft.player == null) {
+            playerMarkers = List.of();
+            return;
+        }
+
+        List<PlayerMarker> snapshot = new ArrayList<>();
+        for (Player player : minecraft.level.players()) {
+            snapshot.add(new PlayerMarker(
+                    player.getName().getString(),
+                    player.getX(),
+                    player.getY(),
+                    player.getZ(),
+                    player == minecraft.player));
+        }
+        playerMarkers = List.copyOf(snapshot);
+    }
+
+    private void drawPlayerMarkers(GuiGraphicsExtractor g) {
+        if (!VoxyMapCameraController.isActive() || playerMarkers.isEmpty()) {
+            return;
+        }
+
+        for (PlayerMarker marker : playerMarkers) {
+            ScreenPoint point = projectToScreen(marker.x, marker.y, marker.z);
+            if (point == null || point.x < 8 || point.x >= width - 8 || point.y < 16 || point.y >= height - 8) {
+                continue;
+            }
+
+            int radius = marker.local ? 7 : 5;
+            int outline = marker.local ? 0xEE071923 : 0xEE210A25;
+            int color = marker.local ? 0xFF55E7FF : 0xFFFF62D4;
+            drawDiamond(g, point.x, point.y, radius + 2, outline);
+            drawDiamond(g, point.x, point.y, radius, color);
+            g.fill(point.x - 1, point.y - 1, point.x + 2, point.y + 2, 0xFFFFFFFF);
+
+            String label = marker.local
+                    ? Component.translatable("overlay.voxymap.player").getString()
+                    : marker.name;
+            int labelWidth = minecraft.font.width(label) + 8;
+            int labelX = Mth.clamp(point.x - labelWidth / 2, 3, Math.max(3, width - labelWidth - 3));
+            int labelY = point.y - radius - 15;
+            g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, 0xCC030914);
+            g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, color);
+            g.text(minecraft.font, label, labelX + 4, labelY + 2, 0xFFFFFFFF);
+        }
+    }
+
+    private ScreenPoint projectToScreen(double worldX, double worldY, double worldZ) {
+        double cameraX = VoxyMapCameraController.cameraX();
+        double cameraY = VoxyMapCameraController.cameraY();
+        double cameraZ = VoxyMapCameraController.cameraZ();
+        double pitch = Math.toRadians(VoxyMapCameraController.cameraPitch());
+
+        double relativeX = worldX - cameraX;
+        double relativeY = worldY - cameraY;
+        double relativeZ = worldZ - cameraZ;
+        double forwardX = -Math.sin(viewYaw) * Math.cos(pitch);
+        double forwardY = -Math.sin(pitch);
+        double forwardZ = Math.cos(viewYaw) * Math.cos(pitch);
+        double rightX = Math.cos(viewYaw);
+        double rightZ = Math.sin(viewYaw);
+        double upX = Math.sin(viewYaw) * Math.sin(pitch);
+        double upY = Math.cos(pitch);
+        double upZ = -Math.cos(viewYaw) * Math.sin(pitch);
+
+        double depth = relativeX * forwardX + relativeY * forwardY + relativeZ * forwardZ;
+        if (depth <= 0.1 || !Double.isFinite(depth)) {
+            return null;
+        }
+
+        double horizontal = relativeX * rightX + relativeZ * rightZ;
+        double vertical = relativeX * upX + relativeY * upY + relativeZ * upZ;
+        double tanY = Math.tan(Math.toRadians(VoxyMapCameraController.fov()) * 0.5);
+        double tanX = tanY * width / (double) height;
+        double screenX = width * 0.5 * (1.0 - horizontal / (depth * tanX));
+        double screenY = height * 0.5 * (1.0 - vertical / (depth * tanY));
+        if (!Double.isFinite(screenX) || !Double.isFinite(screenY)) {
+            return null;
+        }
+        return new ScreenPoint((int) Math.round(screenX), (int) Math.round(screenY));
+    }
+
+    private static void drawDiamond(GuiGraphicsExtractor g, int centerX, int centerY, int radius, int color) {
+        for (int row = -radius; row <= radius; row++) {
+            int halfWidth = radius - Math.abs(row);
+            g.fill(centerX - halfWidth, centerY + row, centerX + halfWidth + 1, centerY + row + 1, color);
+        }
+    }
+
+    private void centerOnPlayer() {
+        viewCenterX = minecraft.player.getX();
+        viewCenterY = minecraft.player.getY();
+        viewCenterZ = minecraft.player.getZ();
+        moveVelocityX = 0.0;
+        moveVelocityZ = 0.0;
     }
 
     private void drawSettingsButton(GuiGraphicsExtractor g, int mouseX, int mouseY, int slide) {
@@ -704,9 +808,7 @@ public class MapScreen extends Screen {
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_C && minecraft.player != null) {
-            viewCenterX = minecraft.player.getX();
-            viewCenterY = MAP_VIEW_LEVEL;
-            viewCenterZ = minecraft.player.getZ();
+            centerOnPlayer();
             syncWorldCamera();
             return true;
         }
@@ -768,5 +870,11 @@ public class MapScreen extends Screen {
     }
 
     private record GroundPoint(double x, double z) {
+    }
+
+    private record ScreenPoint(int x, int y) {
+    }
+
+    private record PlayerMarker(String name, double x, double y, double z, boolean local) {
     }
 }

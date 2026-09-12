@@ -98,9 +98,9 @@ public final class VoxyMapGuiRenderer {
         try {
             GL30C.glBindFramebuffer(GL30C.GL_FRAMEBUFFER, framebuffer);
             GL11C.glViewport(0, 0, width, height);
-            GL11C.glClearColor(0.03f, 0.03f, 0.06f, 1.0f);
-            GL11C.glClear(GL11C.GL_COLOR_BUFFER_BIT | GL11C.GL_DEPTH_BUFFER_BIT);
 
+            // Keep the vanilla near-field color and depth that were rendered with the map camera.
+            // Voxy intentionally leaves an LOD exclusion zone around the player for those chunks.
             rendering = true;
             renderer.renderOpaque(viewport, width, height);
             GL11C.glClear(GL11C.GL_DEPTH_BUFFER_BIT);
