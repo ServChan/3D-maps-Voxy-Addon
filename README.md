@@ -11,12 +11,12 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 ## Features
 
 - Full-screen Voxy terrain view opened with a configurable key, `M` by default.
-- Nether roof strip based on the dimension's logical ceiling, with overlapping vanilla terrain suppressed only while a cut is active.
+- Nether roof strip based on the dimension's logical ceiling.
 - Mouse dragging, middle-button rotation, cursor-centered zoom, and smooth keyboard movement.
 - Exact player centering plus projected markers for the local player and other loaded players.
 - Optional VanillaSquad global player markers with compact skin heads and clustered territory outlines.
 - Connectivity-aware room cutaway computed in bounded slices outside the render-state loop.
-- Seamless near terrain: vanilla chunks fill Voxy's player-centered LOD exclusion zone.
+- Stable near terrain: while the map is open, Voxy's cached LODs fill its normal player-centered hand-off zone instead of using Sodium's angle-dependent real-camera visibility set.
 - Optional singleplayer pause and adjustable camera speed.
 - Optional handoff to Xaero's World Map with a return button.
 - English, Russian, Spanish (Spain and Mexico), and Polish translations.
@@ -68,7 +68,7 @@ The normal non-sources JAR is written to `build/libs/voxy-map-<version>.jar`.
 
 VoxyMap LTS — поддерживаемый клиентский форк 3D Maps Voxy Addon для Minecraft 26.2. Он открывает полноэкранную трёхмерную карту на данных LOD из Voxy.
 
-Карта открывается клавишей `M`; назначение можно изменить в стандартных настройках управления. ЛКМ перемещает карту, СКМ поворачивает камеру, колесо меняет масштаб, `W/A/S/D` двигают камеру, `Shift` ускоряет, `C` точно возвращает центр к игроку. На карте отображаются отдельная отметка текущего игрока и именные отметки других загруженных игроков. В настройках можно включить срез замкнутых помещений, удалённых игроков VanillaSquad и контуры территорий по флагам. Настройки сохраняются в `config/voxymap.properties`, рядом хранится резервная копия.
+Карта открывается клавишей `M`; назначение можно изменить в стандартных настройках управления. ЛКМ перемещает карту, СКМ поворачивает камеру, колесо меняет масштаб, `W/A/S/D` двигают камеру, `Shift` ускоряет, `C` точно возвращает центр к игроку. На карте отображаются отдельная отметка текущего игрока и именные отметки других загруженных игроков. В ближней зоне карта использует уже кэшированные LOD Voxy, поэтому её геометрия не зависит от направления обычной камеры игрока и не вызывает дополнительную загрузку чанков. В настройках можно включить срез замкнутых помещений, удалённых игроков VanillaSquad и контуры территорий по флагам. Настройки сохраняются в `config/voxymap.properties`, рядом хранится резервная копия.
 
 ## Credits and license
 

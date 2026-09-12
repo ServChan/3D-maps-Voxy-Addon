@@ -76,8 +76,6 @@ class ProjectContractTest {
                 "src/client/java/com/voxymap/client/gui/MapScreen.java"), StandardCharsets.UTF_8);
         String computer = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/RoomCutawayComputer.java"), StandardCharsets.UTF_8);
-        String vanillaMixin = Files.readString(Path.of(
-                "src/client/java/com/voxymap/client/mixin/MapVanillaTerrainMixin.java"), StandardCharsets.UTF_8);
         assertFalse(source.contains("isUnsupportedDimension"));
         // Must not be dimension-gated: whether a cut happens is decided purely by whether the player
         // is actually enclosed, not by which dimension they're in.
@@ -91,10 +89,25 @@ class ProjectContractTest {
         // A flood fill that isn't fully contained in the search window must not be treated as a room.
         assertTrue(computer.contains("nodeBudget"),
                 "Room scanning must be budgetable instead of blocking a render or client tick");
-        // Never expose Voxy's coarse near-camera LOD by suppressing vanilla terrain when no cut is
-        // active. This was the source of screen-sized stretched surfaces in the normal map view.
-        assertTrue(vanillaMixin.contains("RoomCutawayController.isActive()"));
-        assertTrue(vanillaMixin.contains("ci.cancel()"));
+    }
+
+    @Test
+    void mapUsesVoxysCachedLodsInsteadOfTheRealCameraSodiumVisibilitySet() throws IOException {
+        String mixin = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/mixin/VoxyClientMixin.java"), StandardCharsets.UTF_8);
+        JsonObject config = readJson(Path.of("src/main/resources/voxymap.client.mixins.json"));
+
+        assertTrue(config.getAsJsonArray("client").asList().stream()
+                .anyMatch(element -> "VoxyClientMixin".equals(element.getAsString())));
+        assertTrue(mixin.contains("disableSodiumChunkRender"),
+                "Use Voxy's supported LOD-only switch instead of adding another render pass");
+        assertTrue(mixin.contains("VoxyMapCameraController.isActive()"),
+                "Normal gameplay must retain Sodium's vanilla-distance terrain");
+        assertTrue(mixin.contains("cir.setReturnValue(true)"),
+                "The map must let Voxy fill its normal near-camera exclusion zone");
+        assertFalse(Files.exists(Path.of(
+                "src/client/java/com/voxymap/client/mixin/MapVanillaTerrainMixin.java")),
+                "Do not cancel the chunk pass independently of Voxy's own render hook");
     }
 
     @Test
