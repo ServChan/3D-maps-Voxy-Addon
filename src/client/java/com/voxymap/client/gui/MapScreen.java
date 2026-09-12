@@ -5,6 +5,7 @@ import com.voxymap.client.integration.VanillaSquadFlagMapBridge;
 import com.voxymap.client.integration.VanillaSquadPlayerMapBridge;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
+import com.voxymap.client.map.PlayerViewConeGeometry;
 import com.voxymap.client.map.RoomCutawayController;
 import com.voxymap.client.map.VoxyBridge;
 import com.voxymap.client.map.VoxyMapCameraController;
@@ -34,6 +35,9 @@ public class MapScreen extends Screen {
     private static final long XAERO_TRANSITION_NANOS = 380_000_000L;
     private static final double MAX_KEYBOARD_CAMERA_SPEED = 640.0;
     private static final double MAX_DRAG_STEP_BLOCKS = 1536.0;
+    private static final double PLAYER_VIEW_CONE_HALF_ANGLE = 32.0;
+    private static final int PLAYER_VIEW_CONE_ARC_SEGMENTS = 6;
+    private static final double PLAYER_VIEW_CONE_SCREEN_LENGTH = 34.0;
     private double viewCenterX;
     private double viewCenterY;
     private double viewCenterZ;
@@ -474,7 +478,8 @@ public class MapScreen extends Screen {
                     player.getZ(),
                     player == minecraft.player,
                     false,
-                    player.getUUID()));
+                    player.getUUID(),
+                    player.getYHeadRot()));
         }
 
         if (VoxyMapSettings.vanillaSquadPlayersEnabled()) {
@@ -485,7 +490,7 @@ public class MapScreen extends Screen {
                     continue; // Already shown live from the client's own nearby entity list.
                 }
                 snapshot.add(new PlayerMarker(remote.name(), remote.x(), remote.y(), remote.z(), false, true,
-                        VanillaSquadPlayerMapBridge.toJavaUuid(remote.uuid())));
+                        VanillaSquadPlayerMapBridge.toJavaUuid(remote.uuid()), Float.NaN));
             }
         }
 
@@ -603,6 +608,9 @@ public class MapScreen extends Screen {
             int radius = marker.local ? 9 : 6;
             int outline = marker.local ? 0xEE071923 : (marker.remote ? 0xEE241A05 : 0xEE210A25);
             int color = marker.local ? 0xFF55E7FF : (marker.remote ? 0xFFF2B33D : 0xFFFF62D4);
+            if (marker.isActivePlayer()) {
+                drawPlayerViewCone(g, marker, point);
+            }
             drawDiamond(g, point.x, point.y, radius + 2, outline);
             drawDiamond(g, point.x, point.y, radius, color);
             g.fill(point.x - 1, point.y - 1, point.x + 2, point.y + 2, 0xFFFFFFFF);
@@ -623,6 +631,40 @@ public class MapScreen extends Screen {
             }
             g.text(minecraft.font, label, labelX + 4 + headGap, labelY + 2, 0xFFFFFFFF);
         }
+    }
+
+    private void drawPlayerViewCone(GuiGraphicsExtractor g, PlayerMarker marker, ScreenPoint origin) {
+        double worldLength = Mth.clamp(blocksPerPixel * PLAYER_VIEW_CONE_SCREEN_LENGTH, 12.0, 96.0);
+        ScreenPoint previousArcPoint = null;
+        for (int i = 0; i <= PLAYER_VIEW_CONE_ARC_SEGMENTS; i++) {
+            double fraction = i / (double) PLAYER_VIEW_CONE_ARC_SEGMENTS;
+            double yaw = marker.yawDegrees - PLAYER_VIEW_CONE_HALF_ANGLE
+                    + fraction * PLAYER_VIEW_CONE_HALF_ANGLE * 2.0;
+            ScreenPoint arcPoint = projectViewConePoint(marker, yaw, worldLength);
+            if (arcPoint == null) {
+                previousArcPoint = null;
+                continue;
+            }
+            if (i == 0 || i == PLAYER_VIEW_CONE_ARC_SEGMENTS) {
+                drawDashedLine(g, origin.x, origin.y, arcPoint.x, arcPoint.y, 0x88FF62D4);
+            }
+            if (previousArcPoint != null) {
+                drawDashedLine(g, previousArcPoint.x, previousArcPoint.y, arcPoint.x, arcPoint.y, 0x66FF62D4);
+            }
+            previousArcPoint = arcPoint;
+        }
+
+        ScreenPoint lookPoint = projectViewConePoint(marker, marker.yawDegrees, worldLength);
+        if (lookPoint != null) {
+            drawDashedLine(g, origin.x, origin.y, lookPoint.x, lookPoint.y, 0xCCFFB3EC);
+        }
+    }
+
+    private ScreenPoint projectViewConePoint(PlayerMarker marker, double yawDegrees, double length) {
+        return projectToScreen(
+                marker.x + PlayerViewConeGeometry.directionX(yawDegrees) * length,
+                marker.y,
+                marker.z + PlayerViewConeGeometry.directionZ(yawDegrees) * length);
     }
 
     private boolean isViewCenteredOn(PlayerMarker marker) {
@@ -1001,6 +1043,10 @@ public class MapScreen extends Screen {
     private record ScreenPoint(int x, int y) {
     }
 
-    private record PlayerMarker(String name, double x, double y, double z, boolean local, boolean remote, UUID uuid) {
+    private record PlayerMarker(String name, double x, double y, double z, boolean local, boolean remote,
+                                UUID uuid, float yawDegrees) {
+        private boolean isActivePlayer() {
+            return !local && !remote && Float.isFinite(yawDegrees);
+        }
     }
 }

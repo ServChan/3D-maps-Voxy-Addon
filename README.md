@@ -13,7 +13,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 - Full-screen Voxy terrain view opened with a configurable key, `M` by default.
 - Global Nether roof removal works across all cached LODs while preserving complete builds below the ceiling.
 - Mouse dragging, middle-button rotation, cursor-centered zoom, and smooth keyboard movement.
-- Exact player centering plus projected markers for the local player and other loaded players.
+- Exact player centering plus projected markers and facing cones for nearby active players.
 - Optional VanillaSquad global player markers with compact skin heads and clustered territory outlines.
 - Connectivity-aware room cutaway computed in bounded slices outside the render-state loop.
 - Stable near terrain: while the map is open, Voxy's cached LODs fill its normal player-centered hand-off zone instead of using Sodium's angle-dependent real-camera visibility set.

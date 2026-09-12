@@ -164,6 +164,19 @@ class ProjectContractTest {
                 "The selected source must be an 8x8 face from a 64x64 skin");
     }
 
+    @Test
+    void viewConesUseLiveHeadYawOnlyForPinkActivePlayers() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/gui/MapScreen.java"), StandardCharsets.UTF_8);
+        assertTrue(source.contains("player.getYHeadRot()"));
+        assertTrue(source.contains("return !local && !remote && Float.isFinite(yawDegrees)"));
+        assertTrue(source.contains("blocksPerPixel * PLAYER_VIEW_CONE_SCREEN_LENGTH"),
+                "The cone should keep a useful screen size across map zoom levels");
+        assertTrue(source.indexOf("drawPlayerViewCone(g, marker, point)")
+                < source.indexOf("drawDiamond(g, point.x, point.y, radius + 2, outline)"),
+                "The marker must remain legible on top of its cone");
+    }
+
     private static JsonObject readJson(Path path) throws IOException {
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             return JsonParser.parseReader(reader).getAsJsonObject();
