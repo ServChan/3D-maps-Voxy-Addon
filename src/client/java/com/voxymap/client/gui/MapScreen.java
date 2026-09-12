@@ -1,8 +1,11 @@
 package com.voxymap.client.gui;
 
 import com.voxymap.client.VoxyMapClient;
+import com.voxymap.client.integration.VanillaSquadFlagMapBridge;
+import com.voxymap.client.integration.VanillaSquadPlayerMapBridge;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
+import com.voxymap.client.map.RoomCutawayController;
 import com.voxymap.client.map.VoxyBridge;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapGuiRenderer;
@@ -12,12 +15,16 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 public class MapScreen extends Screen {
 
@@ -65,6 +72,9 @@ public class MapScreen extends Screen {
     private int speedPlusY = -1;
     private int pauseRowY = -1;
     private int speedRowY = -1;
+    private int cutawayRowY = -1;
+    private int vanillaSquadRowY = -1;
+    private int vanillaSquadFlagsRowY = -1;
     private static final int SETTINGS_ROW_HEIGHT = 24;
     private static final int SPEED_BUTTON_SIZE = 18;
     private static final int HUD_MARGIN = 12;
@@ -88,6 +98,7 @@ public class MapScreen extends Screen {
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
+        RoomCutawayController.tick(minecraft);
         VoxyMapGuiRenderer.open(minecraft);
         if (!openLogged) {
             VoxyMapClient.LOGGER.info("[VoxyMap] Map opened.");
@@ -233,6 +244,11 @@ public class MapScreen extends Screen {
 
     @Override
     public void tick() {
+        RoomCutawayController.tick(minecraft);
+        VanillaSquadPlayerMapBridge.tick();
+        if (minecraft != null && minecraft.level != null) {
+            VanillaSquadFlagMapBridge.tick(minecraft.level.dimension().identifier().toString());
+        }
         capturePlayerMarkers();
         syncWorldCamera();
     }
@@ -324,6 +340,12 @@ public class MapScreen extends Screen {
         } else if (isInsideSettingsRow(mouseX, mouseY, speedRowY)) {
             double rowMid = settingsPanelX + settingsPanelW / 2.0;
             VoxyMapSettings.changeCameraSpeed(mouseX < rowMid ? -0.25 : 0.25);
+        } else if (isInsideSettingsRow(mouseX, mouseY, cutawayRowY)) {
+            VoxyMapSettings.toggleRoomCutaway();
+        } else if (isInsideSettingsRow(mouseX, mouseY, vanillaSquadRowY)) {
+            VoxyMapSettings.toggleVanillaSquadPlayers();
+        } else if (isInsideSettingsRow(mouseX, mouseY, vanillaSquadFlagsRowY)) {
+            VoxyMapSettings.toggleVanillaSquadFlags();
         }
         return true;
     }
@@ -390,6 +412,7 @@ public class MapScreen extends Screen {
     }
 
     private void drawWorldViewerOverlay(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        drawFlagMarkers(g);
         drawPlayerMarkers(g);
 
         int slide = (int) ((1.0 - openingProgress()) * 28.0);
@@ -405,9 +428,8 @@ public class MapScreen extends Screen {
         }
         String cameraText = Component.translatable("overlay.voxymap.camera").getString() + "  " + (int) viewCenterX + " / " + (int) viewCenterY + " / " + (int) viewCenterZ
                 + "   " + Component.translatable("overlay.voxymap.zoom").getString() + " " + String.format("%.2f", blocksPerPixel);
-        if (VoxyMapCameraController.isNetherSliceActive()) {
-            cameraText += "   " + Component.translatable("overlay.voxymap.slice").getString() + " Y "
-                    + (int) Math.floor(VoxyMapCameraController.netherSliceY());
+        if (RoomCutawayController.isActive()) {
+            cameraText += "   " + Component.translatable("overlay.voxymap.slice").getString();
         }
         int topW = Math.max(1, Math.min(width - HUD_MARGIN * 2, Math.max(minecraft.font.width(title), Math.max(minecraft.font.width(playerText), minecraft.font.width(cameraText))) + 20));
         int topH = minecraft.player != null ? 42 : 30;
@@ -440,15 +462,129 @@ public class MapScreen extends Screen {
         }
 
         List<PlayerMarker> snapshot = new ArrayList<>();
+        Set<String> knownUuids = new HashSet<>();
+        Set<String> knownNames = new HashSet<>();
         for (Player player : minecraft.level.players()) {
+            knownUuids.add(VanillaSquadPlayerMapBridge.normalizeUuid(player.getUUID().toString()));
+            knownNames.add(player.getName().getString().toLowerCase(java.util.Locale.ROOT));
             snapshot.add(new PlayerMarker(
                     player.getName().getString(),
                     player.getX(),
                     player.getY(),
                     player.getZ(),
-                    player == minecraft.player));
+                    player == minecraft.player,
+                    false,
+                    player.getUUID()));
         }
+
+        if (VoxyMapSettings.vanillaSquadPlayersEnabled()) {
+            String dimensionId = minecraft.level.dimension().identifier().toString();
+            for (VanillaSquadPlayerMapBridge.RemotePlayer remote : VanillaSquadPlayerMapBridge.playersInDimension(dimensionId)) {
+                if ((remote.uuid() != null && knownUuids.contains(remote.uuid()))
+                        || knownNames.contains(remote.name().toLowerCase(java.util.Locale.ROOT))) {
+                    continue; // Already shown live from the client's own nearby entity list.
+                }
+                snapshot.add(new PlayerMarker(remote.name(), remote.x(), remote.y(), remote.z(), false, true,
+                        VanillaSquadPlayerMapBridge.toJavaUuid(remote.uuid())));
+            }
+        }
+
         playerMarkers = List.copyOf(snapshot);
+    }
+
+    /**
+     * Draws each territory as a dashed hull outline plus a single centroid label, instead of one
+     * marker and one text-width measurement per raw banner point — a named cluster can have 1000+
+     * members, and drawing those individually every frame is what caused the severe frame drop.
+     */
+    private void drawFlagMarkers(GuiGraphicsExtractor g) {
+        if (!VoxyMapCameraController.isActive() || !VoxyMapSettings.vanillaSquadFlagsEnabled()
+                || minecraft == null || minecraft.level == null) {
+            return;
+        }
+
+        String dimensionId = minecraft.level.dimension().identifier().toString();
+        for (VanillaSquadFlagMapBridge.Territory territory : VanillaSquadFlagMapBridge.territoriesInDimension(dimensionId)) {
+            List<double[]> vertices = territory.outline();
+            if (vertices.size() < 2) {
+                continue;
+            }
+
+            ScreenPoint[] outline = new ScreenPoint[vertices.size()];
+            for (int i = 0; i < vertices.size(); i++) {
+                double[] vertex = vertices.get(i);
+                outline[i] = projectToScreen(vertex[0], viewCenterY, vertex[1]);
+            }
+            boolean anyVisible = false;
+            for (int i = 0; i < outline.length; i++) {
+                ScreenPoint a = outline[i];
+                ScreenPoint b = outline[(i + 1) % outline.length];
+                if (a != null && b != null) {
+                    anyVisible |= drawDashedLine(g, a.x, a.y, b.x, b.y, territory.color());
+                }
+            }
+            if (!anyVisible) {
+                continue;
+            }
+
+            ScreenPoint labelPoint = projectToScreen(territory.centroidX(), viewCenterY, territory.centroidZ());
+            if (labelPoint == null || labelPoint.x < 6 || labelPoint.x >= width - 6
+                    || labelPoint.y < 12 || labelPoint.y >= height - 6) {
+                continue;
+            }
+            int labelWidth = minecraft.font.width(territory.name()) + 8;
+            int labelX = Mth.clamp(labelPoint.x - labelWidth / 2, 3, Math.max(3, width - labelWidth - 3));
+            int labelY = labelPoint.y - 5;
+            g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, 0x99030914);
+            g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, territory.color());
+            g.text(minecraft.font, territory.name(), labelX + 4, labelY + 2, 0xFFE9F2FF);
+        }
+    }
+
+    private boolean drawDashedLine(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int color) {
+        double[] clipped = clipLineToViewport(x1, y1, x2, y2);
+        if (clipped == null) {
+            return false;
+        }
+        double dx = clipped[2] - clipped[0];
+        double dy = clipped[3] - clipped[1];
+        double length = Math.hypot(dx, dy);
+        if (length < 1.0) {
+            return false;
+        }
+        int steps = Math.max(1, (int) (length / 5.0));
+        for (int i = 0; i <= steps; i += 2) {
+            double t = i / (double) steps;
+            int px = (int) Math.round(clipped[0] + dx * t);
+            int py = (int) Math.round(clipped[1] + dy * t);
+            g.fill(px, py, px + 2, py + 2, color);
+        }
+        return true;
+    }
+
+    /** Liang-Barsky clipping bounds work per edge to at most the screen diagonal. */
+    private double[] clipLineToViewport(double x1, double y1, double x2, double y2) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double t0 = 0.0;
+        double t1 = 1.0;
+        double[] p = {-dx, dx, -dy, dy};
+        double[] q = {x1 + 2.0, width + 2.0 - x1, y1 + 2.0, height + 2.0 - y1};
+        for (int i = 0; i < 4; i++) {
+            if (p[i] == 0.0) {
+                if (q[i] < 0.0) return null;
+                continue;
+            }
+            double ratio = q[i] / p[i];
+            if (p[i] < 0.0) {
+                if (ratio > t1) return null;
+                t0 = Math.max(t0, ratio);
+            } else {
+                if (ratio < t0) return null;
+                t1 = Math.min(t1, ratio);
+            }
+        }
+        return new double[]{x1 + t0 * dx, y1 + t0 * dy, x1 + t1 * dx, y1 + t1 * dy};
     }
 
     private void drawPlayerMarkers(GuiGraphicsExtractor g) {
@@ -465,8 +601,8 @@ public class MapScreen extends Screen {
             }
 
             int radius = marker.local ? 9 : 6;
-            int outline = marker.local ? 0xEE071923 : 0xEE210A25;
-            int color = marker.local ? 0xFF55E7FF : 0xFFFF62D4;
+            int outline = marker.local ? 0xEE071923 : (marker.remote ? 0xEE241A05 : 0xEE210A25);
+            int color = marker.local ? 0xFF55E7FF : (marker.remote ? 0xFFF2B33D : 0xFFFF62D4);
             drawDiamond(g, point.x, point.y, radius + 2, outline);
             drawDiamond(g, point.x, point.y, radius, color);
             g.fill(point.x - 1, point.y - 1, point.x + 2, point.y + 2, 0xFFFFFFFF);
@@ -474,12 +610,18 @@ public class MapScreen extends Screen {
             String label = marker.local
                     ? Component.translatable("overlay.voxymap.player").getString() + ": " + marker.name
                     : marker.name;
-            int labelWidth = minecraft.font.width(label) + 8;
+            Identifier skin = PlayerHeadIcon.resolveSkinTexture(minecraft, marker.uuid);
+            int headSize = 10;
+            int headGap = skin != null ? headSize + 3 : 0;
+            int labelWidth = minecraft.font.width(label) + 8 + headGap;
             int labelX = Mth.clamp(point.x - labelWidth / 2, 3, Math.max(3, width - labelWidth - 3));
             int labelY = point.y - radius - 15;
             g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, 0xCC030914);
             g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, color);
-            g.text(minecraft.font, label, labelX + 4, labelY + 2, 0xFFFFFFFF);
+            if (skin != null) {
+                PlayerHeadIcon.draw(g, skin, labelX + 3, labelY, headSize);
+            }
+            g.text(minecraft.font, label, labelX + 4 + headGap, labelY + 2, 0xFFFFFFFF);
         }
     }
 
@@ -559,7 +701,7 @@ public class MapScreen extends Screen {
 
     private void drawSettingsPanel(GuiGraphicsExtractor g, int footerTop) {
         settingsPanelW = Math.min(360, width - HUD_MARGIN * 2);
-        settingsPanelH = 94;
+        settingsPanelH = 166;
         settingsPanelX = width - settingsPanelW - HUD_MARGIN;
         settingsPanelY = Math.max(HUD_MARGIN, footerTop - settingsPanelH - HUD_GAP);
         drawGlassPanel(g, settingsPanelX, settingsPanelY, settingsPanelW, settingsPanelH, 0xDD030914, 0xFF3BA4FF);
@@ -568,9 +710,15 @@ public class MapScreen extends Screen {
         int y = settingsPanelY + 10;
         pauseRowY = y + 20;
         speedRowY = y + 44;
+        cutawayRowY = y + 68;
+        vanillaSquadRowY = y + 92;
+        vanillaSquadFlagsRowY = y + 116;
         g.text(minecraft.font, Component.translatable("screen.voxymap.settings.title"), x, y, 0xFFFFFFFF);
         drawSettingValue(g, x, pauseRowY, "screen.voxymap.settings.pause", onOff(VoxyMapSettings.pauseSingleplayer()), 0);
         drawSettingValue(g, x, speedRowY, "screen.voxymap.settings.speed", String.format("%.2fx", VoxyMapSettings.cameraSpeedMultiplier()), 1);
+        drawSettingValue(g, x, cutawayRowY, "screen.voxymap.settings.cutaway", onOff(VoxyMapSettings.roomCutawayEnabled()), 2);
+        drawSettingValue(g, x, vanillaSquadRowY, "screen.voxymap.settings.vanillasquad", onOff(VoxyMapSettings.vanillaSquadPlayersEnabled()), 3);
+        drawSettingValue(g, x, vanillaSquadFlagsRowY, "screen.voxymap.settings.vanillasquadflags", onOff(VoxyMapSettings.vanillaSquadFlagsEnabled()), 4);
     }
 
     private void drawSettingValue(GuiGraphicsExtractor g, int x, int y, String labelKey, String value, int row) {
@@ -584,9 +732,18 @@ public class MapScreen extends Screen {
         if (row == 1) {
             valueX -= (SPEED_BUTTON_SIZE + 6);
         }
-        int valueColor = row == 0
-                ? (VoxyMapSettings.pauseSingleplayer() ? 0xFF55FF55 : 0xFFFF5555)
-                : 0xFFFFFFFF;
+        int valueColor;
+        if (row == 0) {
+            valueColor = VoxyMapSettings.pauseSingleplayer() ? 0xFF55FF55 : 0xFFFF5555;
+        } else if (row == 2) {
+            valueColor = VoxyMapSettings.roomCutawayEnabled() ? 0xFF55FF55 : 0xFFFF5555;
+        } else if (row == 3) {
+            valueColor = VoxyMapSettings.vanillaSquadPlayersEnabled() ? 0xFF55FF55 : 0xFFFF5555;
+        } else if (row == 4) {
+            valueColor = VoxyMapSettings.vanillaSquadFlagsEnabled() ? 0xFF55FF55 : 0xFFFF5555;
+        } else {
+            valueColor = 0xFFFFFFFF;
+        }
         drawValueBox(g, valueX, y + 3, valueW, 16, value, valueColor);
         if (row == 1) {
             speedMinusX = valueX - SPEED_BUTTON_SIZE - 6;
@@ -844,6 +1001,6 @@ public class MapScreen extends Screen {
     private record ScreenPoint(int x, int y) {
     }
 
-    private record PlayerMarker(String name, double x, double y, double z, boolean local) {
+    private record PlayerMarker(String name, double x, double y, double z, boolean local, boolean remote, UUID uuid) {
     }
 }

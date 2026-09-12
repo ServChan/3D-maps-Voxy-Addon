@@ -1,11 +1,15 @@
 package com.voxymap.client.mixin;
 
-import com.voxymap.client.map.NetherSliceShaderPatcher;
-import com.voxymap.client.map.VoxyMapCameraController;
+import com.voxymap.client.map.RoomCutawayController;
+import com.voxymap.client.map.RoomCutawayShaderPatcher;
+import com.voxymap.client.map.RoomCutawayTexture;
 import me.cortex.voxy.client.core.gl.shader.Shader;
 import me.cortex.voxy.client.core.rendering.section.backend.mdic.MDICSectionRenderer;
 import me.cortex.voxy.client.core.rendering.section.backend.mdic.MDICViewport;
 import org.lwjgl.opengl.GL41C;
+import org.lwjgl.opengl.GL11C;
+import org.lwjgl.opengl.GL30C;
+import org.lwjgl.opengl.GL45C;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -17,21 +21,47 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class MDICSectionRendererMixin {
     @Shadow @Final private Shader terrainShader;
     @Shadow @Final private Shader translucentTerrainShader;
+    private int voxymap$opaquePreviousTexture = -1;
+    private int voxymap$translucentPreviousTexture = -1;
 
     @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"))
-    private void voxymap$setOpaqueSlice(MDICViewport viewport, CallbackInfo ci) {
-        voxymap$setSliceUniforms(terrainShader);
+    private void voxymap$setOpaqueCutaway(MDICViewport viewport, CallbackInfo ci) {
+        voxymap$opaquePreviousTexture = voxymap$setCutawayUniforms(terrainShader);
+    }
+
+    @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("RETURN"))
+    private void voxymap$restoreOpaqueTexture(MDICViewport viewport, CallbackInfo ci) {
+        voxymap$restoreTexture(voxymap$opaquePreviousTexture);
+        voxymap$opaquePreviousTexture = -1;
     }
 
     @Inject(method = "renderTranslucent(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"))
-    private void voxymap$setTranslucentSlice(MDICViewport viewport, CallbackInfo ci) {
-        voxymap$setSliceUniforms(translucentTerrainShader);
+    private void voxymap$setTranslucentCutaway(MDICViewport viewport, CallbackInfo ci) {
+        voxymap$translucentPreviousTexture = voxymap$setCutawayUniforms(translucentTerrainShader);
     }
 
-    private static void voxymap$setSliceUniforms(Shader shader) {
-        boolean enabled = VoxyMapCameraController.isNetherSliceActive();
-        GL41C.glProgramUniform1i(shader.id(), NetherSliceShaderPatcher.ENABLED_UNIFORM_LOCATION, enabled ? 1 : 0);
-        GL41C.glProgramUniform1f(shader.id(), NetherSliceShaderPatcher.HEIGHT_UNIFORM_LOCATION,
-                enabled ? VoxyMapCameraController.netherSliceY() : 0.0f);
+    @Inject(method = "renderTranslucent(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("RETURN"))
+    private void voxymap$restoreTranslucentTexture(MDICViewport viewport, CallbackInfo ci) {
+        voxymap$restoreTexture(voxymap$translucentPreviousTexture);
+        voxymap$translucentPreviousTexture = -1;
+    }
+
+    private static int voxymap$setCutawayUniforms(Shader shader) {
+        boolean enabled = RoomCutawayController.isActive() && RoomCutawayTexture.isEnabled();
+        GL41C.glProgramUniform1i(shader.id(), RoomCutawayShaderPatcher.ENABLED_UNIFORM_LOCATION, enabled ? 1 : 0);
+        if (enabled) {
+            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.ORIGIN_X_UNIFORM_LOCATION, RoomCutawayTexture.originX());
+            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.ORIGIN_Z_UNIFORM_LOCATION, RoomCutawayTexture.originZ());
+            int previousTexture = GL30C.glGetIntegeri(GL11C.GL_TEXTURE_BINDING_2D, RoomCutawayTexture.TEXTURE_UNIT);
+            GL45C.glBindTextureUnit(RoomCutawayTexture.TEXTURE_UNIT, RoomCutawayTexture.textureId());
+            return previousTexture;
+        }
+        return -1;
+    }
+
+    private static void voxymap$restoreTexture(int previousTexture) {
+        if (previousTexture >= 0) {
+            GL45C.glBindTextureUnit(RoomCutawayTexture.TEXTURE_UNIT, previousTexture);
+        }
     }
 }

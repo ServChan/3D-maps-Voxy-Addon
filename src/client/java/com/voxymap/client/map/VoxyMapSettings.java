@@ -20,6 +20,9 @@ public final class VoxyMapSettings {
     private static boolean loaded = false;
     private static boolean pauseSingleplayer = true;
     private static double cameraSpeedMultiplier = 1.0;
+    private static boolean roomCutawayEnabled = true;
+    private static boolean vanillaSquadPlayersEnabled = false;
+    private static boolean vanillaSquadFlagsEnabled = false;
 
     private VoxyMapSettings() {
     }
@@ -37,14 +40,20 @@ public final class VoxyMapSettings {
         }
         if (properties == null) properties = new Properties();
 
-        pauseSingleplayer = Boolean.parseBoolean(properties.getProperty("pauseSingleplayer", Boolean.toString(pauseSingleplayer)));
+        pauseSingleplayer = readBoolean(properties.getProperty("pauseSingleplayer"), pauseSingleplayer);
         cameraSpeedMultiplier = clamp(readDouble(properties.getProperty("cameraSpeedMultiplier"), cameraSpeedMultiplier), 0.25, 4.0);
+        roomCutawayEnabled = readBoolean(properties.getProperty("roomCutawayEnabled"), roomCutawayEnabled);
+        vanillaSquadPlayersEnabled = readBoolean(properties.getProperty("vanillaSquadPlayersEnabled"), vanillaSquadPlayersEnabled);
+        vanillaSquadFlagsEnabled = readBoolean(properties.getProperty("vanillaSquadFlagsEnabled"), vanillaSquadFlagsEnabled);
     }
 
     public static void save() {
         Properties properties = new Properties();
         properties.setProperty("pauseSingleplayer", Boolean.toString(pauseSingleplayer));
         properties.setProperty("cameraSpeedMultiplier", String.format(Locale.ROOT, "%.2f", cameraSpeedMultiplier));
+        properties.setProperty("roomCutawayEnabled", Boolean.toString(roomCutawayEnabled));
+        properties.setProperty("vanillaSquadPlayersEnabled", Boolean.toString(vanillaSquadPlayersEnabled));
+        properties.setProperty("vanillaSquadFlagsEnabled", Boolean.toString(vanillaSquadFlagsEnabled));
 
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
@@ -87,13 +96,53 @@ public final class VoxyMapSettings {
         save();
     }
 
+    public static boolean roomCutawayEnabled() {
+        load();
+        return roomCutawayEnabled;
+    }
+
+    public static void toggleRoomCutaway() {
+        load();
+        roomCutawayEnabled = !roomCutawayEnabled;
+        save();
+    }
+
+    public static boolean vanillaSquadPlayersEnabled() {
+        load();
+        return vanillaSquadPlayersEnabled;
+    }
+
+    public static void toggleVanillaSquadPlayers() {
+        load();
+        vanillaSquadPlayersEnabled = !vanillaSquadPlayersEnabled;
+        save();
+    }
+
+    public static boolean vanillaSquadFlagsEnabled() {
+        load();
+        return vanillaSquadFlagsEnabled;
+    }
+
+    public static void toggleVanillaSquadFlags() {
+        load();
+        vanillaSquadFlagsEnabled = !vanillaSquadFlagsEnabled;
+        save();
+    }
+
     private static double readDouble(String value, double fallback) {
         if (value == null) return fallback;
         try {
-            return Double.parseDouble(value);
+            double parsed = Double.parseDouble(value);
+            return Double.isFinite(parsed) ? parsed : fallback;
         } catch (NumberFormatException ignored) {
             return fallback;
         }
+    }
+
+    private static boolean readBoolean(String value, boolean fallback) {
+        if ("true".equalsIgnoreCase(value)) return true;
+        if ("false".equalsIgnoreCase(value)) return false;
+        return fallback;
     }
 
     private static Properties readProperties(Path path) {

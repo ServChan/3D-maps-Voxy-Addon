@@ -30,6 +30,9 @@
   "screen.voxymap.settings.title": "Map settings",
   "screen.voxymap.settings.pause": "Pause singleplayer",
   "screen.voxymap.settings.speed": "Camera speed",
+  "screen.voxymap.settings.cutaway": "Reveal rooms/caves",
+  "screen.voxymap.settings.vanillasquad": "VanillaSquad players",
+  "screen.voxymap.settings.vanillasquadflags": "VanillaSquad flags",
   "screen.voxymap.settings.on": "On",
   "screen.voxymap.settings.off": "Off"
 }

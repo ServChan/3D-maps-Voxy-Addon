@@ -30,6 +30,9 @@
   "screen.voxymap.settings.title": "Ustawienia mapy",
   "screen.voxymap.settings.pause": "Pauza w singleplayer",
   "screen.voxymap.settings.speed": "Szybko\u015b\u0107 kamery",
+  "screen.voxymap.settings.cutaway": "Ods\u0142anianie pomieszcze\u0144",
+  "screen.voxymap.settings.vanillasquad": "Gracze VanillaSquad",
+  "screen.voxymap.settings.vanillasquadflags": "Flagi VanillaSquad",
   "screen.voxymap.settings.on": "W\u0142.",
   "screen.voxymap.settings.off": "Wy\u0142."
 }

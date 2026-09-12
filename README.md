@@ -11,9 +11,11 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 ## Features
 
 - Full-screen Voxy terrain view opened with a configurable key, `M` by default.
-- Player-height Nether cutaway: terrain above the player's head is clipped in Voxy and the overlapping vanilla roof pass is suppressed.
+- Nether roof strip based on the dimension's logical ceiling, with overlapping vanilla terrain suppressed only while a cut is active.
 - Mouse dragging, middle-button rotation, cursor-centered zoom, and smooth keyboard movement.
 - Exact player centering plus projected markers for the local player and other loaded players.
+- Optional VanillaSquad global player markers with compact skin heads and clustered territory outlines.
+- Connectivity-aware room cutaway computed in bounded slices outside the render-state loop.
 - Seamless near terrain: vanilla chunks fill Voxy's player-centered LOD exclusion zone.
 - Optional singleplayer pause and adjustable camera speed.
 - Optional handoff to Xaero's World Map with a return button.
@@ -25,7 +27,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 - Java `25`.
 - Fabric Loader `0.19.3` or newer.
 - Fabric API.
-- Voxy `0.2.18-beta` or newer for Minecraft 26.2.
+- Voxy `0.2.18-beta` exactly. The cutaway shader integration targets this internal shader layout.
 
 Iris and Xaero's World Map are optional integrations. The mod is client-only and does not need to be installed on the server.
 
@@ -56,16 +58,17 @@ The normal non-sources JAR is written to `build/libs/voxy-map-<version>.jar`.
 
 ## Known limitations
 
-- The Nether cut height follows the local player's current Y level plus 2.5 blocks. Only terrain already present in Voxy's cache can be shown.
+- Room cutaway only removes a locally verified enclosed ceiling; unloaded or uncertain block data disables the local cut rather than guessing.
+- The Nether roof strip uses the dimension's logical ceiling. Only terrain already present in Voxy's cache can be shown.
 - VoxyMap only displays terrain already available to Voxy; it does not load chunks or reveal unexplored server data.
-- Multiplayer markers are limited to players whose entities are currently available to the client; a client-only mod cannot obtain hidden or distant coordinates from the server.
+- Optional distant VanillaSquad markers come from that server's public web-map endpoints and are disabled by default.
 - Build and package checks do not replace an in-game test with the exact Voxy, Iris, Sodium, and Xaero versions in the target profile.
 
 ## Русский
 
 VoxyMap LTS — поддерживаемый клиентский форк 3D Maps Voxy Addon для Minecraft 26.2. Он открывает полноэкранную трёхмерную карту на данных LOD из Voxy.
 
-Карта открывается клавишей `M`; назначение можно изменить в стандартных настройках управления. ЛКМ перемещает карту, СКМ поворачивает камеру, колесо меняет масштаб, `W/A/S/D` двигают камеру, `Shift` ускоряет, `C` точно возвращает центр к игроку. На карте отображаются отдельная отметка текущего игрока и именные отметки других загруженных игроков. Настройки сохраняются в `config/voxymap.properties`, рядом хранится резервная копия.
+Карта открывается клавишей `M`; назначение можно изменить в стандартных настройках управления. ЛКМ перемещает карту, СКМ поворачивает камеру, колесо меняет масштаб, `W/A/S/D` двигают камеру, `Shift` ускоряет, `C` точно возвращает центр к игроку. На карте отображаются отдельная отметка текущего игрока и именные отметки других загруженных игроков. В настройках можно включить срез замкнутых помещений, удалённых игроков VanillaSquad и контуры территорий по флагам. Настройки сохраняются в `config/voxymap.properties`, рядом хранится резервная копия.
 
 ## Credits and license
 

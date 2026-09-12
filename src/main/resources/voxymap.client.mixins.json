@@ -11,8 +11,8 @@
     "HudMixin",
     "LevelMixin",
     "LevelRendererMixin",
+    "MapVanillaTerrainMixin",
     "MDICSectionRendererMixin",
-    "NetherChunkLayerMixin",
     "VoxyShaderLoaderMixin",
     "XaeroGuiMapMixin"
   ],
