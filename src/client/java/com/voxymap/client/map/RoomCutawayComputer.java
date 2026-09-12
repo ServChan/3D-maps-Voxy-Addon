@@ -9,12 +9,12 @@ package com.voxymap.client.map;
  * cells actually reachable from the player without crossing a solid block are considered part of the
  * room, so a cave on the other side of a wall, or open sky/terrain above, never gets touched.
  *
- * <p>If the flood fill is not fully contained within the search window (it reaches the window's edge,
- * or exceeds the cell budget), the space is treated as open/too large and {@link Result#OPEN} is
- * returned — the caller must not cut anything in that case.
+ * <p>Normal searches only return a cutaway for a fully enclosed pocket. A remote-server Nether
+ * search can instead retain the verified portion when it reaches unknown data or its safety bounds:
+ * this reveals only connected air the server actually sent, never guessed anti-xray contents.
  */
 public final class RoomCutawayComputer {
-    public static final int MAX_CELLS = 12000;
+    public static final int MAX_CELLS = 96000;
     public static final int HORIZONTAL_RADIUS = 48;
     public static final int VERTICAL_RADIUS = 32;
     public static final int GRID_SIZE = HORIZONTAL_RADIUS * 2 + 1;
@@ -51,17 +51,23 @@ public final class RoomCutawayComputer {
     }
 
     public static Search start(int feetX, int feetY, int feetZ) {
-        return new Search(feetX, feetY, feetZ);
+        return new Search(feetX, feetY, feetZ, false);
+    }
+
+    public static Search startVerifiedPartial(int feetX, int feetY, int feetZ) {
+        return new Search(feetX, feetY, feetZ, true);
     }
 
     /** Incremental flood fill so client-world reads can be spread across screen ticks. */
     public static final class Search {
         private static final byte SEEN = 1;
         private static final byte REACHABLE = 2;
+        private static final byte VERIFIED_BLOCKED = 3;
 
         private final int feetX;
         private final int feetY;
         private final int feetZ;
+        private final boolean retainVerifiedPartial;
         private final byte[] cells = new byte[GRID_SIZE * GRID_SIZE * VERTICAL_SIZE];
         private final int[] queueX = new int[MAX_CELLS + 2];
         private final int[] queueY = new int[MAX_CELLS + 2];
@@ -69,12 +75,14 @@ public final class RoomCutawayComputer {
         private int queueHead;
         private int queueTail;
         private int visitedCount;
+        private boolean truncated;
         private Result result;
 
-        private Search(int feetX, int feetY, int feetZ) {
+        private Search(int feetX, int feetY, int feetZ, boolean retainVerifiedPartial) {
             this.feetX = feetX;
             this.feetY = feetY;
             this.feetZ = feetZ;
+            this.retainVerifiedPartial = retainVerifiedPartial;
             seed(feetX, feetY, feetZ);
             seed(feetX, feetY + 1, feetZ);
         }
@@ -100,9 +108,11 @@ public final class RoomCutawayComputer {
 
                     if (Math.abs(nx - feetX) > HORIZONTAL_RADIUS || Math.abs(nz - feetZ) > HORIZONTAL_RADIUS
                             || Math.abs(ny - feetY) > VERTICAL_RADIUS) {
-                        // Once reachable air leaves the bounded window, this cannot be a certified
-                        // enclosed room. There is no value in scanning another 12k cells.
-                        result = Result.OPEN;
+                        if (retainVerifiedPartial) {
+                            truncated = true;
+                            continue;
+                        }
+                        finishUnenclosed();
                         return true;
                     }
 
@@ -113,20 +123,24 @@ public final class RoomCutawayComputer {
                     cells[index] = SEEN;
                     int state = classifier.classify(nx, ny, nz);
                     if (state == UNKNOWN) {
-                        // We can't verify what's beyond an unloaded/unreported cell, so we can't
-                        // certify the room is actually sealed there - treat it like leaving the
-                        // search window entirely rather than risk guessing wrong.
-                        result = Result.OPEN;
+                        if (retainVerifiedPartial) {
+                            // Unknown is a hard boundary, never air. Continue finishing other
+                            // already reachable columns so their real solid ceilings can be proven.
+                            truncated = true;
+                            continue;
+                        }
+                        finishUnenclosed();
                         return true;
                     }
                     if (state == BLOCKED) {
+                        cells[index] = VERIFIED_BLOCKED;
                         continue;
                     }
 
                     cells[index] = REACHABLE;
                     visitedCount++;
                     if (visitedCount > MAX_CELLS) {
-                        result = Result.OPEN;
+                        finishUnenclosed();
                         return true;
                     }
                     enqueue(nx, ny, nz);
@@ -134,7 +148,7 @@ public final class RoomCutawayComputer {
             }
 
             if (queueHead >= queueTail) {
-                result = buildResult(feetX, feetY, feetZ, cells);
+                result = buildResult(feetX, feetY, feetZ, cells, !truncated);
                 return true;
             }
             return false;
@@ -146,6 +160,12 @@ public final class RoomCutawayComputer {
 
         public Result result() {
             return result;
+        }
+
+        private void finishUnenclosed() {
+            result = retainVerifiedPartial
+                    ? buildResult(feetX, feetY, feetZ, cells, false)
+                    : Result.OPEN;
         }
 
         private void seed(int x, int y, int z) {
@@ -171,7 +191,7 @@ public final class RoomCutawayComputer {
         return (gx * GRID_SIZE + gz) * VERTICAL_SIZE + gy;
     }
 
-    private static Result buildResult(int feetX, int feetY, int feetZ, byte[] cells) {
+    private static Result buildResult(int feetX, int feetY, int feetZ, byte[] cells, boolean enclosed) {
         int[][] topY = new int[GRID_SIZE][GRID_SIZE];
         for (int[] row : topY) {
             java.util.Arrays.fill(row, NO_CEILING);
@@ -182,6 +202,13 @@ public final class RoomCutawayComputer {
                 int base = (gx * GRID_SIZE + gz) * VERTICAL_SIZE;
                 for (int gy = VERTICAL_SIZE - 1; gy >= 0; gy--) {
                     if (cells[base + gy] == Search.REACHABLE) {
+                        if (!enclosed && (gy + 1 >= VERTICAL_SIZE
+                                || cells[base + gy + 1] != Search.VERIFIED_BLOCKED)) {
+                            // A partial scan may stop before reaching this column's real ceiling.
+                            // Cutting at the wavefront would create a low stepped dome and amputate
+                            // buildings, so only publish columns with a confirmed solid cap.
+                            break;
+                        }
                         topY[gx][gz] = gy - VERTICAL_RADIUS + feetY;
                         break;
                     }
@@ -189,7 +216,7 @@ public final class RoomCutawayComputer {
             }
         }
 
-        return new Result(true, topY, feetX - HORIZONTAL_RADIUS, feetZ - HORIZONTAL_RADIUS);
+        return new Result(enclosed, topY, feetX - HORIZONTAL_RADIUS, feetZ - HORIZONTAL_RADIUS);
     }
 
     public static final class Result {
@@ -207,9 +234,13 @@ public final class RoomCutawayComputer {
             this.minZ = minZ;
         }
 
+        public boolean hasCutaway() {
+            return topY != null;
+        }
+
         /** Highest reachable-room block in this column, or {@link #NO_CEILING} if the column isn't part of the room. */
         public int ceilingAt(int worldX, int worldZ) {
-            if (!enclosed) {
+            if (!hasCutaway()) {
                 return NO_CEILING;
             }
             int gx = worldX - minX;

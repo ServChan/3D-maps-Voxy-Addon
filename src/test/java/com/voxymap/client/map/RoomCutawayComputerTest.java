@@ -31,6 +31,25 @@ class RoomCutawayComputerTest {
     }
 
     @Test
+    void verifiedPartialModeKeepsOnlyReachableAirWhenRemoteDataEnds() {
+        RoomCutawayComputer.Search search = RoomCutawayComputer.startVerifiedPartial(0, 64, 0);
+        while (!search.isComplete()) {
+            search.advance((x, y, z) -> {
+                if (x >= -3 && x <= 3 && z >= -3 && z <= 3 && y >= 64 && y <= 68) {
+                    return RoomCutawayComputer.PASSABLE;
+                }
+                return x == 4 ? RoomCutawayComputer.UNKNOWN : RoomCutawayComputer.BLOCKED;
+            }, Integer.MAX_VALUE);
+        }
+
+        RoomCutawayComputer.Result result = search.result();
+        assertFalse(result.enclosed);
+        assertTrue(result.hasCutaway());
+        assertEquals(68, result.ceilingAt(0, 0));
+        assertEquals(RoomCutawayComputer.NO_CEILING, result.ceilingAt(5, 0));
+    }
+
+    @Test
     void caveOnTheOtherSideOfAWallIsNotTreatedAsPartOfTheRoom() {
         // Player's room: x in [-2,-1]. A solid wall at x=0. A second, disconnected room at x in [1,2].
         RoomCutawayComputer.Result result = RoomCutawayComputer.compute(-1, 0, 0, (x, y, z) ->

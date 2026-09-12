@@ -111,17 +111,17 @@ class ProjectContractTest {
     }
 
     @Test
-    void netherUsesAGlobalRoofOnlySliceOutsideTheLocalRoomTexture() throws IOException {
+    void netherGlobalRoofSliceIsRestrictedToTrustedLocalWorldData() throws IOException {
         String controller = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/RoomCutawayController.java"), StandardCharsets.UTF_8);
         String shader = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/RoomCutawayShaderPatcher.java"), StandardCharsets.UTF_8);
         assertTrue(controller.contains("minecraft:the_nether"));
         assertTrue(controller.contains("NetherRoofPolicy.cutoff("));
-        assertFalse(controller.substring(controller.indexOf("float netherRoofCutoff"),
-                        controller.indexOf("cuttingSomething ="))
-                .contains("minecraft.player.getY()"),
-                "The global Nether plane must not amputate builds at the player's height");
+        assertTrue(controller.contains("isNether && trustedLocalWorld"),
+                "Remote anti-xray cache data must never be exposed by a global horizontal slice");
+        assertTrue(controller.contains("startVerifiedPartial"),
+                "Remote Nether cutaway must use only connected air confirmed by client data");
         assertTrue(controller.contains("RoomCutawayTexture.setUniformCutoff(netherRoofCutoff)"),
                 "Changing the global plane must not re-upload the unchanged local room texture");
         assertTrue(shader.contains("voxymapGlobalCutawayY"));
@@ -172,6 +172,10 @@ class ProjectContractTest {
         assertTrue(source.contains("return !local && !remote && Float.isFinite(yawDegrees)"));
         assertTrue(source.contains("blocksPerPixel * PLAYER_VIEW_CONE_SCREEN_LENGTH"),
                 "The cone should keep a useful screen size across map zoom levels");
+        assertTrue(source.contains("nearestActiveMarkerDistance"),
+                "Crowded active players must collapse to compact direction ticks");
+        assertTrue(source.contains("hovered || nearest >= PLAYER_VIEW_CONE_CROWD_DISTANCE"),
+                "Hovering a crowded player must restore its full cone");
         assertTrue(source.indexOf("drawPlayerViewCone(g, marker, point)")
                 < source.indexOf("drawDiamond(g, point.x, point.y, radius + 2, outline)"),
                 "The marker must remain legible on top of its cone");

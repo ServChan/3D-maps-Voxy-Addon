@@ -11,9 +11,9 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 ## Features
 
 - Full-screen Voxy terrain view opened with a configurable key, `M` by default.
-- Global Nether roof removal works across all cached LODs while preserving complete builds below the ceiling.
+- Safe Nether cutaway avoids exposing anti-xray decoy LODs on remote servers; integrated worlds retain global roof removal.
 - Mouse dragging, middle-button rotation, cursor-centered zoom, and smooth keyboard movement.
-- Exact player centering plus projected markers and facing cones for nearby active players.
+- Exact player centering plus projected markers and adaptive facing indicators for nearby active players.
 - Optional VanillaSquad global player markers with compact skin heads and clustered territory outlines.
 - Connectivity-aware room cutaway computed in bounded slices outside the render-state loop.
 - Stable near terrain: while the map is open, Voxy's cached LODs fill its normal player-centered hand-off zone instead of using Sodium's angle-dependent real-camera visibility set.
@@ -58,8 +58,9 @@ The normal non-sources JAR is written to `build/libs/voxy-map-<version>.jar`.
 
 ## Known limitations
 
-- Room cutaway only removes a locally verified enclosed ceiling; unloaded or uncertain block data disables the precise local cut rather than guessing.
-- The Nether globally removes only the top eight-block roof layer. Tall builds below that layer remain intact; only terrain already present in Voxy's cache can be shown.
+- Room cutaway removes only columns with a verified solid ceiling over connected client-visible air; unloaded or uncertain cells are never guessed.
+- In the remote-server Nether, global cache slicing is intentionally disabled because anti-xray replacements are not real terrain. The wider incremental local mask reveals verified rooms/caves near the player. Integrated singleplayer worlds retain global top-roof removal because their cached data is authoritative.
+- Active-player facing indicators collapse to short direction ticks in dense groups. Hovering a marker restores its complete cone and draws that marker last.
 - VoxyMap only displays terrain already available to Voxy; it does not load chunks or reveal unexplored server data.
 - Optional distant VanillaSquad markers come from that server's public web-map endpoints and are disabled by default.
 - Build and package checks do not replace an in-game test with the exact Voxy, Iris, Sodium, and Xaero versions in the target profile.

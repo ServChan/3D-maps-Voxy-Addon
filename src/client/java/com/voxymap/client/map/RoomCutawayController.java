@@ -12,7 +12,7 @@ import net.minecraft.world.level.Level;
 public final class RoomCutawayController {
     private static final long ENCLOSED_RECOMPUTE_INTERVAL_NANOS = 2_000_000_000L;
     private static final long OPEN_RECOMPUTE_INTERVAL_NANOS = 10_000_000_000L;
-    private static final int SCAN_NODE_BUDGET_PER_TICK = 128;
+    private static final int SCAN_NODE_BUDGET_PER_TICK = 1024;
     private static final int RECOMPUTE_MOVE_THRESHOLD = 2;
     private static RoomCutawayComputer.Result result = RoomCutawayComputer.Result.OPEN;
     private static long lastComputeNanos = 0L;
@@ -36,24 +36,28 @@ public final class RoomCutawayController {
             return;
         }
 
+        Level level = minecraft.level;
+        String dimensionId = level.dimension().identifier().toString();
+        boolean isNether = "minecraft:the_nether".equals(dimensionId);
+        boolean trustedLocalWorld = minecraft.isLocalServer();
+
         if (VoxyMapSettings.roomCutawayEnabled()) {
-            recomputeRoomIfNeeded(minecraft);
+            recomputeRoomIfNeeded(minecraft, isNether && !trustedLocalWorld);
         } else {
             result = RoomCutawayComputer.Result.OPEN;
             hasComputed = false;
             pendingSearch = null;
         }
 
-        Level level = minecraft.level;
-        String dimensionId = level.dimension().identifier().toString();
-        boolean isNether = "minecraft:the_nether".equals(dimensionId);
-        float netherRoofCutoff = isNether
+        // Remote servers may replace hidden Nether blocks with anti-xray decoys. A global Voxy
+        // slice exposes that fake volume as a checkerboard, so only integrated worlds may use it.
+        float netherRoofCutoff = isNether && trustedLocalWorld
                 ? NetherRoofPolicy.cutoff(
                         level.dimensionType().minY(),
                         level.dimensionType().logicalHeight())
                 : RoomCutawayTexture.NO_CUT_VALUE;
 
-        cuttingSomething = result.enclosed || isNether;
+        cuttingSomething = result.hasCutaway() || netherRoofCutoff != RoomCutawayTexture.NO_CUT_VALUE;
         if (cuttingSomething) {
             if (!RoomCutawayTexture.isEnabled() || uploadedResult != result) {
                 RoomCutawayTexture.update(result, netherRoofCutoff);
@@ -69,7 +73,7 @@ public final class RoomCutawayController {
         }
     }
 
-    private static void recomputeRoomIfNeeded(Minecraft minecraft) {
+    private static void recomputeRoomIfNeeded(Minecraft minecraft, boolean retainVerifiedPartial) {
         BlockPos feet = minecraft.player.blockPosition();
         long now = System.nanoTime();
         String dimensionId = minecraft.level.dimension().identifier().toString();
@@ -83,11 +87,13 @@ public final class RoomCutawayController {
                 || Math.abs(feet.getX() - lastFeetX) >= RECOMPUTE_MOVE_THRESHOLD
                 || Math.abs(feet.getY() - lastFeetY) >= RECOMPUTE_MOVE_THRESHOLD
                 || Math.abs(feet.getZ() - lastFeetZ) >= RECOMPUTE_MOVE_THRESHOLD;
-        long interval = result.enclosed ? ENCLOSED_RECOMPUTE_INTERVAL_NANOS : OPEN_RECOMPUTE_INTERVAL_NANOS;
+        long interval = result.hasCutaway() ? ENCLOSED_RECOMPUTE_INTERVAL_NANOS : OPEN_RECOMPUTE_INTERVAL_NANOS;
         boolean stale = (now - lastComputeNanos) >= interval;
 
         if (moved || (pendingSearch == null && stale)) {
-            pendingSearch = RoomCutawayComputer.start(feet.getX(), feet.getY(), feet.getZ());
+            pendingSearch = retainVerifiedPartial
+                    ? RoomCutawayComputer.startVerifiedPartial(feet.getX(), feet.getY(), feet.getZ())
+                    : RoomCutawayComputer.start(feet.getX(), feet.getY(), feet.getZ());
             lastFeetX = feet.getX();
             lastFeetY = feet.getY();
             lastFeetZ = feet.getZ();
@@ -117,7 +123,7 @@ public final class RoomCutawayController {
         }
     }
 
-    /** Whether the cutaway texture currently discards anything (local room, Nether roof strip, or both). */
+    /** Whether the cutaway texture currently discards anything (verified room or trusted local roof). */
     public static boolean isActive() {
         return VoxyMapCameraController.isActive() && cuttingSomething;
     }

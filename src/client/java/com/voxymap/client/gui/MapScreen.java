@@ -36,8 +36,9 @@ public class MapScreen extends Screen {
     private static final double MAX_KEYBOARD_CAMERA_SPEED = 640.0;
     private static final double MAX_DRAG_STEP_BLOCKS = 1536.0;
     private static final double PLAYER_VIEW_CONE_HALF_ANGLE = 32.0;
-    private static final int PLAYER_VIEW_CONE_ARC_SEGMENTS = 6;
     private static final double PLAYER_VIEW_CONE_SCREEN_LENGTH = 34.0;
+    private static final double PLAYER_VIEW_CONE_CROWD_DISTANCE = 52.0;
+    private static final double PLAYER_MARKER_HOVER_DISTANCE = 12.0;
     private double viewCenterX;
     private double viewCenterY;
     private double viewCenterZ;
@@ -417,7 +418,7 @@ public class MapScreen extends Screen {
 
     private void drawWorldViewerOverlay(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         drawFlagMarkers(g);
-        drawPlayerMarkers(g);
+        drawPlayerMarkers(g, mouseX, mouseY);
 
         int slide = (int) ((1.0 - openingProgress()) * 28.0);
         int topX = HUD_MARGIN;
@@ -592,11 +593,12 @@ public class MapScreen extends Screen {
         return new double[]{x1 + t0 * dx, y1 + t0 * dy, x1 + t1 * dx, y1 + t1 * dy};
     }
 
-    private void drawPlayerMarkers(GuiGraphicsExtractor g) {
+    private void drawPlayerMarkers(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         if (!VoxyMapCameraController.isActive() || playerMarkers.isEmpty()) {
             return;
         }
 
+        List<ProjectedPlayerMarker> projected = new ArrayList<>();
         for (PlayerMarker marker : playerMarkers) {
             ScreenPoint point = marker.local && isViewCenteredOn(marker)
                     ? new ScreenPoint(width / 2, height / 2)
@@ -604,59 +606,122 @@ public class MapScreen extends Screen {
             if (point == null || point.x < 8 || point.x >= width - 8 || point.y < 16 || point.y >= height - 8) {
                 continue;
             }
-
-            int radius = marker.local ? 9 : 6;
-            int outline = marker.local ? 0xEE071923 : (marker.remote ? 0xEE241A05 : 0xEE210A25);
-            int color = marker.local ? 0xFF55E7FF : (marker.remote ? 0xFFF2B33D : 0xFFFF62D4);
-            if (marker.isActivePlayer()) {
-                drawPlayerViewCone(g, marker, point);
-            }
-            drawDiamond(g, point.x, point.y, radius + 2, outline);
-            drawDiamond(g, point.x, point.y, radius, color);
-            g.fill(point.x - 1, point.y - 1, point.x + 2, point.y + 2, 0xFFFFFFFF);
-
-            String label = marker.local
-                    ? Component.translatable("overlay.voxymap.player").getString() + ": " + marker.name
-                    : marker.name;
-            Identifier skin = PlayerHeadIcon.resolveSkinTexture(minecraft, marker.uuid);
-            int headSize = 10;
-            int headGap = skin != null ? headSize + 3 : 0;
-            int labelWidth = minecraft.font.width(label) + 8 + headGap;
-            int labelX = Mth.clamp(point.x - labelWidth / 2, 3, Math.max(3, width - labelWidth - 3));
-            int labelY = point.y - radius - 15;
-            g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, 0xCC030914);
-            g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, color);
-            if (skin != null) {
-                PlayerHeadIcon.draw(g, skin, labelX + 3, labelY, headSize);
-            }
-            g.text(minecraft.font, label, labelX + 4 + headGap, labelY + 2, 0xFFFFFFFF);
+            projected.add(new ProjectedPlayerMarker(marker, point));
         }
+
+        ProjectedPlayerMarker hovered = null;
+        double hoveredDistance = PLAYER_MARKER_HOVER_DISTANCE;
+        for (ProjectedPlayerMarker entry : projected) {
+            double distance = Math.hypot(entry.point.x - mouseX, entry.point.y - mouseY);
+            if (distance <= hoveredDistance) {
+                hovered = entry;
+                hoveredDistance = distance;
+            }
+        }
+
+        for (ProjectedPlayerMarker entry : projected) {
+            if (entry != hovered) {
+                drawPlayerMarker(g, entry, projected, false);
+            }
+        }
+        if (hovered != null) {
+            drawPlayerMarker(g, hovered, projected, true);
+        }
+    }
+
+    private void drawPlayerMarker(GuiGraphicsExtractor g, ProjectedPlayerMarker entry,
+                                  List<ProjectedPlayerMarker> projected, boolean hovered) {
+        PlayerMarker marker = entry.marker;
+        ScreenPoint point = entry.point;
+        int radius = marker.local ? 9 : 6;
+        int outline = marker.local ? 0xEE071923 : (marker.remote ? 0xEE241A05 : 0xEE210A25);
+        int color = marker.local ? 0xFF55E7FF : (marker.remote ? 0xFFF2B33D : 0xFFFF62D4);
+        if (marker.isActivePlayer()) {
+            double nearest = nearestActiveMarkerDistance(entry, projected);
+            if (hovered || nearest >= PLAYER_VIEW_CONE_CROWD_DISTANCE) {
+                drawPlayerViewCone(g, marker, point);
+            } else {
+                drawPlayerDirectionTick(g, marker, point, Mth.clamp(nearest * 0.28, 6.0, 11.0));
+            }
+        }
+        drawDiamond(g, point.x, point.y, radius + 2, outline);
+        drawDiamond(g, point.x, point.y, radius, color);
+        g.fill(point.x - 1, point.y - 1, point.x + 2, point.y + 2, 0xFFFFFFFF);
+
+        String label = marker.local
+                ? Component.translatable("overlay.voxymap.player").getString() + ": " + marker.name
+                : marker.name;
+        Identifier skin = PlayerHeadIcon.resolveSkinTexture(minecraft, marker.uuid);
+        int headSize = 10;
+        int headGap = skin != null ? headSize + 3 : 0;
+        int labelWidth = minecraft.font.width(label) + 8 + headGap;
+        int labelX = Mth.clamp(point.x - labelWidth / 2, 3, Math.max(3, width - labelWidth - 3));
+        int labelY = point.y - radius - 15;
+        g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, hovered ? 0xEE030914 : 0xCC030914);
+        g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, color);
+        if (skin != null) {
+            PlayerHeadIcon.draw(g, skin, labelX + 3, labelY, headSize);
+        }
+        g.text(minecraft.font, label, labelX + 4 + headGap, labelY + 2, 0xFFFFFFFF);
+    }
+
+    private double nearestActiveMarkerDistance(ProjectedPlayerMarker source,
+                                               List<ProjectedPlayerMarker> projected) {
+        double nearest = Double.POSITIVE_INFINITY;
+        for (ProjectedPlayerMarker other : projected) {
+            if (other != source && other.marker.isActivePlayer()) {
+                nearest = Math.min(nearest,
+                        Math.hypot(other.point.x - source.point.x, other.point.y - source.point.y));
+            }
+        }
+        return nearest;
     }
 
     private void drawPlayerViewCone(GuiGraphicsExtractor g, PlayerMarker marker, ScreenPoint origin) {
         double worldLength = Mth.clamp(blocksPerPixel * PLAYER_VIEW_CONE_SCREEN_LENGTH, 12.0, 96.0);
-        ScreenPoint previousArcPoint = null;
-        for (int i = 0; i <= PLAYER_VIEW_CONE_ARC_SEGMENTS; i++) {
-            double fraction = i / (double) PLAYER_VIEW_CONE_ARC_SEGMENTS;
-            double yaw = marker.yawDegrees - PLAYER_VIEW_CONE_HALF_ANGLE
-                    + fraction * PLAYER_VIEW_CONE_HALF_ANGLE * 2.0;
-            ScreenPoint arcPoint = projectViewConePoint(marker, yaw, worldLength);
-            if (arcPoint == null) {
-                previousArcPoint = null;
-                continue;
-            }
-            if (i == 0 || i == PLAYER_VIEW_CONE_ARC_SEGMENTS) {
-                drawDashedLine(g, origin.x, origin.y, arcPoint.x, arcPoint.y, 0x88FF62D4);
-            }
-            if (previousArcPoint != null) {
-                drawDashedLine(g, previousArcPoint.x, previousArcPoint.y, arcPoint.x, arcPoint.y, 0x66FF62D4);
-            }
-            previousArcPoint = arcPoint;
-        }
-
+        ScreenPoint left = projectViewConePoint(marker, marker.yawDegrees - PLAYER_VIEW_CONE_HALF_ANGLE, worldLength);
+        ScreenPoint right = projectViewConePoint(marker, marker.yawDegrees + PLAYER_VIEW_CONE_HALF_ANGLE, worldLength);
         ScreenPoint lookPoint = projectViewConePoint(marker, marker.yawDegrees, worldLength);
+        if (left != null && right != null) {
+            drawSolidLine(g, origin.x, origin.y, left.x, left.y, 0x66FF62D4);
+            drawSolidLine(g, left.x, left.y, right.x, right.y, 0x44FF62D4);
+            drawSolidLine(g, right.x, right.y, origin.x, origin.y, 0x66FF62D4);
+        }
         if (lookPoint != null) {
-            drawDashedLine(g, origin.x, origin.y, lookPoint.x, lookPoint.y, 0xCCFFB3EC);
+            drawSolidLine(g, origin.x, origin.y, lookPoint.x, lookPoint.y, 0xAAFFB3EC);
+        }
+    }
+
+    private void drawPlayerDirectionTick(GuiGraphicsExtractor g, PlayerMarker marker,
+                                         ScreenPoint origin, double screenLength) {
+        ScreenPoint farPoint = projectViewConePoint(marker, marker.yawDegrees,
+                Mth.clamp(blocksPerPixel * PLAYER_VIEW_CONE_SCREEN_LENGTH, 12.0, 96.0));
+        if (farPoint == null) {
+            return;
+        }
+        double dx = farPoint.x - origin.x;
+        double dy = farPoint.y - origin.y;
+        double length = Math.hypot(dx, dy);
+        if (length > 0.5) {
+            drawSolidLine(g, origin.x, origin.y,
+                    (int) Math.round(origin.x + dx / length * screenLength),
+                    (int) Math.round(origin.y + dy / length * screenLength), 0xBBFFB3EC);
+        }
+    }
+
+    private void drawSolidLine(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int color) {
+        double[] clipped = clipLineToViewport(x1, y1, x2, y2);
+        if (clipped == null) {
+            return;
+        }
+        double dx = clipped[2] - clipped[0];
+        double dy = clipped[3] - clipped[1];
+        int steps = Math.max(1, (int) Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))));
+        for (int i = 0; i <= steps; i++) {
+            double t = i / (double) steps;
+            int px = (int) Math.round(clipped[0] + dx * t);
+            int py = (int) Math.round(clipped[1] + dy * t);
+            g.fill(px, py, px + 1, py + 1, color);
         }
     }
 
@@ -1041,6 +1106,9 @@ public class MapScreen extends Screen {
     }
 
     private record ScreenPoint(int x, int y) {
+    }
+
+    private record ProjectedPlayerMarker(PlayerMarker marker, ScreenPoint point) {
     }
 
     private record PlayerMarker(String name, double x, double y, double z, boolean local, boolean remote,

@@ -49,14 +49,14 @@ public final class RoomCutawayTexture {
     public static void update(RoomCutawayComputer.Result result, float globalCutoff) {
         ensureCreated();
         int size = RoomCutawayComputer.GRID_SIZE;
-        int originGridX = result.enclosed ? result.minX : 0;
-        int originGridZ = result.enclosed ? result.minZ : 0;
+        int originGridX = result.hasCutaway() ? result.minX : 0;
+        int originGridZ = result.hasCutaway() ? result.minZ : 0;
         FloatBuffer buffer = MemoryUtil.memAllocFloat(size * size);
         try {
             for (int gx = 0; gx < size; gx++) {
                 for (int gz = 0; gz < size; gz++) {
                     float value = NO_CUT_VALUE;
-                    if (result.enclosed) {
+                    if (result.hasCutaway()) {
                         int ceiling = result.topY[gx][gz];
                         if (ceiling != RoomCutawayComputer.NO_CEILING) {
                             value = (float) ceiling + RoomCutawayComputer.CEILING_MARGIN;
