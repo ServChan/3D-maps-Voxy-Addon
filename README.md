@@ -11,6 +11,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 ## Features
 
 - Full-screen Voxy terrain view opened with a configurable key, `M` by default.
+- Separate native Voxy views for the Overworld, Nether, and End.
 - Mouse dragging, middle-button rotation, cursor-centered zoom, and smooth keyboard movement.
 - Exact player centering plus projected markers for the local player and other loaded players.
 - Seamless near terrain: vanilla chunks fill Voxy's player-centered LOD exclusion zone.
@@ -55,7 +56,7 @@ The normal non-sources JAR is written to `build/libs/voxy-map-<version>.jar`.
 
 ## Known limitations
 
-- The Nether is intentionally disabled by the upstream map design.
+- The Nether view shows the terrain surface available to Voxy, normally the bedrock roof. An interior cave cutaway would require Voxy shader-level height clipping that its current public API does not expose.
 - VoxyMap only displays terrain already available to Voxy; it does not load chunks or reveal unexplored server data.
 - Multiplayer markers are limited to players whose entities are currently available to the client; a client-only mod cannot obtain hidden or distant coordinates from the server.
 - Build and package checks do not replace an in-game test with the exact Voxy, Iris, Sodium, and Xaero versions in the target profile.

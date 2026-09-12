@@ -70,6 +70,15 @@ class ProjectContractTest {
                 "Entity snapshots must not be collected in the render-state loop");
     }
 
+    @Test
+    void netherUsesItsNativeVoxyWorldInsteadOfAnUnsupportedScreen() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/gui/MapScreen.java"), StandardCharsets.UTF_8);
+        assertFalse(source.contains("isUnsupportedDimension"));
+        assertFalse(source.contains("minecraft:the_nether"));
+        assertTrue(source.contains("VoxyMapGuiRenderer.open(minecraft)"));
+    }
+
     private static JsonObject readJson(Path path) throws IOException {
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             return JsonParser.parseReader(reader).getAsJsonObject();
