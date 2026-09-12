@@ -43,6 +43,14 @@ class ProjectContractTest {
         assertFalse(Files.exists(forbidden), "Do not compile fake classes in the net.minecraft namespace");
     }
 
+    @Test
+    void voxyRenderMixinMatchesCurrentRenderOpaqueDescriptor() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/mixin/VoxyRenderSystemMixin.java"), StandardCharsets.UTF_8);
+        assertTrue(source.contains("Viewport<?> viewport, int width, int height, CallbackInfo ci"),
+                "Voxy 0.2.18+ renderOpaque requires viewport, width, and height arguments");
+    }
+
     private static JsonObject readJson(Path path) throws IOException {
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             return JsonParser.parseReader(reader).getAsJsonObject();
