@@ -111,23 +111,23 @@ class ProjectContractTest {
     }
 
     @Test
-    void netherGlobalRoofSliceIsRestrictedToTrustedLocalWorldData() throws IOException {
+    void netherRoofRemovalUsesWholeQuadsInsteadOfAntiXrayCrossSections() throws IOException {
         String controller = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/RoomCutawayController.java"), StandardCharsets.UTF_8);
         String shader = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/RoomCutawayShaderPatcher.java"), StandardCharsets.UTF_8);
         assertTrue(controller.contains("minecraft:the_nether"));
         assertTrue(controller.contains("NetherRoofPolicy.cutoff("));
-        assertTrue(controller.contains("isNether && trustedLocalWorld"),
-                "Remote anti-xray cache data must never be exposed by a global horizontal slice");
+        assertTrue(controller.contains("float netherRoofCutoff = isNether"),
+                "Remote Nether maps also need their bedrock shell removed");
         assertTrue(controller.contains("startVerifiedPartial"),
                 "Remote Nether cutaway must use only connected air confirmed by client data");
         assertTrue(controller.contains("RoomCutawayTexture.setUniformCutoff(netherRoofCutoff)"),
                 "Changing the global plane must not re-upload the unchanged local room texture");
         assertTrue(shader.contains("voxymapGlobalCutawayY"));
-        assertTrue(shader.indexOf("if (voxymapWorldPos.y > voxymapCutY)")
-                > shader.indexOf("voxymapTexel.x >= 0"),
-                "The Nether slice must not be constrained to the local room texture bounds");
+        assertTrue(shader.contains("voxymapQuadMinY >= voxymapGlobalCutawayY"));
+        assertFalse(shader.contains("min(voxymapCutY"),
+                "Global clipping must not manufacture a tiled anti-xray cross-section");
     }
 
     @Test

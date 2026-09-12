@@ -3,9 +3,9 @@ package com.voxymap.client.map;
 import com.voxymap.client.VoxyMapClient;
 
 /**
- * Patches Voxy's native LOD shaders with a global horizontal cut plane and an optional, more precise
- * local room mask. In the Nether the global plane removes only the top roof layer across the whole
- * map, preserving complete builds below it. The per-column texture is built by
+ * Patches Voxy's native LOD shaders with a whole-quad Nether roof remover and an optional, more
+ * precise local room mask. Removing complete roof quads avoids manufacturing cross-sections through
+ * server anti-xray decoy LODs. The per-column texture is built by
  * {@link RoomCutawayComputer} from the connected air space around the player and may lower that plane
  * locally to reveal a room ceiling.
  */
@@ -17,10 +17,12 @@ public final class RoomCutawayShaderPatcher {
 
     private static final String VERTEX_DECLARATIONS = """
             layout(location = 12) out vec3 voxymapWorldPos;
+            layout(location = 13) out flat float voxymapQuadMinY;
 
             """;
     private static final String FRAGMENT_DECLARATIONS = """
             layout(location = 12) in vec3 voxymapWorldPos;
+            layout(location = 13) in flat float voxymapQuadMinY;
             layout(location = 30) uniform int voxymapCutawayEnabled;
             layout(location = 31) uniform float voxymapCutawayOriginX;
             layout(location = 32) uniform float voxymapCutawayOriginZ;
@@ -32,6 +34,7 @@ public final class RoomCutawayShaderPatcher {
                 vec2 voxymapCornerMask = vec2((cornerId >> 1) & 1u, cornerId & 1u) * quad.lodScale;
                 vec3 voxymapPoint = quad.basePoint + swizzelDataAxis(quad.axis, vec3(quad.quadSizeAddin * voxymapCornerMask, 0));
                 voxymapWorldPos = voxymapPoint + vec3(baseSectionPos << 5);
+                voxymapQuadMinY = quad.basePoint.y + float(baseSectionPos.y << 5);
             """;
     private static final String FRAGMENT_CLIP_ANCHOR =
             "if (DEPTH_SCALAR_COMPARE(gl_FragCoord.z, texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r)) {\n"
@@ -42,17 +45,25 @@ public final class RoomCutawayShaderPatcher {
 
 
                 if (voxymapCutawayEnabled != 0) {
-                    float voxymapCutY = voxymapGlobalCutawayY;
+                    // The global Nether threshold removes only complete quads belonging to the roof
+                    // band. Per-fragment clipping here would expose fake anti-xray volume as a tiled
+                    // cross-section. Local verified-air columns may still use a precise clip plane.
+                    if (voxymapGlobalCutawayY < %2$s && voxymapQuadMinY >= voxymapGlobalCutawayY) {
+                        discard;
+                        return;
+                    }
+                    float voxymapCutY = %2$s;
                     ivec2 voxymapTexel = ivec2(int(floor(voxymapWorldPos.x)) - int(voxymapCutawayOriginX),
                                                 int(floor(voxymapWorldPos.z)) - int(voxymapCutawayOriginZ));
                     if (voxymapTexel.x >= 0 && voxymapTexel.x < %1$d && voxymapTexel.y >= 0 && voxymapTexel.y < %1$d) {
-                        voxymapCutY = min(voxymapCutY, texelFetch(voxymapRoomHeightMap, voxymapTexel, 0).r);
+                        voxymapCutY = texelFetch(voxymapRoomHeightMap, voxymapTexel, 0).r;
                     }
                     if (voxymapWorldPos.y > voxymapCutY) {
                         discard;
                         return;
                     }
-                }""".formatted(RoomCutawayComputer.GRID_SIZE);
+                }""".formatted(RoomCutawayComputer.GRID_SIZE,
+                    Float.toString(RoomCutawayTexture.NO_CUT_VALUE));
 
     private static volatile boolean unsupported = false;
 

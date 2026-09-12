@@ -49,9 +49,9 @@ public final class RoomCutawayController {
             pendingSearch = null;
         }
 
-        // Remote servers may replace hidden Nether blocks with anti-xray decoys. A global Voxy
-        // slice exposes that fake volume as a checkerboard, so only integrated worlds may use it.
-        float netherRoofCutoff = isNether && trustedLocalWorld
+        // This threshold no longer slices through cached voxels. The shader removes only complete
+        // quads wholly in the roof band, so it is safe on remote anti-xray caches as well.
+        float netherRoofCutoff = isNether
                 ? NetherRoofPolicy.cutoff(
                         level.dimensionType().minY(),
                         level.dimensionType().logicalHeight())

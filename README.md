@@ -11,7 +11,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 ## Features
 
 - Full-screen Voxy terrain view opened with a configurable key, `M` by default.
-- Safe Nether cutaway avoids exposing anti-xray decoy LODs on remote servers; integrated worlds retain global roof removal.
+- Whole-quad Nether roof removal opens the bedrock shell without slicing anti-xray decoy LODs into a checkerboard.
 - Mouse dragging, middle-button rotation, cursor-centered zoom, and smooth keyboard movement.
 - Exact player centering plus projected markers and adaptive facing indicators for nearby active players.
 - Optional VanillaSquad global player markers with compact skin heads and clustered territory outlines.
@@ -60,7 +60,7 @@ The normal non-sources JAR is written to `build/libs/voxy-map-<version>.jar`.
 ## Known limitations
 
 - Room cutaway removes only columns with a verified solid ceiling over connected client-visible air; unloaded or uncertain cells are never guessed.
-- In the remote-server Nether, global cache slicing is intentionally disabled because anti-xray replacements are not real terrain. The wider incremental local mask reveals verified rooms/caves near the player. Integrated singleplayer worlds retain global top-roof removal because their cached data is authoritative.
+- In the Nether, the global roof threshold removes complete Voxy quads wholly inside the upper roof band instead of clipping fragments at a horizontal plane. This avoids exposing artificial cross-sections through multiplayer anti-xray replacements. The incremental local mask still reveals only columns whose connected air and solid ceiling were verified from client-visible blocks.
 - Active-player facing indicators collapse to short direction ticks in dense groups. Hovering a marker restores its complete cone and draws that marker last.
 - VoxyMap only displays terrain already available to Voxy; it does not load chunks or reveal unexplored server data.
 - Optional distant VanillaSquad markers come from that server's public web-map endpoints and are disabled by default.
