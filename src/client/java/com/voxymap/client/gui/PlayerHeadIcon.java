@@ -3,6 +3,7 @@ package com.voxymap.client.gui;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.PlayerSkin;
 
@@ -30,10 +31,12 @@ final class PlayerHeadIcon {
     }
 
     static void draw(GuiGraphicsExtractor g, Identifier skin, int x, int y, int size) {
-        // The 26.2 convenience overload takes destination bounds (x1, y1, x2, y2), not
-        // (x, y, width, height). Passing size as x2/y2 stretches every skin across the screen.
-        // UVs use (u0, u1, v0, v1), not the more common (u0, v0, u1, v1).
-        g.blit(skin, x, y, x + size, y + size, 8f / 64f, 16f / 64f, 8f / 64f, 16f / 64f);
-        g.blit(skin, x, y, x + size, y + size, 40f / 64f, 48f / 64f, 8f / 64f, 16f / 64f);
+        // Use the explicit pixel-region overload used by the game's player-head renderers. The
+        // compact normalized-UV overload has destination-bounds and UV ordering that are easy to
+        // confuse; both mistakes previously exposed strips or the full 64x64 skin sheet here.
+        g.blit(RenderPipelines.GUI_TEXTURED, skin, x, y, 8.0f, 8.0f,
+                size, size, 8, 8, 64, 64, 0xFFFFFFFF);
+        g.blit(RenderPipelines.GUI_TEXTURED, skin, x, y, 40.0f, 8.0f,
+                size, size, 8, 8, 64, 64, 0xFFFFFFFF);
     }
 }

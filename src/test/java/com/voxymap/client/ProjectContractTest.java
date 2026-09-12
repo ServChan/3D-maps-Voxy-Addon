@@ -134,13 +134,12 @@ class ProjectContractTest {
     void playerHeadsUseDestinationBoundsInsteadOfTreatingSizeAsAnAbsoluteCorner() throws IOException {
         String source = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/gui/PlayerHeadIcon.java"), StandardCharsets.UTF_8);
-        assertTrue(source.contains("x + size, y + size"),
-                "GuiGraphicsExtractor.blit expects x2/y2; passing size stretches skins across the map");
+        assertTrue(source.contains("RenderPipelines.GUI_TEXTURED"));
         assertFalse(source.contains("x, y, size, size"));
-        assertTrue(source.contains("8f / 64f, 16f / 64f, 8f / 64f, 16f / 64f"),
-                "Base face UVs must use the 26.2 u0/u1/v0/v1 argument order");
-        assertTrue(source.contains("40f / 64f, 48f / 64f, 8f / 64f, 16f / 64f"),
-                "Hat-layer UVs must use the 26.2 u0/u1/v0/v1 argument order");
+        assertTrue(source.contains("8.0f, 8.0f"), "Base face must start at skin pixel 8,8");
+        assertTrue(source.contains("40.0f, 8.0f"), "Hat layer must start at skin pixel 40,8");
+        assertTrue(source.contains("size, size, 8, 8, 64, 64"),
+                "The selected source must be an 8x8 face from a 64x64 skin");
     }
 
     private static JsonObject readJson(Path path) throws IOException {
