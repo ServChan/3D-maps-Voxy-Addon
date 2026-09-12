@@ -1,24 +1,22 @@
 package com.voxymap.client.integration;
 
 import com.voxymap.client.VoxyMapClient;
+import com.voxymap.client.compat.MinecraftCompat;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+
 public final class XaeroWorldMapBridge {
-
     private static final String XAERO_MOD_ID = "xaeroworldmap";
-
-    private static Boolean available;
 
     private XaeroWorldMapBridge() {
     }
 
     public static boolean isAvailable() {
-        if (available == null) {
-            available = FabricLoader.getInstance().isModLoaded(XAERO_MOD_ID);
-        }
-        return available;
+        return FabricLoader.getInstance().isModLoaded(XAERO_MOD_ID);
     }
 
     public static boolean openWorldMap(Minecraft client) {
@@ -27,30 +25,46 @@ public final class XaeroWorldMapBridge {
         }
 
         try {
-            return XaeroAccess.openWorldMap(client);
-        } catch (Throwable t) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not open Xaero World Map from VoxyMap: {}", t.toString());
-            return false;
-        }
-    }
-
-    private static final class XaeroAccess {
-        private static boolean openWorldMap(Minecraft client) {
-            var session = xaero.map.WorldMapSession.getCurrentSession();
+            Class<?> sessionClass = Class.forName("xaero.map.WorldMapSession");
+            Method getCurrentSession = sessionClass.getMethod("getCurrentSession");
+            Object session = getCurrentSession.invoke(null);
             if (session == null) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Xaero World Map is installed, but its current session is not ready yet.");
+                VoxyMapClient.LOGGER.warn("[VoxyMap] Xaero World Map session is not ready yet.");
                 return false;
             }
 
-            xaero.map.MapProcessor mapProcessor = session.getMapProcessor();
+            Object mapProcessor = sessionClass.getMethod("getMapProcessor").invoke(session);
             if (mapProcessor == null) {
                 VoxyMapClient.LOGGER.warn("[VoxyMap] Xaero World Map session has no active map processor.");
                 return false;
             }
 
-            Screen screen = new xaero.map.gui.GuiMap(null, null, mapProcessor, client.player);
-            client.setScreen(screen);
+            Class<?> guiMapClass = Class.forName("xaero.map.gui.GuiMap");
+            Constructor<?> constructor = findGuiMapConstructor(guiMapClass, mapProcessor.getClass());
+            if (constructor == null) {
+                VoxyMapClient.LOGGER.warn("[VoxyMap] Xaero World Map GUI constructor is incompatible.");
+                return false;
+            }
+
+            Object screen = constructor.newInstance(null, null, mapProcessor, client.player);
+            MinecraftCompat.showScreen(client, (Screen) screen);
             return true;
+        } catch (ReflectiveOperationException | LinkageError | ClassCastException exception) {
+            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not open Xaero World Map from VoxyMap: {}", exception.toString());
+            return false;
         }
+    }
+
+    private static Constructor<?> findGuiMapConstructor(Class<?> guiMapClass, Class<?> processorClass) {
+        for (Constructor<?> constructor : guiMapClass.getConstructors()) {
+            Class<?>[] parameters = constructor.getParameterTypes();
+            if (parameters.length == 4
+                    && Screen.class.isAssignableFrom(parameters[0])
+                    && Screen.class.isAssignableFrom(parameters[1])
+                    && parameters[2].isAssignableFrom(processorClass)) {
+                return constructor;
+            }
+        }
+        return null;
     }
 }

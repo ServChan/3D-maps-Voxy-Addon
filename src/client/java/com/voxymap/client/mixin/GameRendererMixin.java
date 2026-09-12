@@ -23,6 +23,11 @@ public abstract class GameRendererMixin {
         VoxyMapGuiRenderer.render(minecraft);
     }
 
+    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/render/GuiRenderer;render()V", shift = At.Shift.BEFORE), remap = false, require = 0)
+    private void voxymap$renderGuiMapBeforeHud26_2(DeltaTracker deltaTracker, boolean renderLevel, CallbackInfo ci) {
+        VoxyMapGuiRenderer.render(minecraft);
+    }
+
     @Inject(method = "renderItemInHand(Lnet/minecraft/client/renderer/state/level/CameraRenderState;FLorg/joml/Matrix4fc;)V", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void voxymap$hideHandInMap(@Coerce Object cameraRenderState, float tickDelta, Matrix4fc projectionMatrix, CallbackInfo ci) {
         if (VoxyMapCameraController.isActive()) {

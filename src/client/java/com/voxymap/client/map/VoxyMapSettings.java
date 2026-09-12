@@ -1,5 +1,6 @@
 package com.voxymap.client.map;
 
+import com.voxymap.client.VoxyMapClient;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
@@ -7,11 +8,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.Properties;
 
 public final class VoxyMapSettings {
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("voxymap.properties");
+    private static final Path BACKUP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".bak");
+    private static final Path TEMP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
 
     private static boolean loaded = false;
     private static boolean pauseSingleplayer = true;
@@ -24,13 +28,14 @@ public final class VoxyMapSettings {
         if (loaded) return;
         loaded = true;
 
-        Properties properties = new Properties();
-        if (Files.exists(CONFIG_PATH)) {
-            try (InputStream input = Files.newInputStream(CONFIG_PATH)) {
-                properties.load(input);
-            } catch (IOException ignored) {
+        Properties properties = readProperties(CONFIG_PATH);
+        if (properties == null) {
+            properties = readProperties(BACKUP_PATH);
+            if (properties != null) {
+                VoxyMapClient.LOGGER.warn("[VoxyMap] Loaded settings from backup after the primary file failed.");
             }
         }
+        if (properties == null) properties = new Properties();
 
         pauseSingleplayer = Boolean.parseBoolean(properties.getProperty("pauseSingleplayer", Boolean.toString(pauseSingleplayer)));
         cameraSpeedMultiplier = clamp(readDouble(properties.getProperty("cameraSpeedMultiplier"), cameraSpeedMultiplier), 0.25, 4.0);
@@ -43,10 +48,20 @@ public final class VoxyMapSettings {
 
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
-            try (OutputStream output = Files.newOutputStream(CONFIG_PATH)) {
+            try (OutputStream output = Files.newOutputStream(TEMP_PATH)) {
                 properties.store(output, "VoxyMap client settings");
             }
-        } catch (IOException ignored) {
+            if (Files.exists(CONFIG_PATH)) {
+                Files.copy(CONFIG_PATH, BACKUP_PATH, StandardCopyOption.REPLACE_EXISTING);
+            }
+            replaceAtomically(TEMP_PATH, CONFIG_PATH);
+        } catch (IOException exception) {
+            VoxyMapClient.LOGGER.error("[VoxyMap] Could not save settings to {}", CONFIG_PATH, exception);
+            try {
+                Files.deleteIfExists(TEMP_PATH);
+            } catch (IOException cleanupException) {
+                exception.addSuppressed(cleanupException);
+            }
         }
     }
 
@@ -78,6 +93,26 @@ public final class VoxyMapSettings {
             return Double.parseDouble(value);
         } catch (NumberFormatException ignored) {
             return fallback;
+        }
+    }
+
+    private static Properties readProperties(Path path) {
+        if (!Files.exists(path)) return null;
+        Properties properties = new Properties();
+        try (InputStream input = Files.newInputStream(path)) {
+            properties.load(input);
+            return properties;
+        } catch (IOException | IllegalArgumentException exception) {
+            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read settings from {}", path, exception);
+            return null;
+        }
+    }
+
+    private static void replaceAtomically(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 

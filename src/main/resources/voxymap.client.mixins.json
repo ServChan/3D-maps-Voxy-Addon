@@ -1,13 +1,14 @@
 {
   "required": true,
   "package": "com.voxymap.client.mixin",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_17",
   "client": [
     "CameraMixin",
     "ClientClockManagerMixin",
     "FogRendererMixin",
     "GameRendererMixin",
     "GuiMixin",
+    "HudMixin",
     "LevelMixin",
     "LevelRendererMixin",
     "RenderPipelineFactoryMixin",

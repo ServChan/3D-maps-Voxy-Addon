@@ -3,7 +3,8 @@ package com.voxymap.client.map;
 import com.mojang.blaze3d.opengl.GlTexture;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.voxymap.client.VoxyMapClient;
-import me.cortex.voxy.client.core.IGetVoxyRenderSystem;
+import com.voxymap.client.compat.MinecraftCompat;
+import me.cortex.voxy.client.core.IVoxyRenderSystemHolder;
 import me.cortex.voxy.client.core.VoxyRenderSystem;
 import me.cortex.voxy.client.core.rendering.Viewport;
 import net.fabricmc.loader.api.FabricLoader;
@@ -66,7 +67,7 @@ public final class VoxyMapGuiRenderer {
             return;
         }
 
-        VoxyRenderSystem renderer = IGetVoxyRenderSystem.getNullable();
+        VoxyRenderSystem renderer = IVoxyRenderSystemHolder.getNullable();
         if (renderer == null) {
             return;
         }
@@ -76,7 +77,7 @@ public final class VoxyMapGuiRenderer {
             return;
         }
 
-        RenderTarget renderTarget = minecraft.getMainRenderTarget();
+        RenderTarget renderTarget = MinecraftCompat.mainRenderTarget(minecraft);
         if (!(renderTarget.getColorTexture() instanceof GlTexture color) || !(renderTarget.getDepthTexture() instanceof GlTexture depth)) {
             return;
         }
@@ -101,7 +102,7 @@ public final class VoxyMapGuiRenderer {
             GL11C.glClear(GL11C.GL_COLOR_BUFFER_BIT | GL11C.GL_DEPTH_BUFFER_BIT);
 
             rendering = true;
-            renderer.renderOpaque(viewport);
+            renderer.renderOpaque(viewport, width, height);
             GL11C.glClear(GL11C.GL_DEPTH_BUFFER_BIT);
         } finally {
             rendering = false;
@@ -155,7 +156,7 @@ public final class VoxyMapGuiRenderer {
     }
 
     private static void rebuildRenderer(Minecraft minecraft) {
-        IGetVoxyRenderSystem levelRenderer = (IGetVoxyRenderSystem) minecraft.levelRenderer;
+        IVoxyRenderSystemHolder levelRenderer = (IVoxyRenderSystemHolder) minecraft.levelRenderer;
         levelRenderer.voxy$shutdownRenderer();
         levelRenderer.voxy$createRenderer();
     }

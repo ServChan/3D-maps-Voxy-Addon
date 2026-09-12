@@ -1,83 +1,89 @@
 plugins {
-	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
-	id 'maven-publish'
+    id "net.fabricmc.fabric-loom" version "${loom_version}"
+    id "maven-publish"
 }
 
 version = project.mod_version
 group = project.maven_group
+def modVersion = project.version.toString()
+def licenseArchiveName = project.name
+def minecraftVersionKey = project.minecraft_version.toString().replace('.', '_')
+def fabricKeyMappingApiVersion = project.property("fabric_key_mapping_api_version_${minecraftVersionKey}")
+def fabricLifecycleEventsVersion = project.property("fabric_lifecycle_events_version_${minecraftVersionKey}")
+def voxyVersion = project.property("voxy_version_${minecraftVersionKey}")
+def irisVersion = project.property("iris_version_${minecraftVersionKey}")
+
+base {
+    archivesName = project.archives_base_name
+}
 
 repositories {
-	maven {
-		name = 'Modrinth'
-		url = 'https://api.modrinth.com/maven'
-	}
-	maven {
-		name = 'TerraformersMC'
-		url = 'https://maven.terraformersmc.com/'
-	}
-	maven {
-		name = "Xaero's Maven"
-		url = 'https://chocolateminecraft.com/maven'
-	}
+    maven {
+        name = "Modrinth"
+        url = uri("https://api.modrinth.com/maven")
+        content { includeGroup "maven.modrinth" }
+    }
+    mavenCentral()
 }
 
 loom {
-	splitEnvironmentSourceSets()
-
-	mods {
-		"voxymap" {
-			sourceSet sourceSets.main
-			sourceSet sourceSets.client
-		}
-	}
+    splitEnvironmentSourceSets()
+    mods {
+        "voxymap" {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
 }
 
 dependencies {
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings loom.officialMojangMappings()
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-	modCompileOnly "maven.modrinth:voxy:0.2.15-beta"
-	modCompileOnly "maven.modrinth:iris:1.10.7+1.21.11-fabric"
-	modCompileOnly "xaero.map:xaeroworldmap-fabric-1.21.11:1.40.16"
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-key-mapping-api-v1:${fabricKeyMappingApiVersion}"
+    implementation "net.fabricmc.fabric-api:fabric-lifecycle-events-v1:${fabricLifecycleEventsVersion}"
+
+    compileOnly("maven.modrinth:voxy:${voxyVersion}") { transitive = false }
+    compileOnly("maven.modrinth:iris:${irisVersion}") { transitive = false }
+    testImplementation sourceSets.client.output
+    testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    testImplementation "com.google.code.gson:gson:2.11.0"
 }
 
-processResources {
-	inputs.property "version", project.version
-
-	filesMatching("fabric.mod.json") {
-		expand "version": inputs.properties.version
-	}
+tasks.withType(ProcessResources).configureEach {
+    inputs.property "version", modVersion
+    filesMatching("fabric.mod.json") {
+        expand "version": modVersion
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 21
+    it.options.release = 25
+    it.options.encoding = "UTF-8"
+    it.options.compilerArgs += ["-Xlint:deprecation"]
 }
 
 java {
-	withSourcesJar()
-	sourceCompatibility = JavaVersion.VERSION_21
-	targetCompatibility = JavaVersion.VERSION_21
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
 }
 
 jar {
-	inputs.property "projectName", project.name
-	exclude("net/minecraft/client/gui/GuiGraphicsExtractor.class")
-	from("LICENSE") {
-		rename { "${it}_${project.name}" }
-	}
+    from("LICENSE") {
+        rename { "${it}_${licenseArchiveName}" }
+    }
 }
 
-tasks.register("officialRuntimeJar", Jar) {
-	dependsOn "classes", "clientClasses"
-	archiveFileName = "${project.name}-${project.version}.jar"
-	destinationDirectory = layout.buildDirectory.dir("libs")
-	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-	from(sourceSets.main.output)
-	from(sourceSets.client.output)
-	exclude("net/minecraft/client/gui/GuiGraphicsExtractor.class")
-	from("LICENSE") {
-		rename { "${it}_${project.name}" }
-	}
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            from components.java
+        }
+    }
 }
