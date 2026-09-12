@@ -1,17 +1,16 @@
 package com.voxymap.client.map;
 
 /**
- * Patches Voxy's native LOD shaders to discard the geometry that seals the player's current room away
- * from the map camera — and only that geometry. The cut height comes from
- * {@link RoomCutawayTexture}, a per-column heightmap built by {@link RoomCutawayComputer} from a
- * flood fill of the connected air space the player is actually standing in, so a wall, a neighbouring
- * cave, or open sky is never touched: only columns the player can reach without passing through a
- * solid block get a cut, and only above the highest point they can reach in that column.
+ * Patches Voxy's native LOD shaders with a global horizontal cut plane and an optional, more precise
+ * local room mask. In the Nether the global plane exposes cached terrain at the player's current
+ * height across the whole map. The per-column texture is built by {@link RoomCutawayComputer} from
+ * the connected air space around the player and may lower that plane locally to reveal a room ceiling.
  */
 public final class RoomCutawayShaderPatcher {
     public static final int ENABLED_UNIFORM_LOCATION = 30;
     public static final int ORIGIN_X_UNIFORM_LOCATION = 31;
     public static final int ORIGIN_Z_UNIFORM_LOCATION = 32;
+    public static final int GLOBAL_CUTOFF_UNIFORM_LOCATION = 33;
 
     private static final String VERTEX_DECLARATIONS = """
             layout(location = 12) out vec3 voxymapWorldPos;
@@ -22,6 +21,7 @@ public final class RoomCutawayShaderPatcher {
             layout(location = 30) uniform int voxymapCutawayEnabled;
             layout(location = 31) uniform float voxymapCutawayOriginX;
             layout(location = 32) uniform float voxymapCutawayOriginZ;
+            layout(location = 33) uniform float voxymapGlobalCutawayY;
             layout(binding = %d) uniform sampler2D voxymapRoomHeightMap;
 
             """.formatted(RoomCutawayTexture.TEXTURE_UNIT);
@@ -39,14 +39,15 @@ public final class RoomCutawayShaderPatcher {
 
 
                 if (voxymapCutawayEnabled != 0) {
+                    float voxymapCutY = voxymapGlobalCutawayY;
                     ivec2 voxymapTexel = ivec2(int(floor(voxymapWorldPos.x)) - int(voxymapCutawayOriginX),
                                                 int(floor(voxymapWorldPos.z)) - int(voxymapCutawayOriginZ));
                     if (voxymapTexel.x >= 0 && voxymapTexel.x < %1$d && voxymapTexel.y >= 0 && voxymapTexel.y < %1$d) {
-                        float voxymapCutY = texelFetch(voxymapRoomHeightMap, voxymapTexel, 0).r;
-                        if (voxymapWorldPos.y > voxymapCutY) {
-                            discard;
-                            return;
-                        }
+                        voxymapCutY = min(voxymapCutY, texelFetch(voxymapRoomHeightMap, voxymapTexel, 0).r);
+                    }
+                    if (voxymapWorldPos.y > voxymapCutY) {
+                        discard;
+                        return;
                     }
                 }""".formatted(RoomCutawayComputer.GRID_SIZE);
 

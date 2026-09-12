@@ -27,6 +27,10 @@ class RoomCutawayShaderPatcherTest {
 
         assertTrue(patched.indexOf(depthAnchor) < patched.indexOf("voxymapCutawayEnabled != 0"));
         assertTrue(patched.contains("texelFetch(voxymapRoomHeightMap"));
+        assertTrue(patched.contains("float voxymapCutY = voxymapGlobalCutawayY"));
+        assertTrue(patched.indexOf("if (voxymapWorldPos.y > voxymapCutY)")
+                > patched.indexOf("voxymapTexel.x >= 0"),
+                "The global cutoff must run outside the bounds of the local 97x97 room texture");
     }
 
     @Test

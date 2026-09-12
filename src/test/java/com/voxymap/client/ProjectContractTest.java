@@ -111,14 +111,20 @@ class ProjectContractTest {
     }
 
     @Test
-    void netherRoofIsStrippedUnconditionallyEvenOutsideAnEnclosedRoom() throws IOException {
+    void netherUsesAGlobalPlayerHeightSliceEvenOutsideTheLocalRoomTexture() throws IOException {
         String controller = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/RoomCutawayController.java"), StandardCharsets.UTF_8);
+        String shader = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/map/RoomCutawayShaderPatcher.java"), StandardCharsets.UTF_8);
         assertTrue(controller.contains("minecraft:the_nether"));
-        // The roof cutoff must come from the dimension's actual ceiling, not the player's height:
-        // an open Nether cavern (not a locally enclosed room) still needs its roof stripped so the
-        // elevated map camera isn't blocked, but ordinary solid terrain near the player must not be.
-        assertTrue(controller.contains("level.dimensionType().logicalHeight()"));
+        assertTrue(controller.contains("NetherSlicePolicy.cutoff("));
+        assertTrue(controller.contains("minecraft.player.getY()"));
+        assertTrue(controller.contains("RoomCutawayTexture.setUniformCutoff(netherSliceCutoff)"),
+                "Changing Y must not re-upload the unchanged local room texture");
+        assertTrue(shader.contains("voxymapGlobalCutawayY"));
+        assertTrue(shader.indexOf("if (voxymapWorldPos.y > voxymapCutY)")
+                > shader.indexOf("voxymapTexel.x >= 0"),
+                "The Nether slice must not be constrained to the local room texture bounds");
     }
 
     @Test

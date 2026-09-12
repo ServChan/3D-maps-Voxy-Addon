@@ -9,9 +9,9 @@ import org.lwjgl.system.MemoryUtil;
 import java.nio.FloatBuffer;
 
 /**
- * Uploads {@link RoomCutawayComputer.Result} as a small per-column "ceiling height" texture that the
- * patched Voxy shaders sample to decide what to discard. A single persistent GL_R32F texture is reused
- * for the life of the client; only its contents are refreshed when the room is recomputed.
+ * Uploads {@link RoomCutawayComputer.Result} as a small per-column "ceiling height" texture and keeps
+ * the independent global cut plane used by the patched Voxy shaders. A single persistent GL_R32F
+ * texture is reused for the life of the client; its contents change only when the room is recomputed.
  */
 public final class RoomCutawayTexture {
     // Voxy itself uses texture unit 3 for its post-process colour buffer. Overwriting that binding
@@ -23,6 +23,7 @@ public final class RoomCutawayTexture {
     private static boolean enabled = false;
     private static float originX;
     private static float originZ;
+    private static float uniformCutoff = NO_CUT_VALUE;
 
     private RoomCutawayTexture() {
     }
@@ -42,10 +43,10 @@ public final class RoomCutawayTexture {
 
     /**
      * @param result            the locally detected room, or {@link RoomCutawayComputer.Result#OPEN}
-     * @param uniformRoofCutoff a cutoff applied to every column regardless of the room (used to strip
-     *                          the Nether's bedrock roof), or {@link #NO_CUT_VALUE} to skip it
+     * @param globalCutoff a cutoff applied globally regardless of the local texture bounds, or
+     *                     {@link #NO_CUT_VALUE} to skip it
      */
-    public static void update(RoomCutawayComputer.Result result, float uniformRoofCutoff) {
+    public static void update(RoomCutawayComputer.Result result, float globalCutoff) {
         ensureCreated();
         int size = RoomCutawayComputer.GRID_SIZE;
         int originGridX = result.enclosed ? result.minX : 0;
@@ -54,11 +55,11 @@ public final class RoomCutawayTexture {
         try {
             for (int gx = 0; gx < size; gx++) {
                 for (int gz = 0; gz < size; gz++) {
-                    float value = uniformRoofCutoff;
+                    float value = NO_CUT_VALUE;
                     if (result.enclosed) {
                         int ceiling = result.topY[gx][gz];
                         if (ceiling != RoomCutawayComputer.NO_CEILING) {
-                            value = Math.min(value, (float) ceiling + RoomCutawayComputer.CEILING_MARGIN);
+                            value = (float) ceiling + RoomCutawayComputer.CEILING_MARGIN;
                         }
                     }
                     buffer.put(gz * size + gx, value);
@@ -71,11 +72,16 @@ public final class RoomCutawayTexture {
 
         originX = originGridX;
         originZ = originGridZ;
+        uniformCutoff = globalCutoff;
         enabled = true;
     }
 
     public static void disable() {
         enabled = false;
+    }
+
+    public static void setUniformCutoff(float cutoff) {
+        uniformCutoff = cutoff;
     }
 
     public static boolean isEnabled() {
@@ -93,5 +99,10 @@ public final class RoomCutawayTexture {
 
     public static float originZ() {
         return originZ;
+    }
+
+    /** Global horizontal cut plane; unlike the room texture, this applies at every X/Z coordinate. */
+    public static float uniformCutoff() {
+        return uniformCutoff;
     }
 }

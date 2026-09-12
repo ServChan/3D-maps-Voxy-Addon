@@ -14,10 +14,6 @@ public final class RoomCutawayController {
     private static final long OPEN_RECOMPUTE_INTERVAL_NANOS = 10_000_000_000L;
     private static final int SCAN_NODE_BUDGET_PER_TICK = 128;
     private static final int RECOMPUTE_MOVE_THRESHOLD = 2;
-    // The Nether's solid bedrock roof blocks the elevated map camera outright no matter where the
-    // player stands, so it is stripped unconditionally - not just inside a locally detected room.
-    private static final float NETHER_ROOF_STRIP_MARGIN = 8.0f;
-
     private static RoomCutawayComputer.Result result = RoomCutawayComputer.Result.OPEN;
     private static long lastComputeNanos = 0L;
     private static boolean hasComputed = false;
@@ -26,7 +22,7 @@ public final class RoomCutawayController {
     private static int lastFeetZ;
     private static boolean cuttingSomething;
     private static RoomCutawayComputer.Result uploadedResult;
-    private static float uploadedRoofCutoff = Float.NaN;
+    private static float uploadedGlobalCutoff = Float.NaN;
     private static RoomCutawayComputer.Search pendingSearch;
     private static String lastDimensionId;
 
@@ -51,17 +47,24 @@ public final class RoomCutawayController {
         Level level = minecraft.level;
         String dimensionId = level.dimension().identifier().toString();
         boolean isNether = "minecraft:the_nether".equals(dimensionId);
-        float netherRoofCutoff = isNether
-                ? (float) (level.dimensionType().minY() + level.dimensionType().logicalHeight()) - NETHER_ROOF_STRIP_MARGIN
+        float netherSliceCutoff = isNether
+                ? NetherSlicePolicy.cutoff(
+                        level.dimensionType().minY(),
+                        level.dimensionType().logicalHeight(),
+                        minecraft.player.getY())
                 : RoomCutawayTexture.NO_CUT_VALUE;
 
         cuttingSomething = result.enclosed || isNether;
         if (cuttingSomething) {
-            if (!RoomCutawayTexture.isEnabled() || uploadedResult != result || uploadedRoofCutoff != netherRoofCutoff) {
-                RoomCutawayTexture.update(result, netherRoofCutoff);
+            if (!RoomCutawayTexture.isEnabled() || uploadedResult != result) {
+                RoomCutawayTexture.update(result, netherSliceCutoff);
                 uploadedResult = result;
-                uploadedRoofCutoff = netherRoofCutoff;
+            } else if (uploadedGlobalCutoff != netherSliceCutoff) {
+                // Moving vertically changes only one shader uniform. Do not allocate and re-upload
+                // the 97x97 room texture when its local connectivity result is unchanged.
+                RoomCutawayTexture.setUniformCutoff(netherSliceCutoff);
             }
+            uploadedGlobalCutoff = netherSliceCutoff;
         } else {
             RoomCutawayTexture.disable();
         }
@@ -125,7 +128,7 @@ public final class RoomCutawayController {
         hasComputed = false;
         cuttingSomething = false;
         uploadedResult = null;
-        uploadedRoofCutoff = Float.NaN;
+        uploadedGlobalCutoff = Float.NaN;
         pendingSearch = null;
         lastDimensionId = null;
         RoomCutawayTexture.disable();
