@@ -32,7 +32,8 @@ final class PlayerHeadIcon {
     static void draw(GuiGraphicsExtractor g, Identifier skin, int x, int y, int size) {
         // The 26.2 convenience overload takes destination bounds (x1, y1, x2, y2), not
         // (x, y, width, height). Passing size as x2/y2 stretches every skin across the screen.
-        g.blit(skin, x, y, x + size, y + size, 8f / 64f, 8f / 64f, 16f / 64f, 16f / 64f);
-        g.blit(skin, x, y, x + size, y + size, 40f / 64f, 8f / 64f, 48f / 64f, 16f / 64f);
+        // UVs use (u0, u1, v0, v1), not the more common (u0, v0, u1, v1).
+        g.blit(skin, x, y, x + size, y + size, 8f / 64f, 16f / 64f, 8f / 64f, 16f / 64f);
+        g.blit(skin, x, y, x + size, y + size, 40f / 64f, 48f / 64f, 8f / 64f, 16f / 64f);
     }
 }

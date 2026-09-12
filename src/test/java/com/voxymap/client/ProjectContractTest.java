@@ -137,6 +137,10 @@ class ProjectContractTest {
         assertTrue(source.contains("x + size, y + size"),
                 "GuiGraphicsExtractor.blit expects x2/y2; passing size stretches skins across the map");
         assertFalse(source.contains("x, y, size, size"));
+        assertTrue(source.contains("8f / 64f, 16f / 64f, 8f / 64f, 16f / 64f"),
+                "Base face UVs must use the 26.2 u0/u1/v0/v1 argument order");
+        assertTrue(source.contains("40f / 64f, 48f / 64f, 8f / 64f, 16f / 64f"),
+                "Hat-layer UVs must use the 26.2 u0/u1/v0/v1 argument order");
     }
 
     private static JsonObject readJson(Path path) throws IOException {
