@@ -488,12 +488,14 @@ public class MapScreen extends Screen {
         }
 
         for (PlayerMarker marker : playerMarkers) {
-            ScreenPoint point = projectToScreen(marker.x, marker.y, marker.z);
+            ScreenPoint point = marker.local && isViewCenteredOn(marker)
+                    ? new ScreenPoint(width / 2, height / 2)
+                    : projectToScreen(marker.x, marker.y, marker.z);
             if (point == null || point.x < 8 || point.x >= width - 8 || point.y < 16 || point.y >= height - 8) {
                 continue;
             }
 
-            int radius = marker.local ? 7 : 5;
+            int radius = marker.local ? 9 : 6;
             int outline = marker.local ? 0xEE071923 : 0xEE210A25;
             int color = marker.local ? 0xFF55E7FF : 0xFFFF62D4;
             drawDiamond(g, point.x, point.y, radius + 2, outline);
@@ -501,7 +503,7 @@ public class MapScreen extends Screen {
             g.fill(point.x - 1, point.y - 1, point.x + 2, point.y + 2, 0xFFFFFFFF);
 
             String label = marker.local
-                    ? Component.translatable("overlay.voxymap.player").getString()
+                    ? Component.translatable("overlay.voxymap.player").getString() + ": " + marker.name
                     : marker.name;
             int labelWidth = minecraft.font.width(label) + 8;
             int labelX = Mth.clamp(point.x - labelWidth / 2, 3, Math.max(3, width - labelWidth - 3));
@@ -510,6 +512,12 @@ public class MapScreen extends Screen {
             g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, color);
             g.text(minecraft.font, label, labelX + 4, labelY + 2, 0xFFFFFFFF);
         }
+    }
+
+    private boolean isViewCenteredOn(PlayerMarker marker) {
+        return Math.abs(marker.x - viewCenterX) < 0.5
+                && Math.abs(marker.y - viewCenterY) < 2.0
+                && Math.abs(marker.z - viewCenterZ) < 0.5;
     }
 
     private ScreenPoint projectToScreen(double worldX, double worldY, double worldZ) {
@@ -526,9 +534,9 @@ public class MapScreen extends Screen {
         double forwardZ = Math.cos(viewYaw) * Math.cos(pitch);
         double rightX = Math.cos(viewYaw);
         double rightZ = Math.sin(viewYaw);
-        double upX = Math.sin(viewYaw) * Math.sin(pitch);
+        double upX = -Math.sin(viewYaw) * Math.sin(pitch);
         double upY = Math.cos(pitch);
-        double upZ = -Math.cos(viewYaw) * Math.sin(pitch);
+        double upZ = Math.cos(viewYaw) * Math.sin(pitch);
 
         double depth = relativeX * forwardX + relativeY * forwardY + relativeZ * forwardZ;
         if (depth <= 0.1 || !Double.isFinite(depth)) {

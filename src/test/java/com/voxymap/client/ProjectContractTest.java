@@ -79,6 +79,16 @@ class ProjectContractTest {
         assertTrue(source.contains("drawUnsupportedDimension(g)"));
     }
 
+    @Test
+    void localMarkerHasACenteredFallbackAndCorrectCameraUpVector() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/gui/MapScreen.java"), StandardCharsets.UTF_8);
+        assertTrue(source.contains("marker.local && isViewCenteredOn(marker)"));
+        assertTrue(source.contains("new ScreenPoint(width / 2, height / 2)"));
+        assertTrue(source.contains("double upX = -Math.sin(viewYaw) * Math.sin(pitch)"));
+        assertTrue(source.contains("double upZ = Math.cos(viewYaw) * Math.sin(pitch)"));
+    }
+
     private static JsonObject readJson(Path path) throws IOException {
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             return JsonParser.parseReader(reader).getAsJsonObject();
