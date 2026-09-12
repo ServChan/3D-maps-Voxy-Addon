@@ -11,8 +11,6 @@
     "HudMixin",
     "LevelMixin",
     "LevelRendererMixin",
-    "RenderPipelineFactoryMixin",
-    "VoxyRenderSystemMixin",
     "XaeroGuiMapMixin"
   ],
   "injectors": {

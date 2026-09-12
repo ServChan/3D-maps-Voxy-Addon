@@ -44,19 +44,17 @@ class ProjectContractTest {
     }
 
     @Test
-    void voxyRenderMixinMatchesCurrentRenderOpaqueDescriptor() throws IOException {
-        String source = Files.readString(Path.of(
-                "src/client/java/com/voxymap/client/mixin/VoxyRenderSystemMixin.java"), StandardCharsets.UTF_8);
-        assertTrue(source.contains("Viewport<?> viewport, int width, int height, CallbackInfo ci"),
-                "Voxy 0.2.18+ renderOpaque requires viewport, width, and height arguments");
-    }
-
-    @Test
-    void mapKeepsVanillaNearFieldForVoxyLodExclusionZone() throws IOException {
-        String source = Files.readString(Path.of(
+    void mapUsesOneNativeWorldRenderPass() throws IOException {
+        String coordinator = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/VoxyMapGuiRenderer.java"), StandardCharsets.UTF_8);
-        assertFalse(source.contains("glClear(GL11C.GL_COLOR_BUFFER_BIT"),
-                "The vanilla near-field must remain behind Voxy's player-centered LOD exclusion zone");
+        String gameRendererMixin = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/mixin/GameRendererMixin.java"), StandardCharsets.UTF_8);
+        assertFalse(coordinator.contains("renderOpaque("),
+                "Do not submit Voxy a second time after its native world pass");
+        assertFalse(coordinator.contains("voxy$shutdownRenderer"),
+                "Opening the map must not rebuild Voxy while node work is in flight");
+        assertFalse(gameRendererMixin.contains("renderGuiMapBeforeHud"),
+                "The map should use Minecraft's normal world then GUI ordering");
     }
 
     @Test
