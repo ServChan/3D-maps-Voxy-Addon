@@ -72,6 +72,8 @@ public class MapScreen extends Screen {
     private static final int HUD_BUTTON_HEIGHT = 24;
     private static final int KEY_HINT_HEIGHT = 22;
 
+    private static final int BG = 0xFF080810;
+
     public MapScreen() {
         super(TITLE);
     }
@@ -85,10 +87,14 @@ public class MapScreen extends Screen {
             centerOnPlayer();
         }
         capturePlayerMarkers();
-        VoxyBridge.suppressEnvironmentalFogForMap();
-        MapRenderSettingsGuard.applyForMap(minecraft);
-        syncWorldCamera();
-        VoxyMapGuiRenderer.open(minecraft);
+        if (!isUnsupportedDimension()) {
+            VoxyBridge.suppressEnvironmentalFogForMap();
+            MapRenderSettingsGuard.applyForMap(minecraft);
+            syncWorldCamera();
+            VoxyMapGuiRenderer.open(minecraft);
+        } else {
+            VoxyMapCameraController.deactivate();
+        }
         if (!openLogged) {
             VoxyMapClient.LOGGER.info("[VoxyMap] Map opened.");
             openLogged = true;
@@ -99,6 +105,14 @@ public class MapScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
         lastMouseX = mouseX;
         lastMouseY = mouseY;
+        if (isUnsupportedDimension()) {
+            VoxyMapGuiRenderer.close(minecraft);
+            VoxyMapCameraController.deactivate();
+            drawUnsupportedDimension(g);
+            drawOpeningAnimation(g);
+            return;
+        }
+
         updateSmoothControls();
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
@@ -234,7 +248,9 @@ public class MapScreen extends Screen {
     @Override
     public void tick() {
         capturePlayerMarkers();
-        syncWorldCamera();
+        if (!isUnsupportedDimension()) {
+            syncWorldCamera();
+        }
     }
 
     @Override
@@ -242,11 +258,16 @@ public class MapScreen extends Screen {
     }
 
     private void syncWorldCamera() {
-        if (minecraft != null && minecraft.level != null && minecraft.player != null) {
+        if (!isUnsupportedDimension()) {
             VoxyMapCameraController.update(minecraft, viewCenterX, viewCenterY, viewCenterZ, viewYaw, viewPitch, blocksPerPixel);
         } else {
             VoxyMapCameraController.deactivate();
         }
+    }
+
+    private boolean isUnsupportedDimension() {
+        if (minecraft == null || minecraft.level == null) return false;
+        return "minecraft:the_nether".equals(minecraft.level.dimension().identifier().toString());
     }
 
     private String[][] keyHints() {
@@ -427,6 +448,20 @@ public class MapScreen extends Screen {
         g.fill(x, y, x + 2, y + h, accent);
         g.fill(x, y, x + w, y + 1, 0x33FFFFFF);
         g.fill(x, y + h - 1, x + w, y + h, 0x55000000);
+    }
+
+    private void drawUnsupportedDimension(GuiGraphicsExtractor g) {
+        g.fill(0, 0, width, height, BG);
+        int boxW = Math.min(width - 40, 520);
+        int boxH = 92;
+        int x = (width - boxW) / 2;
+        int y = (height - boxH) / 2;
+        g.fill(x - 2, y - 2, x + boxW + 2, y + boxH + 2, 0x553BA4FF);
+        g.fill(x, y, x + boxW, y + boxH, 0xEE030914);
+        g.fill(x, y, x + 4, y + boxH, 0xFF3BA4FF);
+        g.centeredText(minecraft.font, Component.translatable("screen.voxymap.unsupported.title"), width / 2, y + 22, 0xFFFFFFFF);
+        g.centeredText(minecraft.font, Component.translatable("screen.voxymap.unsupported.nether"), width / 2, y + 46, 0xFFBFD8FF);
+        g.centeredText(minecraft.font, Component.translatable("screen.voxymap.unsupported.nether.detail"), width / 2, y + 62, 0xFF88A7C7);
     }
 
     private void capturePlayerMarkers() {

@@ -71,12 +71,12 @@ class ProjectContractTest {
     }
 
     @Test
-    void netherUsesItsNativeVoxyWorldInsteadOfAnUnsupportedScreen() throws IOException {
+    void netherUsesSafeFallbackInsteadOfBrokenMixedTerrain() throws IOException {
         String source = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/gui/MapScreen.java"), StandardCharsets.UTF_8);
-        assertFalse(source.contains("isUnsupportedDimension"));
-        assertFalse(source.contains("minecraft:the_nether"));
-        assertTrue(source.contains("VoxyMapGuiRenderer.open(minecraft)"));
+        assertTrue(source.contains("isUnsupportedDimension"));
+        assertTrue(source.contains("minecraft:the_nether"));
+        assertTrue(source.contains("drawUnsupportedDimension(g)"));
     }
 
     private static JsonObject readJson(Path path) throws IOException {
