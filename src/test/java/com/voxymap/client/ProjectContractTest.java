@@ -17,12 +17,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProjectContractTest {
     @Test
-    void metadataDeclaresTheSupportedRuntimeRange() throws IOException {
+    void metadataDeclaresTheSupportedRuntime() throws IOException {
         JsonObject metadata = readJson(Path.of("src/main/resources/fabric.mod.json"));
         assertEquals("voxymap", metadata.get("id").getAsString());
         assertEquals("client", metadata.get("environment").getAsString());
         assertEquals("LTS_Server", metadata.getAsJsonArray("authors").get(0).getAsString());
-        assertEquals(">=26.1.2 <=26.2", metadata.getAsJsonObject("depends").get("minecraft").getAsString());
+        assertEquals("26.2", metadata.getAsJsonObject("depends").get("minecraft").getAsString());
         assertEquals(">=25", metadata.getAsJsonObject("depends").get("java").getAsString());
     }
 

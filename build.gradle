@@ -7,11 +7,6 @@ version = project.mod_version
 group = project.maven_group
 def modVersion = project.version.toString()
 def licenseArchiveName = project.name
-def minecraftVersionKey = project.minecraft_version.toString().replace('.', '_')
-def fabricKeyMappingApiVersion = project.property("fabric_key_mapping_api_version_${minecraftVersionKey}")
-def fabricLifecycleEventsVersion = project.property("fabric_lifecycle_events_version_${minecraftVersionKey}")
-def voxyVersion = project.property("voxy_version_${minecraftVersionKey}")
-def irisVersion = project.property("iris_version_${minecraftVersionKey}")
 
 base {
     archivesName = project.archives_base_name
@@ -39,11 +34,11 @@ loom {
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    implementation "net.fabricmc.fabric-api:fabric-key-mapping-api-v1:${fabricKeyMappingApiVersion}"
-    implementation "net.fabricmc.fabric-api:fabric-lifecycle-events-v1:${fabricLifecycleEventsVersion}"
+    implementation "net.fabricmc.fabric-api:fabric-key-mapping-api-v1:${project.fabric_key_mapping_api_version}"
+    implementation "net.fabricmc.fabric-api:fabric-lifecycle-events-v1:${project.fabric_lifecycle_events_version}"
 
-    compileOnly("maven.modrinth:voxy:${voxyVersion}") { transitive = false }
-    compileOnly("maven.modrinth:iris:${irisVersion}") { transitive = false }
+    compileOnly("maven.modrinth:voxy:${project.voxy_version}") { transitive = false }
+    compileOnly("maven.modrinth:iris:${project.iris_version}") { transitive = false }
     testImplementation sourceSets.client.output
     testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"

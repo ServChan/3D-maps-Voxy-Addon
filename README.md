@@ -1,12 +1,12 @@
 # VoxyMap LTS
 
-[![Minecraft](https://img.shields.io/badge/Minecraft-26.1.2--26.2-62B47A)](https://www.minecraft.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-26.2-62B47A)](https://www.minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Fabric-0.19.3+-DBD0B4)](https://fabricmc.net/)
 [![Java](https://img.shields.io/badge/Java-25-E76F00)](https://adoptium.net/)
 [![Client](https://img.shields.io/badge/side-client-4C8BF5)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://github.com/raben12paste/3D-maps-Voxy-Addon). It opens a full-screen 3D map backed by Voxy LOD data and keeps the same JAR compatible with Minecraft 26.1.2 and 26.2.
+VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://github.com/raben12paste/3D-maps-Voxy-Addon). It opens a full-screen 3D map backed by Voxy LOD data for Minecraft 26.2.
 
 ## Features
 
@@ -20,11 +20,11 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 
 ## Requirements
 
-- Minecraft `26.1.2` or `26.2`.
+- Minecraft `26.2`.
 - Java `25`.
 - Fabric Loader `0.19.3` or newer.
 - Fabric API.
-- Voxy `0.2.18-beta` or newer for the matching Minecraft version.
+- Voxy `0.2.18-beta` or newer for Minecraft 26.2.
 
 Iris and Xaero's World Map are optional integrations. The mod is client-only and does not need to be installed on the server.
 
@@ -45,19 +45,13 @@ Settings are stored in `config/voxymap.properties`. Writes use a sibling tempora
 
 ## Build
 
-The default build targets Minecraft 26.1.2 and produces the distributable JAR:
+The build targets Minecraft 26.2 and produces the distributable JAR:
 
 ```powershell
 .\gradlew.bat clean build --warning-mode all
 ```
 
-Verify the same sources against Minecraft 26.2:
-
-```powershell
-.\gradlew.bat clean build '-Pminecraft_version=26.2' --warning-mode all
-```
-
-Run the default build last. The normal non-sources JAR is written to `build/libs/voxy-map-<version>.jar`.
+The normal non-sources JAR is written to `build/libs/voxy-map-<version>.jar`.
 
 ## Known limitations
 
@@ -68,7 +62,7 @@ Run the default build last. The normal non-sources JAR is written to `build/libs
 
 ## Русский
 
-VoxyMap LTS — поддерживаемый клиентский форк 3D Maps Voxy Addon. Он открывает полноэкранную трёхмерную карту на данных LOD из Voxy и собирается одним JAR для Minecraft 26.1.2 и 26.2.
+VoxyMap LTS — поддерживаемый клиентский форк 3D Maps Voxy Addon для Minecraft 26.2. Он открывает полноэкранную трёхмерную карту на данных LOD из Voxy.
 
 Карта открывается клавишей `M`; назначение можно изменить в стандартных настройках управления. ЛКМ перемещает карту, СКМ поворачивает камеру, колесо меняет масштаб, `W/A/S/D` двигают камеру, `Shift` ускоряет, `C` точно возвращает центр к игроку. На карте отображаются отдельная отметка текущего игрока и именные отметки других загруженных игроков. Настройки сохраняются в `config/voxymap.properties`, рядом хранится резервная копия.
 
