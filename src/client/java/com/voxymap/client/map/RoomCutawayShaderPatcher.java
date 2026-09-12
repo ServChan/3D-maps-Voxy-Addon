@@ -2,9 +2,10 @@ package com.voxymap.client.map;
 
 /**
  * Patches Voxy's native LOD shaders with a global horizontal cut plane and an optional, more precise
- * local room mask. In the Nether the global plane exposes cached terrain at the player's current
- * height across the whole map. The per-column texture is built by {@link RoomCutawayComputer} from
- * the connected air space around the player and may lower that plane locally to reveal a room ceiling.
+ * local room mask. In the Nether the global plane removes only the top roof layer across the whole
+ * map, preserving complete builds below it. The per-column texture is built by
+ * {@link RoomCutawayComputer} from the connected air space around the player and may lower that plane
+ * locally to reveal a room ceiling.
  */
 public final class RoomCutawayShaderPatcher {
     public static final int ENABLED_UNIFORM_LOCATION = 30;

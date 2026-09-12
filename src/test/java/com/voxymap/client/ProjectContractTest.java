@@ -111,16 +111,19 @@ class ProjectContractTest {
     }
 
     @Test
-    void netherUsesAGlobalPlayerHeightSliceEvenOutsideTheLocalRoomTexture() throws IOException {
+    void netherUsesAGlobalRoofOnlySliceOutsideTheLocalRoomTexture() throws IOException {
         String controller = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/RoomCutawayController.java"), StandardCharsets.UTF_8);
         String shader = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/RoomCutawayShaderPatcher.java"), StandardCharsets.UTF_8);
         assertTrue(controller.contains("minecraft:the_nether"));
-        assertTrue(controller.contains("NetherSlicePolicy.cutoff("));
-        assertTrue(controller.contains("minecraft.player.getY()"));
-        assertTrue(controller.contains("RoomCutawayTexture.setUniformCutoff(netherSliceCutoff)"),
-                "Changing Y must not re-upload the unchanged local room texture");
+        assertTrue(controller.contains("NetherRoofPolicy.cutoff("));
+        assertFalse(controller.substring(controller.indexOf("float netherRoofCutoff"),
+                        controller.indexOf("cuttingSomething ="))
+                .contains("minecraft.player.getY()"),
+                "The global Nether plane must not amputate builds at the player's height");
+        assertTrue(controller.contains("RoomCutawayTexture.setUniformCutoff(netherRoofCutoff)"),
+                "Changing the global plane must not re-upload the unchanged local room texture");
         assertTrue(shader.contains("voxymapGlobalCutawayY"));
         assertTrue(shader.indexOf("if (voxymapWorldPos.y > voxymapCutY)")
                 > shader.indexOf("voxymapTexel.x >= 0"),

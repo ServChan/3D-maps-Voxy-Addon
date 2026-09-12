@@ -47,24 +47,23 @@ public final class RoomCutawayController {
         Level level = minecraft.level;
         String dimensionId = level.dimension().identifier().toString();
         boolean isNether = "minecraft:the_nether".equals(dimensionId);
-        float netherSliceCutoff = isNether
-                ? NetherSlicePolicy.cutoff(
+        float netherRoofCutoff = isNether
+                ? NetherRoofPolicy.cutoff(
                         level.dimensionType().minY(),
-                        level.dimensionType().logicalHeight(),
-                        minecraft.player.getY())
+                        level.dimensionType().logicalHeight())
                 : RoomCutawayTexture.NO_CUT_VALUE;
 
         cuttingSomething = result.enclosed || isNether;
         if (cuttingSomething) {
             if (!RoomCutawayTexture.isEnabled() || uploadedResult != result) {
-                RoomCutawayTexture.update(result, netherSliceCutoff);
+                RoomCutawayTexture.update(result, netherRoofCutoff);
                 uploadedResult = result;
-            } else if (uploadedGlobalCutoff != netherSliceCutoff) {
-                // Moving vertically changes only one shader uniform. Do not allocate and re-upload
-                // the 97x97 room texture when its local connectivity result is unchanged.
-                RoomCutawayTexture.setUniformCutoff(netherSliceCutoff);
+            } else if (uploadedGlobalCutoff != netherRoofCutoff) {
+                // A dimension cutoff change updates only one shader uniform. Do not allocate and
+                // re-upload the 97x97 room texture when its local connectivity result is unchanged.
+                RoomCutawayTexture.setUniformCutoff(netherRoofCutoff);
             }
-            uploadedGlobalCutoff = netherSliceCutoff;
+            uploadedGlobalCutoff = netherRoofCutoff;
         } else {
             RoomCutawayTexture.disable();
         }
