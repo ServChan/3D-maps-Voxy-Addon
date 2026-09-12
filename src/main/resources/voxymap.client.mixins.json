@@ -11,6 +11,9 @@
     "HudMixin",
     "LevelMixin",
     "LevelRendererMixin",
+    "MDICSectionRendererMixin",
+    "NetherChunkLayerMixin",
+    "VoxyShaderLoaderMixin",
     "XaeroGuiMapMixin"
   ],
   "injectors": {

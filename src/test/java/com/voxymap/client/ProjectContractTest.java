@@ -71,12 +71,18 @@ class ProjectContractTest {
     }
 
     @Test
-    void netherUsesSafeFallbackInsteadOfBrokenMixedTerrain() throws IOException {
+    void netherUsesShaderSliceAndSuppressesTheOverlappingVanillaRoof() throws IOException {
         String source = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/gui/MapScreen.java"), StandardCharsets.UTF_8);
-        assertTrue(source.contains("isUnsupportedDimension"));
-        assertTrue(source.contains("minecraft:the_nether"));
-        assertTrue(source.contains("drawUnsupportedDimension(g)"));
+        String controller = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/map/VoxyMapCameraController.java"), StandardCharsets.UTF_8);
+        String chunkMixin = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/mixin/NetherChunkLayerMixin.java"), StandardCharsets.UTF_8);
+        assertFalse(source.contains("isUnsupportedDimension"));
+        assertTrue(controller.contains("minecraft:the_nether"));
+        assertTrue(controller.contains("minecraft.player.getY() + 2.5f"));
+        assertTrue(chunkMixin.contains("isNetherSliceActive()"));
+        assertTrue(chunkMixin.contains("ci.cancel()"));
     }
 
     @Test

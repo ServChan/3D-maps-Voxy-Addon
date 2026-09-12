@@ -11,6 +11,8 @@ public final class VoxyMapCameraController {
     private static float cameraYaw;
     private static float cameraPitch;
     private static float fov;
+    private static boolean netherSliceActive;
+    private static float netherSliceY;
 
     private VoxyMapCameraController() {
     }
@@ -18,8 +20,12 @@ public final class VoxyMapCameraController {
     public static void update(Minecraft minecraft, double centerX, double centerY, double centerZ, double yawRadians, double pitchControl, double blocksPerPixel) {
         if (minecraft == null || minecraft.level == null || minecraft.player == null) {
             active = false;
+            netherSliceActive = false;
             return;
         }
+
+        netherSliceActive = "minecraft:the_nether".equals(minecraft.level.dimension().identifier().toString());
+        netherSliceY = (float) minecraft.player.getY() + 2.5f;
 
         boolean endDimension = "minecraft:the_end".equals(minecraft.level.dimension().identifier().toString());
         float pitchDegrees = Mth.clamp((float) (18.0 + pitchControl * 42.0), 18.0f, 72.0f);
@@ -77,7 +83,16 @@ public final class VoxyMapCameraController {
         return fov;
     }
 
+    public static boolean isNetherSliceActive() {
+        return active && netherSliceActive;
+    }
+
+    public static float netherSliceY() {
+        return netherSliceY;
+    }
+
     public static void deactivate() {
         active = false;
+        netherSliceActive = false;
     }
 }
