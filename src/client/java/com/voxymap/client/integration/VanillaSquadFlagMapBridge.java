@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
  * enabled it in the map settings — same shape as {@link VanillaSquadPlayerMapBridge}.
  */
 public final class VanillaSquadFlagMapBridge {
-    private static final String MARKERS_URL_TEMPLATE = "https://vanillasquad.com/map/proxy/build/tiles/%s/markers.json";
+    private static final String MARKERS_URL_TEMPLATE = "https://vanillasquad.com/map/proxy/%s/tiles/%s/markers.json";
     private static final String BANNER_SET_ID = "banners";
     private static final long DEFAULT_INTERVAL_SECONDS = 60L;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
@@ -48,36 +48,38 @@ public final class VanillaSquadFlagMapBridge {
     }
 
     /** @param dimensionId e.g. {@code "minecraft:overworld"} */
-    public static void tick(String dimensionId) {
-        if (!VoxyMapSettings.vanillaSquadFlagsEnabled() || dimensionId == null) {
+    public static void tick(String mapId, String dimensionId) {
+        if (!VoxyMapSettings.vanillaSquadFlagsEnabled() || mapId == null || dimensionId == null) {
             return;
         }
 
         String world = dimensionId.replace(':', '_');
+        String cacheKey = mapId + "/" + world;
         long now = System.nanoTime();
-        Long lastFetch = LAST_FETCH_NANOS_BY_WORLD.get(world);
+        Long lastFetch = LAST_FETCH_NANOS_BY_WORLD.get(cacheKey);
         if (lastFetch != null && now - lastFetch < DEFAULT_INTERVAL_SECONDS * 1_000_000_000L) {
             return;
         }
 
-        AtomicBoolean fetching = FETCHING_BY_WORLD.computeIfAbsent(world, ignored -> new AtomicBoolean(false));
+        AtomicBoolean fetching = FETCHING_BY_WORLD.computeIfAbsent(cacheKey, ignored -> new AtomicBoolean(false));
         if (!fetching.compareAndSet(false, true)) {
             return;
         }
-        LAST_FETCH_NANOS_BY_WORLD.put(world, now);
+        LAST_FETCH_NANOS_BY_WORLD.put(cacheKey, now);
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(MARKERS_URL_TEMPLATE.formatted(world)))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(MARKERS_URL_TEMPLATE.formatted(mapId, world)))
                 .timeout(REQUEST_TIMEOUT)
                 .GET()
                 .build();
-        CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+        CLIENT.sendAsync(request, HttpResponse.BodyHandlers.limiting(
+                        HttpResponse.BodyHandlers.ofString(), MAX_RESPONSE_CHARS))
                 .whenComplete((response, throwable) -> {
                     try {
                         if (throwable != null) {
                             VoxyMapClient.LOGGER.warn("[VoxyMap] Could not fetch VanillaSquad flags for {}.", world, throwable);
                         } else if (response.statusCode() == 200) {
                             // Clustering is done once here, off the render thread, not per frame.
-                            TERRITORIES_BY_WORLD.put(world, TerritoryClusterer.cluster(parse(response.body())));
+                            TERRITORIES_BY_WORLD.put(cacheKey, TerritoryClusterer.cluster(parse(response.body())));
                         } else {
                             VoxyMapClient.LOGGER.warn("[VoxyMap] VanillaSquad markers endpoint returned HTTP {} for {}.", response.statusCode(), world);
                         }
@@ -95,11 +97,25 @@ public final class VanillaSquadFlagMapBridge {
         }
         JsonArray sets = JsonParser.parseString(body).getAsJsonArray();
         for (JsonElement setElement : sets) {
-            JsonObject set = setElement.getAsJsonObject();
-            if (!set.has("id") || !BANNER_SET_ID.equals(set.get("id").getAsString())) {
+            if (!setElement.isJsonObject()) {
                 continue;
             }
-            JsonArray markers = set.getAsJsonArray("markers");
+            JsonObject set = setElement.getAsJsonObject();
+            String id;
+            try {
+                id = set.has("id") ? set.get("id").getAsString() : "";
+            } catch (RuntimeException ignored) {
+                continue;
+            }
+            if (!BANNER_SET_ID.equals(id)) {
+                continue;
+            }
+            JsonArray markers;
+            try {
+                markers = set.getAsJsonArray("markers");
+            } catch (RuntimeException ignored) {
+                return List.of();
+            }
             if (markers == null) {
                 return List.of();
             }
@@ -140,11 +156,11 @@ public final class VanillaSquadFlagMapBridge {
     }
 
     /** All currently known territory outlines in the given dimension (e.g. {@code "minecraft:the_nether"}). */
-    public static List<Territory> territoriesInDimension(String dimensionId) {
-        if (dimensionId == null) {
+    public static List<Territory> territoriesInDimension(String mapId, String dimensionId) {
+        if (mapId == null || dimensionId == null) {
             return List.of();
         }
-        return TERRITORIES_BY_WORLD.getOrDefault(dimensionId.replace(':', '_'), List.of());
+        return TERRITORIES_BY_WORLD.getOrDefault(mapId + "/" + dimensionId.replace(':', '_'), List.of());
     }
 
     public enum Color {

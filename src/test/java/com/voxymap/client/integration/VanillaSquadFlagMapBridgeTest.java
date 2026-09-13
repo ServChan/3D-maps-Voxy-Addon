@@ -57,6 +57,21 @@ class VanillaSquadFlagMapBridgeTest {
     }
 
     @Test
+    void malformedMarkerSetsDoNotDiscardTheValidBannerSet() {
+        String body = """
+                [null, 42, {"id":{}},
+                 {"id":"banners","markers":[
+                   {"tooltip":"Valid","icon":"blue","point":{"x":4,"z":8}}
+                 ]}]
+                """;
+
+        List<VanillaSquadFlagMapBridge.Flag> flags = VanillaSquadFlagMapBridge.parse(body);
+
+        assertEquals(1, flags.size());
+        assertEquals("Valid", flags.get(0).tooltip());
+    }
+
+    @Test
     void colorForFallsBackToWhiteForUnknownOrMissingIcons() {
         assertEquals(VanillaSquadFlagMapBridge.Color.RED.argb, VanillaSquadFlagMapBridge.colorFor("RED"));
         assertEquals(VanillaSquadFlagMapBridge.Color.RED.argb, VanillaSquadFlagMapBridge.colorFor("red"));

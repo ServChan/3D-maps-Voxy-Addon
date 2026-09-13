@@ -13,8 +13,15 @@ import java.lang.reflect.Method;
 public final class HappyGhastScannerBridge {
     private static final String MOD_ID = "happyghastscanner";
     private static final String[] ACTIVE_STATES = {"ASCENDING", "SCANNING", "PAUSED"};
+    private static final long SNAPSHOT_INTERVAL_NANOS = 100_000_000L;
+    private static final double MAX_ABS_COORDINATE = 60_000_000.0;
+    private static final double MAX_STEP = 1_000_000.0;
+    private static final int MAX_SEGMENT = 1_000_000;
 
     private static final Accessor ACCESSOR = resolveAccessor();
+    private static volatile Route cachedRoute;
+    private static volatile long lastReadNanos = Long.MIN_VALUE;
+    private static volatile boolean readFailureLogged;
 
     private HappyGhastScannerBridge() {
     }
@@ -29,12 +36,23 @@ public final class HappyGhastScannerBridge {
         if (ACCESSOR == null) {
             return null;
         }
-        try {
-            return ACCESSOR.read();
-        } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read the HappyGhastScanner route.", exception);
-            return null;
+        long now = System.nanoTime();
+        if (lastReadNanos != Long.MIN_VALUE && now - lastReadNanos < SNAPSHOT_INTERVAL_NANOS) {
+            return cachedRoute;
         }
+        try {
+            cachedRoute = ACCESSOR.read();
+            readFailureLogged = false;
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            cachedRoute = null;
+            if (!readFailureLogged) {
+                readFailureLogged = true;
+                VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read the HappyGhastScanner route; further failures will be suppressed.", exception);
+            }
+        } finally {
+            lastReadNanos = now;
+        }
+        return cachedRoute;
     }
 
     private static Accessor resolveAccessor() {
@@ -46,8 +64,6 @@ public final class HappyGhastScannerBridge {
             Method getInstance = controllerClass.getMethod("getInstance");
             Method getState = controllerClass.getMethod("getState");
             Method getPlanner = controllerClass.getMethod("getPlanner");
-            Object controller = getInstance.invoke(null);
-
             Class<?> plannerClass = Class.forName("org.lts.happyghastscanner.SquareSpiralPlanner");
             Method getCenterX = plannerClass.getMethod("getCenterX");
             Method getCenterZ = plannerClass.getMethod("getCenterZ");
@@ -55,7 +71,18 @@ public final class HappyGhastScannerBridge {
             Method getCurrentSegment = plannerClass.getMethod("getCurrentSegment");
 
             return () -> {
-                String state = ((Enum<?>) getState.invoke(controller)).name();
+                // The scanner singleton may not exist yet while mods are still initializing. Do not
+                // permanently capture that early null; resolve the current instance for each sampled
+                // snapshot (at most ten times per second).
+                Object controller = getInstance.invoke(null);
+                if (controller == null) {
+                    return null;
+                }
+                Object stateValue = getState.invoke(controller);
+                if (!(stateValue instanceof Enum<?> stateEnum)) {
+                    return null;
+                }
+                String state = stateEnum.name();
                 if (!isActiveState(state)) {
                     return null;
                 }
@@ -63,11 +90,15 @@ public final class HappyGhastScannerBridge {
                 if (planner == null) {
                     return null;
                 }
-                double centerX = (double) getCenterX.invoke(planner);
-                double centerZ = (double) getCenterZ.invoke(planner);
-                double step = (double) getStep.invoke(planner);
-                int currentSegment = (int) getCurrentSegment.invoke(planner);
-                return new Route(centerX, centerZ, step, currentSegment);
+                Object centerX = getCenterX.invoke(planner);
+                Object centerZ = getCenterZ.invoke(planner);
+                Object step = getStep.invoke(planner);
+                Object currentSegment = getCurrentSegment.invoke(planner);
+                if (!(centerX instanceof Number x) || !(centerZ instanceof Number z)
+                        || !(step instanceof Number spacing) || !(currentSegment instanceof Number segment)) {
+                    return null;
+                }
+                return validatedRoute(x.doubleValue(), z.doubleValue(), spacing.doubleValue(), segment.intValue());
             };
         } catch (ReflectiveOperationException | LinkageError exception) {
             VoxyMapClient.LOGGER.warn("[VoxyMap] HappyGhastScanner is installed but its API is incompatible.", exception);
@@ -82,6 +113,15 @@ public final class HappyGhastScannerBridge {
             }
         }
         return false;
+    }
+
+    static Route validatedRoute(double centerX, double centerZ, double step, int currentSegment) {
+        if (!Double.isFinite(centerX) || !Double.isFinite(centerZ) || !Double.isFinite(step)
+                || Math.abs(centerX) > MAX_ABS_COORDINATE || Math.abs(centerZ) > MAX_ABS_COORDINATE
+                || step <= 0.0 || step > MAX_STEP || currentSegment < 0 || currentSegment > MAX_SEGMENT) {
+            return null;
+        }
+        return new Route(centerX, centerZ, step, currentSegment);
     }
 
     @FunctionalInterface

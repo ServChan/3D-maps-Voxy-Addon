@@ -13,6 +13,7 @@
     "LevelRendererMixin",
     "MDICSectionRendererMixin",
     "VoxyClientMixin",
+    "VoxyNodeManagerMixin",
     "VoxyShaderLoaderMixin",
     "XaeroGuiMapMixin"
   ],

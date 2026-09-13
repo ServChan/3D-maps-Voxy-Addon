@@ -63,7 +63,9 @@ public final class VoxyMapSettings {
             try (OutputStream output = Files.newOutputStream(TEMP_PATH)) {
                 properties.store(output, "VoxyMap client settings");
             }
-            if (Files.exists(CONFIG_PATH)) {
+            // Preserve the last known-good backup if the primary file is corrupt. Blindly copying
+            // an unreadable primary here would destroy the only recoverable settings snapshot.
+            if (readProperties(CONFIG_PATH, false) != null) {
                 Files.copy(CONFIG_PATH, BACKUP_PATH, StandardCopyOption.REPLACE_EXISTING);
             }
             replaceAtomically(TEMP_PATH, CONFIG_PATH);
@@ -160,13 +162,19 @@ public final class VoxyMapSettings {
     }
 
     private static Properties readProperties(Path path) {
+        return readProperties(path, true);
+    }
+
+    private static Properties readProperties(Path path, boolean logFailure) {
         if (!Files.exists(path)) return null;
         Properties properties = new Properties();
         try (InputStream input = Files.newInputStream(path)) {
             properties.load(input);
             return properties;
         } catch (IOException | IllegalArgumentException exception) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read settings from {}", path, exception);
+            if (logFailure) {
+                VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read settings from {}", path, exception);
+            }
             return null;
         }
     }

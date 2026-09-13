@@ -105,7 +105,12 @@ public final class RoomCutawayController {
         long interval = result.hasCutaway() ? ENCLOSED_RECOMPUTE_INTERVAL_NANOS : OPEN_RECOMPUTE_INTERVAL_NANOS;
         boolean stale = (now - lastComputeNanos) >= interval;
 
-        if (moved || (pendingSearch == null && stale)) {
+        // Never throw away an in-progress flood fill just because the player moved two blocks.
+        // A Search owns several large fixed arrays; replacing it every tick while walking both
+        // creates sustained GC pressure and prevents any scan from ever completing. Finish the
+        // bounded search, publish its still-safe (possibly slightly trailing) mask, then the moved
+        // check starts a fresh scan from the player's latest position on the next tick.
+        if (pendingSearch == null && (moved || stale)) {
             pendingSearch = retainVerifiedPartial
                     ? RoomCutawayComputer.startVerifiedPartial(feet.getX(), feet.getY(), feet.getZ())
                     : RoomCutawayComputer.start(feet.getX(), feet.getY(), feet.getZ());

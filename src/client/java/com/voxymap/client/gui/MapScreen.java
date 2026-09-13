@@ -24,8 +24,10 @@ import net.minecraft.world.entity.player.Player;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -45,6 +47,9 @@ public class MapScreen extends Screen {
     private static final int GHAST_ROUTE_LOOKAHEAD_SEGMENTS = 16;
     private static final double PLAYER_VIEW_CONE_CROWD_DISTANCE = 52.0;
     private static final double PLAYER_MARKER_HOVER_DISTANCE = 12.0;
+    private static final int PLAYER_LABEL_CELL_WIDTH = 56;
+    private static final int PLAYER_LABEL_CELL_HEIGHT = 14;
+    private static final long SKIN_RETRY_INTERVAL_NANOS = 5_000_000_000L;
     private double viewCenterX;
     private double viewCenterY;
     private double viewCenterZ;
@@ -59,11 +64,18 @@ public class MapScreen extends Screen {
     private double moveVelocityX = 0.0;
     private double moveVelocityZ = 0.0;
     private List<PlayerMarker> playerMarkers = List.of();
+    private final Map<UUID, Identifier> skinTextureCache = new HashMap<>();
+    private final Map<UUID, Long> missingSkinRetryNanos = new HashMap<>();
+    private HappyGhastScannerBridge.Route cachedGhastRoute;
+    private List<SpiralRouteGeometry.Waypoint> cachedGhastRoutePoints = List.of();
+    private int cachedGhastFirstSegment;
+    private String[][] cachedKeyHints = new String[0][0];
     private long lastFrameNanos = 0L;
     private long openedAtNanos = 0L;
     private boolean openLogged = false;
     private boolean firstInitDone = false;
     private boolean xaeroTransitionActive = false;
+    private boolean xaeroOpenScheduled = false;
     private long xaeroTransitionStartedAt = 0L;
     private int xaeroButtonX = -1;
     private int xaeroButtonY = -1;
@@ -116,6 +128,7 @@ public class MapScreen extends Screen {
             VoxyMapGuiRenderer.open(minecraft);
         }
         capturePlayerMarkers();
+        cachedKeyHints = buildKeyHints();
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
@@ -138,8 +151,17 @@ public class MapScreen extends Screen {
         drawOpeningAnimation(g);
         if (xaeroTransitionActive) {
             drawXaeroTransition(g);
-            if (System.nanoTime() - xaeroTransitionStartedAt >= XAERO_TRANSITION_NANOS) {
-                openXaeroWorldMap();
+            if (!xaeroOpenScheduled && System.nanoTime() - xaeroTransitionStartedAt >= XAERO_TRANSITION_NANOS) {
+                // Screen replacement can invoke removed() and restore renderer state. Defer it until
+                // after render-state extraction rather than mutating the screen stack mid-frame.
+                xaeroOpenScheduled = true;
+                minecraft.execute(() -> {
+                    if (xaeroTransitionActive) {
+                        openXaeroWorldMap();
+                    } else {
+                        xaeroOpenScheduled = false;
+                    }
+                });
             }
         }
     }
@@ -264,13 +286,18 @@ public class MapScreen extends Screen {
 
     @Override
     public void tick() {
+        // Feed the newest pan/zoom context before the cutaway tick updates shader state.
+        syncWorldCamera();
         RoomCutawayController.tick(minecraft);
-        VanillaSquadPlayerMapBridge.tick();
         if (minecraft != null && minecraft.level != null) {
-            VanillaSquadFlagMapBridge.tick(minecraft.level.dimension().identifier().toString());
+            String dimensionId = minecraft.level.dimension().identifier().toString();
+            if (minecraft.player != null) {
+                VanillaSquadPlayerMapBridge.tick(minecraft.level, dimensionId, minecraft.player.getUUID(),
+                        minecraft.player.getName().getString(), minecraft.player.getX(), minecraft.player.getZ());
+            }
+            VanillaSquadFlagMapBridge.tick(VanillaSquadPlayerMapBridge.activeMapId(), dimensionId);
         }
         capturePlayerMarkers();
-        syncWorldCamera();
     }
 
     @Override
@@ -287,7 +314,7 @@ public class MapScreen extends Screen {
         }
     }
 
-    private String[][] keyHints() {
+    private String[][] buildKeyHints() {
         return new String[][] {
                 {Component.translatable("overlay.voxymap.key.drag.button").getString(), Component.translatable("overlay.voxymap.key.drag").getString()},
                 {Component.translatable("overlay.voxymap.key.rotate.button").getString(), Component.translatable("overlay.voxymap.key.rotate").getString()},
@@ -385,6 +412,7 @@ public class MapScreen extends Screen {
         dragging = false;
         middleDragging = false;
         xaeroTransitionActive = true;
+        xaeroOpenScheduled = false;
         xaeroTransitionStartedAt = System.nanoTime();
     }
 
@@ -403,6 +431,7 @@ public class MapScreen extends Screen {
         syncWorldCamera();
         VoxyMapGuiRenderer.open(minecraft);
         xaeroTransitionActive = false;
+        xaeroOpenScheduled = false;
         xaeroTransitionStartedAt = 0L;
         if (minecraft.player != null) {
             minecraft.player.sendSystemMessage(Component.translatable("message.voxymap.xaero_open_failed"));
@@ -510,8 +539,9 @@ public class MapScreen extends Screen {
                         || knownNames.contains(remote.name().toLowerCase(java.util.Locale.ROOT))) {
                     continue; // Already shown live from the client's own nearby entity list.
                 }
+                UUID uuid = VanillaSquadPlayerMapBridge.toJavaUuid(remote.uuid());
                 snapshot.add(new PlayerMarker(remote.name(), remote.x(), remote.y(), remote.z(), false, true,
-                        VanillaSquadPlayerMapBridge.toJavaUuid(remote.uuid()), Float.NaN));
+                        uuid, Float.NaN));
             }
         }
 
@@ -530,7 +560,8 @@ public class MapScreen extends Screen {
         }
 
         String dimensionId = minecraft.level.dimension().identifier().toString();
-        for (VanillaSquadFlagMapBridge.Territory territory : VanillaSquadFlagMapBridge.territoriesInDimension(dimensionId)) {
+        for (VanillaSquadFlagMapBridge.Territory territory : VanillaSquadFlagMapBridge.territoriesInDimension(
+                VanillaSquadPlayerMapBridge.activeMapId(), dimensionId)) {
             List<double[]> vertices = territory.outline();
             if (vertices.isEmpty()) {
                 continue;
@@ -592,13 +623,20 @@ public class MapScreen extends Screen {
         }
         HappyGhastScannerBridge.Route route = HappyGhastScannerBridge.currentRoute();
         if (route == null) {
+            cachedGhastRoute = null;
+            cachedGhastRoutePoints = List.of();
             return;
         }
 
-        int firstSegment = Math.max(0, route.currentSegment() - GHAST_ROUTE_LOOKBACK_SEGMENTS);
-        int lastSegment = route.currentSegment() + GHAST_ROUTE_LOOKAHEAD_SEGMENTS;
-        List<SpiralRouteGeometry.Waypoint> points = SpiralRouteGeometry.pathSegment(
-                route.centerX(), route.centerZ(), route.step(), firstSegment, lastSegment);
+        if (!route.equals(cachedGhastRoute)) {
+            cachedGhastFirstSegment = Math.max(0, route.currentSegment() - GHAST_ROUTE_LOOKBACK_SEGMENTS);
+            int lastSegment = route.currentSegment() + GHAST_ROUTE_LOOKAHEAD_SEGMENTS;
+            cachedGhastRoutePoints = SpiralRouteGeometry.pathSegment(
+                    route.centerX(), route.centerZ(), route.step(), cachedGhastFirstSegment, lastSegment);
+            cachedGhastRoute = route;
+        }
+        int firstSegment = cachedGhastFirstSegment;
+        List<SpiralRouteGeometry.Waypoint> points = cachedGhastRoutePoints;
 
         ScreenPoint previous = projectToScreen(points.get(0).x(), viewCenterY, points.get(0).z());
         for (int i = 1; i < points.size(); i++) {
@@ -730,18 +768,59 @@ public class MapScreen extends Screen {
             }
         }
 
+        // Dense player groups used to turn into an unreadable wall of overlapping names and heads.
+        // Keep every direction marker visible, reserve labels for the local/hovered player, and then
+        // greedily place only labels with enough screen space. Hidden labels reappear on hover.
+        Set<ProjectedPlayerMarker> labeled = new HashSet<>();
+        Set<Long> occupiedLabelCells = new HashSet<>();
+        for (ProjectedPlayerMarker entry : projected) {
+            if (entry.marker.local || entry == hovered) {
+                labeled.add(entry);
+                occupyLabelCell(entry.point, occupiedLabelCells);
+            }
+        }
+        for (ProjectedPlayerMarker entry : projected) {
+            if (!labeled.contains(entry) && claimLabelCell(entry.point, occupiedLabelCells)) {
+                labeled.add(entry);
+            }
+        }
+
         for (ProjectedPlayerMarker entry : projected) {
             if (entry != hovered) {
-                drawPlayerMarker(g, entry, projected, false);
+                drawPlayerMarker(g, entry, projected, false, labeled.contains(entry));
             }
         }
         if (hovered != null) {
-            drawPlayerMarker(g, hovered, projected, true);
+            drawPlayerMarker(g, hovered, projected, true, true);
         }
     }
 
+    private boolean claimLabelCell(ScreenPoint point, Set<Long> occupied) {
+        int cellX = Math.floorDiv(point.x, PLAYER_LABEL_CELL_WIDTH);
+        int cellY = Math.floorDiv(point.y, PLAYER_LABEL_CELL_HEIGHT);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                if (occupied.contains(labelCellKey(cellX + dx, cellY + dy))) {
+                    return false;
+                }
+            }
+        }
+        occupied.add(labelCellKey(cellX, cellY));
+        return true;
+    }
+
+    private void occupyLabelCell(ScreenPoint point, Set<Long> occupied) {
+        occupied.add(labelCellKey(
+                Math.floorDiv(point.x, PLAYER_LABEL_CELL_WIDTH),
+                Math.floorDiv(point.y, PLAYER_LABEL_CELL_HEIGHT)));
+    }
+
+    private static long labelCellKey(int x, int y) {
+        return ((long) x << 32) ^ (y & 0xFFFFFFFFL);
+    }
+
     private void drawPlayerMarker(GuiGraphicsExtractor g, ProjectedPlayerMarker entry,
-                                  List<ProjectedPlayerMarker> projected, boolean hovered) {
+                                  List<ProjectedPlayerMarker> projected, boolean hovered, boolean showLabel) {
         PlayerMarker marker = entry.marker;
         ScreenPoint point = entry.point;
         int radius = marker.local ? 9 : 6;
@@ -758,11 +837,14 @@ public class MapScreen extends Screen {
         drawDiamond(g, point.x, point.y, radius + 2, outline);
         drawDiamond(g, point.x, point.y, radius, color);
         g.fill(point.x - 1, point.y - 1, point.x + 2, point.y + 2, 0xFFFFFFFF);
+        if (!showLabel) {
+            return;
+        }
 
         String label = marker.local
                 ? Component.translatable("overlay.voxymap.player").getString() + ": " + marker.name
                 : marker.name;
-        Identifier skin = PlayerHeadIcon.resolveSkinTexture(minecraft, marker.uuid);
+        Identifier skin = resolveCachedSkin(marker.uuid);
         int headSize = 10;
         int headGap = skin != null ? headSize + 3 : 0;
         int labelWidth = minecraft.font.width(label) + 8 + headGap;
@@ -774,6 +856,29 @@ public class MapScreen extends Screen {
             PlayerHeadIcon.draw(g, skin, labelX + 3, labelY, headSize);
         }
         g.text(minecraft.font, label, labelX + 4 + headGap, labelY + 2, 0xFFFFFFFF);
+    }
+
+    private Identifier resolveCachedSkin(UUID uuid) {
+        if (uuid == null) {
+            return null;
+        }
+        Identifier cached = skinTextureCache.get(uuid);
+        if (cached != null) {
+            return cached;
+        }
+        long now = System.nanoTime();
+        Long retryAt = missingSkinRetryNanos.get(uuid);
+        if (retryAt != null && now < retryAt) {
+            return null;
+        }
+        Identifier resolved = PlayerHeadIcon.resolveSkinTexture(minecraft, uuid);
+        if (resolved != null) {
+            skinTextureCache.put(uuid, resolved);
+            missingSkinRetryNanos.remove(uuid);
+        } else {
+            missingSkinRetryNanos.put(uuid, now + SKIN_RETRY_INTERVAL_NANOS);
+        }
+        return resolved;
     }
 
     private double nearestActiveMarkerDistance(ProjectedPlayerMarker source,
@@ -1004,7 +1109,7 @@ public class MapScreen extends Screen {
     }
 
     private int drawFooter(GuiGraphicsExtractor g, int slide) {
-        String[][] hints = keyHints();
+        String[][] hints = cachedKeyHints;
         int contentWidth = keyHintsWidth(hints);
         float availableWidth = Math.max(1, width - HUD_MARGIN * 2);
         float scale = Math.min(1.0f, availableWidth / contentWidth);
@@ -1210,6 +1315,7 @@ public class MapScreen extends Screen {
     }
 
     private void closeMapView() {
+        xaeroTransitionActive = false;
         VoxyMapGuiRenderer.close(minecraft);
         VoxyMapCameraController.deactivate();
         VoxyBridge.restoreEnvironmentalFogAfterMap();

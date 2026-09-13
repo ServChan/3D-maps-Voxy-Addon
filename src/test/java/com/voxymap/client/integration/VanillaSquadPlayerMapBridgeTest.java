@@ -3,6 +3,7 @@ package com.voxymap.client.integration;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,6 +28,36 @@ class VanillaSquadPlayerMapBridgeTest {
         assertEquals(69.0, thost.y());
         assertEquals(179.0, thost.z());
         assertEquals("2f4c3b65811535398569b527957f6721", thost.uuid());
+    }
+
+    @Test
+    void selectsTheMapWhosePlayerSnapshotMatchesTheClientsCurrentPosition() {
+        String uuid = "2f4c3b65811535398569b527957f6721";
+        Map<String, List<VanillaSquadPlayerMapBridge.RemotePlayer>> snapshots = Map.of(
+                "build", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+                        "thost", "minecraft_overworld", 5000, 64, 5000, uuid)),
+                "farm", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+                        "thost", "minecraft_overworld", 31, 69, 179, uuid)));
+
+        assertEquals("farm", VanillaSquadPlayerMapBridge.selectMapId(
+                snapshots, "minecraft:overworld", uuid, "thost", 30, 180));
+    }
+
+    @Test
+    void refusesStaleOrAmbiguousCrossWorldPlayerSnapshots() {
+        String uuid = "2f4c3b65811535398569b527957f6721";
+        VanillaSquadPlayerMapBridge.RemotePlayer stale = new VanillaSquadPlayerMapBridge.RemotePlayer(
+                "thost", "minecraft_overworld", 5000, 64, 5000, uuid);
+        assertTrue(VanillaSquadPlayerMapBridge.selectMapId(
+                Map.of("build", List.of(stale)), "minecraft:overworld", uuid, "thost", 0, 0) == null);
+
+        Map<String, List<VanillaSquadPlayerMapBridge.RemotePlayer>> ambiguous = Map.of(
+                "build", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+                        "thost", "minecraft_overworld", 2, 64, 0, uuid)),
+                "farm", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+                        "thost", "minecraft_overworld", 3, 64, 0, uuid)));
+        assertTrue(VanillaSquadPlayerMapBridge.selectMapId(
+                ambiguous, "minecraft:overworld", uuid, "thost", 0, 0) == null);
     }
 
     @Test

@@ -45,4 +45,13 @@ class NetherRoofPolicyTest {
         assertEquals(96.0f, NetherRoofPolicy.aperture(0, 128, 50.0, 0.1, 200).radius());
         assertEquals(0.0f, NetherRoofPolicy.aperture(0, 4, -40.0, 0.1, 200).innerCutoff());
     }
+
+    @Test
+    void invalidViewInputsStillProduceFiniteSafeShaderUniforms() {
+        NetherRoofPolicy.Aperture aperture = NetherRoofPolicy.aperture(
+                0, 128, Double.NaN, Double.POSITIVE_INFINITY, -1);
+
+        assertEquals(94.0f, aperture.innerCutoff());
+        assertEquals(96.0f, aperture.radius());
+    }
 }

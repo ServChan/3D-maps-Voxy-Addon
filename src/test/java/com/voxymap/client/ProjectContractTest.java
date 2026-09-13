@@ -111,6 +111,20 @@ class ProjectContractTest {
     }
 
     @Test
+    void duplicateVoxyNodeRequestsAreSilencedWithTheSameEarlyReturnCondition() throws IOException {
+        String mixin = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/mixin/VoxyNodeManagerMixin.java"), StandardCharsets.UTF_8);
+        JsonObject config = readJson(Path.of("src/main/resources/voxymap.client.mixins.json"));
+
+        assertTrue(config.getAsJsonArray("client").asList().stream()
+                .anyMatch(element -> "VoxyNodeManagerMixin".equals(element.getAsString())));
+        assertTrue(mixin.contains("NODE_TYPE_MASK = 0xC0000000"));
+        assertTrue(mixin.contains("NODE_TYPE_REQUEST = 0x80000000"));
+        assertTrue(mixin.contains("ci.cancel()"),
+                "The mixin should only skip Voxy's existing log-and-return duplicate path");
+    }
+
+    @Test
     void netherRoofRemovalUsesWholeQuadsInsteadOfAntiXrayCrossSections() throws IOException {
         String controller = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/RoomCutawayController.java"), StandardCharsets.UTF_8);
@@ -134,6 +148,26 @@ class ProjectContractTest {
     }
 
     @Test
+    void anInProgressRoomScanIsNotRestartedWhileThePlayerMoves() throws IOException {
+        String controller = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/map/RoomCutawayController.java"), StandardCharsets.UTF_8);
+
+        assertTrue(controller.contains("if (pendingSearch == null && (moved || stale))"),
+                "Movement must queue the next scan instead of repeatedly allocating and discarding the current one");
+    }
+
+    @Test
+    void remoteMapResponsesAreBoundedBeforeTheyReachTheJsonParser() throws IOException {
+        String players = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/integration/VanillaSquadPlayerMapBridge.java"), StandardCharsets.UTF_8);
+        String flags = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/integration/VanillaSquadFlagMapBridge.java"), StandardCharsets.UTF_8);
+
+        assertTrue(players.contains("BodyHandlers.limiting("));
+        assertTrue(flags.contains("BodyHandlers.limiting("));
+    }
+
+    @Test
     void vanillaSquadPlayerFetchIsOffByDefaultAndGatedBehindTheSetting() throws IOException {
         String settings = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/VoxyMapSettings.java"), StandardCharsets.UTF_8);
@@ -141,8 +175,8 @@ class ProjectContractTest {
                 "src/client/java/com/voxymap/client/integration/VanillaSquadPlayerMapBridge.java"), StandardCharsets.UTF_8);
         assertTrue(settings.contains("vanillaSquadPlayersEnabled = false"),
                 "Fetching from a third-party site must require an explicit opt-in, not be on by default");
-        assertTrue(bridge.contains("if (!VoxyMapSettings.vanillaSquadPlayersEnabled()) {\n            return;\n        }"),
-                "The network fetch must bail out immediately when the setting is off");
+        assertTrue(bridge.contains("if (!VoxyMapSettings.vanillaSquadPlayersEnabled() && !VoxyMapSettings.vanillaSquadFlagsEnabled())"),
+                "Realm detection may fetch only when at least one VanillaSquad overlay was explicitly enabled");
     }
 
     @Test
