@@ -16,6 +16,7 @@ class RoomCutawayShaderPatcherTest {
 
         assertTrue(patched.contains("voxymapWorldPos = voxymapPoint + vec3(baseSectionPos << 5)"));
         assertTrue(patched.contains("voxymapQuadMinY = quad.basePoint.y + float(baseSectionPos.y << 5)"));
+        assertTrue(patched.contains("voxymapQuadCenterXZ"));
         assertEquals(patched, RoomCutawayShaderPatcher.patch("voxy:lod/gl46/quads3.vert", patched));
     }
 
@@ -29,8 +30,11 @@ class RoomCutawayShaderPatcherTest {
 
         assertTrue(patched.indexOf(depthAnchor) < patched.indexOf("voxymapCutawayEnabled != 0"));
         assertTrue(patched.contains("texelFetch(voxymapRoomHeightMap"));
-        assertTrue(patched.contains("voxymapQuadMinY >= voxymapGlobalCutawayY"),
-                "The global Nether threshold must reject complete roof quads");
+        assertTrue(patched.contains("voxymapQuadMinY >= voxymapRoofCutY"),
+                "The dynamic Nether threshold must reject complete roof quads");
+        assertTrue(patched.contains("smoothstep("));
+        assertTrue(patched.contains("mix(voxymapApertureInnerY"),
+                "The whole-quad threshold must deepen smoothly around the inspected map area");
         assertFalse(patched.contains("min(voxymapCutY"),
                 "A global fragment plane would expose anti-xray cache cross-sections");
         assertTrue(patched.indexOf("if (voxymapWorldPos.y > voxymapCutY)")

@@ -54,6 +54,10 @@ public abstract class MDICSectionRendererMixin {
             GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.ORIGIN_X_UNIFORM_LOCATION, RoomCutawayTexture.originX());
             GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.ORIGIN_Z_UNIFORM_LOCATION, RoomCutawayTexture.originZ());
             GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.GLOBAL_CUTOFF_UNIFORM_LOCATION, RoomCutawayTexture.uniformCutoff());
+            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.APERTURE_CENTER_X_UNIFORM_LOCATION, RoomCutawayTexture.apertureCenterX());
+            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.APERTURE_CENTER_Z_UNIFORM_LOCATION, RoomCutawayTexture.apertureCenterZ());
+            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.APERTURE_INNER_CUTOFF_UNIFORM_LOCATION, RoomCutawayTexture.apertureInnerCutoff());
+            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.APERTURE_RADIUS_UNIFORM_LOCATION, RoomCutawayTexture.apertureRadius());
             int previousTexture = GL30C.glGetIntegeri(GL11C.GL_TEXTURE_BINDING_2D, RoomCutawayTexture.TEXTURE_UNIT);
             GL45C.glBindTextureUnit(RoomCutawayTexture.TEXTURE_UNIT, RoomCutawayTexture.textureId());
             return previousTexture;

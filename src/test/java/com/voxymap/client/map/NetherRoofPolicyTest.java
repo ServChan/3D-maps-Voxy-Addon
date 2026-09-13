@@ -21,4 +21,28 @@ class NetherRoofPolicyTest {
         // cut plane below minY and remove the whole dimension instead of just its roof.
         assertEquals(0.0f, NetherRoofPolicy.cutoff(0, 4));
     }
+
+    @Test
+    void closeViewOpensDeeperAroundTheInspectedHeight() {
+        NetherRoofPolicy.Aperture aperture = NetherRoofPolicy.aperture(0, 128, 50.0, 0.55, 1095);
+
+        assertEquals(80.0f, aperture.innerCutoff());
+        assertEquals(289.08f, aperture.radius(), 0.01f);
+    }
+
+    @Test
+    void wideViewPreservesTheExistingSuccessfulRoofThreshold() {
+        NetherRoofPolicy.Aperture aperture = NetherRoofPolicy.aperture(0, 128, 50.0, 1.0, 1095);
+
+        assertEquals(96.0f, aperture.innerCutoff());
+        assertEquals(525.6f, aperture.radius(), 0.01f);
+    }
+
+    @Test
+    void apertureIsClampedAwayFromTheDimensionFloorAndRoof() {
+        assertEquals(48.0f, NetherRoofPolicy.aperture(0, 128, -40.0, 0.1, 200).innerCutoff());
+        assertEquals(96.0f, NetherRoofPolicy.aperture(0, 128, 120.0, 0.1, 200).innerCutoff());
+        assertEquals(96.0f, NetherRoofPolicy.aperture(0, 128, 50.0, 0.1, 200).radius());
+        assertEquals(0.0f, NetherRoofPolicy.aperture(0, 4, -40.0, 0.1, 200).innerCutoff());
+    }
 }

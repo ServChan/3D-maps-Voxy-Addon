@@ -125,7 +125,10 @@ class ProjectContractTest {
         assertTrue(controller.contains("RoomCutawayTexture.setUniformCutoff(netherRoofCutoff)"),
                 "Changing the global plane must not re-upload the unchanged local room texture");
         assertTrue(shader.contains("voxymapGlobalCutawayY"));
-        assertTrue(shader.contains("voxymapQuadMinY >= voxymapGlobalCutawayY"));
+        assertTrue(shader.contains("voxymapQuadMinY >= voxymapRoofCutY"));
+        assertTrue(shader.contains("voxymapQuadCenterXZ"));
+        assertTrue(shader.contains("voxymapApertureRadius"));
+        assertTrue(controller.contains("updateViewContext"));
         assertFalse(shader.contains("min(voxymapCutY"),
                 "Global clipping must not manufacture a tiled anti-xray cross-section");
     }

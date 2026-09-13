@@ -278,6 +278,8 @@ public class MapScreen extends Screen {
     }
 
     private void syncWorldCamera() {
+        RoomCutawayController.updateViewContext(
+                minecraft, viewCenterX, viewCenterY, viewCenterZ, blocksPerPixel, Math.min(width, height));
         if (minecraft != null && minecraft.level != null && minecraft.player != null) {
             VoxyMapCameraController.update(minecraft, viewCenterX, viewCenterY, viewCenterZ, viewYaw, viewPitch, blocksPerPixel);
         } else {

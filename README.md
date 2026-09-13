@@ -11,7 +11,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 ## Features
 
 - Full-screen Voxy terrain view opened with a configurable key, `M` by default.
-- Whole-quad Nether roof removal clears the upper 32-block bedrock/anti-xray shell without slicing decoy LODs into a checkerboard.
+- Whole-quad Nether roof removal clears the upper bedrock/anti-xray shell without slicing decoy LODs into a checkerboard, with a zoom-aware inspection aperture that opens deeper around the current map center at close range.
 - Mouse dragging, middle-button rotation, cursor-centered zoom, and smooth keyboard movement.
 - Exact player centering plus projected markers and adaptive facing indicators for nearby active players.
 - Optional VanillaSquad global player markers with compact skin heads and clustered territory outlines.
@@ -61,6 +61,7 @@ The normal non-sources JAR is written to `build/libs/voxy-map-<version>.jar`.
 
 - Room cutaway removes only columns with a verified solid ceiling over connected client-visible air; unloaded or uncertain cells are never guessed.
 - In the Nether, the global roof threshold removes complete Voxy quads wholly inside the upper roof band instead of clipping fragments at a horizontal plane. This avoids exposing artificial cross-sections through multiplayer anti-xray replacements. The incremental local mask still reveals only columns whose connected air and solid ceiling were verified from client-visible blocks.
+- The Nether inspection aperture follows the panned map center. At close zoom it lowers the whole-quad threshold locally to reveal fine geometry; by zoom `1.00` it blends back to the architectural-preserving global threshold. Its radius is derived from the visible world footprint and fades into the surrounding map instead of producing a fixed rectangular hole.
 - Active-player facing indicators collapse to short direction ticks in dense groups. Hovering a marker restores its complete cone and draws that marker last.
 - VoxyMap only displays terrain already available to Voxy; it does not load chunks or reveal unexplored server data.
 - Optional distant VanillaSquad markers come from that server's public web-map endpoints and are disabled by default.

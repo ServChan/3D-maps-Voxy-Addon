@@ -29,6 +29,21 @@ public final class RoomCutawayController {
     private RoomCutawayController() {
     }
 
+    /** Updates cheap shader-only view parameters; safe to call whenever pan or zoom changes. */
+    public static void updateViewContext(Minecraft minecraft, double viewX, double viewY, double viewZ,
+                                         double blocksPerPixel, int viewportMinPixels) {
+        if (minecraft == null || minecraft.level == null
+                || !"minecraft:the_nether".equals(minecraft.level.dimension().identifier().toString())) {
+            RoomCutawayTexture.clearAperture();
+            return;
+        }
+        Level level = minecraft.level;
+        NetherRoofPolicy.Aperture aperture = NetherRoofPolicy.aperture(
+                level.dimensionType().minY(), level.dimensionType().logicalHeight(),
+                viewY, blocksPerPixel, viewportMinPixels);
+        RoomCutawayTexture.setAperture(viewX, viewZ, aperture.innerCutoff(), aperture.radius());
+    }
+
     /** Called from the screen tick, never from the per-frame render-state extraction path. */
     public static void tick(Minecraft minecraft) {
         if (minecraft == null || minecraft.level == null || minecraft.player == null) {
@@ -136,6 +151,7 @@ public final class RoomCutawayController {
         uploadedGlobalCutoff = Float.NaN;
         pendingSearch = null;
         lastDimensionId = null;
+        RoomCutawayTexture.clearAperture();
         RoomCutawayTexture.disable();
     }
 }

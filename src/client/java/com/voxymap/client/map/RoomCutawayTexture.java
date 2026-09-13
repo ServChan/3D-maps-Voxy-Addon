@@ -24,6 +24,10 @@ public final class RoomCutawayTexture {
     private static float originX;
     private static float originZ;
     private static float uniformCutoff = NO_CUT_VALUE;
+    private static float apertureCenterX;
+    private static float apertureCenterZ;
+    private static float apertureInnerCutoff = NO_CUT_VALUE;
+    private static float apertureRadius;
 
     private RoomCutawayTexture() {
     }
@@ -84,6 +88,18 @@ public final class RoomCutawayTexture {
         uniformCutoff = cutoff;
     }
 
+    public static void setAperture(double centerX, double centerZ, float innerCutoff, float radius) {
+        apertureCenterX = (float) centerX;
+        apertureCenterZ = (float) centerZ;
+        apertureInnerCutoff = innerCutoff;
+        apertureRadius = radius;
+    }
+
+    public static void clearAperture() {
+        apertureInnerCutoff = NO_CUT_VALUE;
+        apertureRadius = 0.0f;
+    }
+
     public static boolean isEnabled() {
         return enabled;
     }
@@ -104,5 +120,21 @@ public final class RoomCutawayTexture {
     /** Global horizontal cut plane; unlike the room texture, this applies at every X/Z coordinate. */
     public static float uniformCutoff() {
         return uniformCutoff;
+    }
+
+    public static float apertureCenterX() {
+        return apertureCenterX;
+    }
+
+    public static float apertureCenterZ() {
+        return apertureCenterZ;
+    }
+
+    public static float apertureInnerCutoff() {
+        return apertureInnerCutoff;
+    }
+
+    public static float apertureRadius() {
+        return apertureRadius;
     }
 }

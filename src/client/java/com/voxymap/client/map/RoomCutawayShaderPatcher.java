@@ -14,19 +14,29 @@ public final class RoomCutawayShaderPatcher {
     public static final int ORIGIN_X_UNIFORM_LOCATION = 31;
     public static final int ORIGIN_Z_UNIFORM_LOCATION = 32;
     public static final int GLOBAL_CUTOFF_UNIFORM_LOCATION = 33;
+    public static final int APERTURE_CENTER_X_UNIFORM_LOCATION = 34;
+    public static final int APERTURE_CENTER_Z_UNIFORM_LOCATION = 35;
+    public static final int APERTURE_INNER_CUTOFF_UNIFORM_LOCATION = 36;
+    public static final int APERTURE_RADIUS_UNIFORM_LOCATION = 37;
 
     private static final String VERTEX_DECLARATIONS = """
             layout(location = 12) out vec3 voxymapWorldPos;
             layout(location = 13) out flat float voxymapQuadMinY;
+            layout(location = 14) out flat vec2 voxymapQuadCenterXZ;
 
             """;
     private static final String FRAGMENT_DECLARATIONS = """
             layout(location = 12) in vec3 voxymapWorldPos;
             layout(location = 13) in flat float voxymapQuadMinY;
+            layout(location = 14) in flat vec2 voxymapQuadCenterXZ;
             layout(location = 30) uniform int voxymapCutawayEnabled;
             layout(location = 31) uniform float voxymapCutawayOriginX;
             layout(location = 32) uniform float voxymapCutawayOriginZ;
             layout(location = 33) uniform float voxymapGlobalCutawayY;
+            layout(location = 34) uniform float voxymapApertureCenterX;
+            layout(location = 35) uniform float voxymapApertureCenterZ;
+            layout(location = 36) uniform float voxymapApertureInnerY;
+            layout(location = 37) uniform float voxymapApertureRadius;
             layout(binding = %d) uniform sampler2D voxymapRoomHeightMap;
 
             """.formatted(RoomCutawayTexture.TEXTURE_UNIT);
@@ -35,6 +45,10 @@ public final class RoomCutawayShaderPatcher {
                 vec3 voxymapPoint = quad.basePoint + swizzelDataAxis(quad.axis, vec3(quad.quadSizeAddin * voxymapCornerMask, 0));
                 voxymapWorldPos = voxymapPoint + vec3(baseSectionPos << 5);
                 voxymapQuadMinY = quad.basePoint.y + float(baseSectionPos.y << 5);
+                vec3 voxymapQuadFarCorner = quad.basePoint
+                    + swizzelDataAxis(quad.axis, vec3(quad.quadSizeAddin * quad.lodScale, 0));
+                voxymapQuadCenterXZ = ((quad.basePoint + voxymapQuadFarCorner) * 0.5
+                    + vec3(baseSectionPos << 5)).xz;
             """;
     private static final String FRAGMENT_CLIP_ANCHOR =
             "if (DEPTH_SCALAR_COMPARE(gl_FragCoord.z, texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r)) {\n"
@@ -48,7 +62,16 @@ public final class RoomCutawayShaderPatcher {
                     // The global Nether threshold removes only complete quads belonging to the roof
                     // band. Per-fragment clipping here would expose fake anti-xray volume as a tiled
                     // cross-section. Local verified-air columns may still use a precise clip plane.
-                    if (voxymapGlobalCutawayY < %2$s && voxymapQuadMinY >= voxymapGlobalCutawayY) {
+                    float voxymapRoofCutY = voxymapGlobalCutawayY;
+                    if (voxymapApertureRadius > 0.0) {
+                        float voxymapDistance = distance(voxymapQuadCenterXZ,
+                            vec2(voxymapApertureCenterX, voxymapApertureCenterZ));
+                        float voxymapApertureBlend = smoothstep(
+                            voxymapApertureRadius * 0.55, voxymapApertureRadius, voxymapDistance);
+                        voxymapRoofCutY = mix(voxymapApertureInnerY,
+                            voxymapGlobalCutawayY, voxymapApertureBlend);
+                    }
+                    if (voxymapGlobalCutawayY < %2$s && voxymapQuadMinY >= voxymapRoofCutY) {
                         discard;
                         return;
                     }
