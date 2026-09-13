@@ -34,6 +34,11 @@
   "screen.voxymap.settings.cutaway": "Ods\u0142anianie pomieszcze\u0144",
   "screen.voxymap.settings.vanillasquad": "Gracze VanillaSquad",
   "screen.voxymap.settings.vanillasquadflags": "Flagi VanillaSquad",
+  "screen.voxymap.settings.vanillasquadmap": "Mapa VanillaSquad",
+  "screen.voxymap.settings.map.auto": "Auto",
+  "screen.voxymap.settings.map.build": "Budowlany",
+  "screen.voxymap.settings.map.farm": "Farmy",
+  "screen.voxymap.settings.map.art": "Artystyczny",
   "screen.voxymap.settings.ghastscanner": "Trasa skanowania ghasta",
   "screen.voxymap.settings.on": "W\u0142.",
   "screen.voxymap.settings.off": "Wy\u0142."

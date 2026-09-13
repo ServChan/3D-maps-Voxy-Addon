@@ -118,8 +118,9 @@ class ProjectContractTest {
 
         assertTrue(config.getAsJsonArray("client").asList().stream()
                 .anyMatch(element -> "VoxyNodeManagerMixin".equals(element.getAsString())));
-        assertTrue(mixin.contains("NODE_TYPE_MASK = 0xC0000000"));
-        assertTrue(mixin.contains("NODE_TYPE_REQUEST = 0x80000000"));
+        assertTrue(mixin.contains("target = \"Lme/cortex/voxy/common/Logger;error([Ljava/lang/Object;)V\""));
+        assertTrue(mixin.contains("ordinal = 0"),
+                "Cancel the already-confirmed duplicate branch instead of racing Voxy's mutable node map");
         assertTrue(mixin.contains("ci.cancel()"),
                 "The mixin should only skip Voxy's existing log-and-return duplicate path");
     }

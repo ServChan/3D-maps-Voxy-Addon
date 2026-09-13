@@ -34,6 +34,11 @@
   "screen.voxymap.settings.cutaway": "Reveal rooms/caves",
   "screen.voxymap.settings.vanillasquad": "VanillaSquad players",
   "screen.voxymap.settings.vanillasquadflags": "VanillaSquad flags",
+  "screen.voxymap.settings.vanillasquadmap": "VanillaSquad map",
+  "screen.voxymap.settings.map.auto": "Auto",
+  "screen.voxymap.settings.map.build": "Build",
+  "screen.voxymap.settings.map.farm": "Farm",
+  "screen.voxymap.settings.map.art": "Art",
   "screen.voxymap.settings.ghastscanner": "Ghast scan route",
   "screen.voxymap.settings.on": "On",
   "screen.voxymap.settings.off": "Off"

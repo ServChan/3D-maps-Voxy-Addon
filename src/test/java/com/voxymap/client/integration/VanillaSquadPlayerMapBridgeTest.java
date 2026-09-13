@@ -61,6 +61,24 @@ class VanillaSquadPlayerMapBridgeTest {
     }
 
     @Test
+    void selectsRealmFromAnotherLoadedPlayerWhenTheLocalPlayerIsHiddenFromSquaremap() {
+        String observerUuid = "770f80234155382b9bdee7e399cb92be";
+        Map<String, List<VanillaSquadPlayerMapBridge.RemotePlayer>> snapshots = Map.of(
+                "build", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+                        "RonnyLearn", "minecraft_overworld", 44, 64, 239, observerUuid)),
+                "farm", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+                        "Other", "minecraft_overworld", 44, 64, 239,
+                        "27d05abbd6494df6b1513eaee244fd43")));
+
+        String selected = VanillaSquadPlayerMapBridge.selectMapId(
+                snapshots, "minecraft:overworld", "d087dd7791514f7b96213593fd584a89",
+                "LTS_Server", 37, 184,
+                List.of(new VanillaSquadPlayerMapBridge.Observer(observerUuid, "RonnyLearn", 45, 240)));
+
+        assertEquals("build", selected);
+    }
+
+    @Test
     void skipsEntriesMissingRequiredFieldsInsteadOfThrowing() {
         String body = "{\"players\":[{\"world\":\"minecraft_overworld\",\"name\":\"noPosition\"}]}";
 

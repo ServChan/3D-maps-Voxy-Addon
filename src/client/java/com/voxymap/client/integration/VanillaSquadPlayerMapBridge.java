@@ -49,7 +49,8 @@ public final class VanillaSquadPlayerMapBridge {
     private static final Map<String, AtomicBoolean> FETCHING_BY_MAP = new ConcurrentHashMap<>();
     private static final Map<String, Long> FETCHED_GENERATION_BY_MAP = new ConcurrentHashMap<>();
     private static volatile SelectionContext selectionContext;
-    private static volatile String activeMapId;
+    private static volatile String activeMapId = "build";
+    private static volatile boolean autoResolved;
     private static WeakReference<Object> lastWorldIdentity = new WeakReference<>(null);
     private static volatile long worldGeneration;
 
@@ -57,7 +58,7 @@ public final class VanillaSquadPlayerMapBridge {
     }
 
     public static void tick(Object worldIdentity, String dimensionId, UUID playerUuid, String playerName,
-                            double playerX, double playerZ) {
+                            double playerX, double playerZ, List<Observer> observers, String voxyWorldId) {
         if (!VoxyMapSettings.vanillaSquadPlayersEnabled() && !VoxyMapSettings.vanillaSquadFlagsEnabled()) {
             return;
         }
@@ -66,15 +67,25 @@ public final class VanillaSquadPlayerMapBridge {
             // Do not keep an old ClientLevel alive after disconnecting or changing proxy worlds.
             lastWorldIdentity = new WeakReference<>(worldIdentity);
             worldGeneration++;
-            activeMapId = null;
+            activeMapId = fallbackMapId(voxyWorldId);
+            autoResolved = false;
             PLAYERS_BY_MAP.clear();
             LAST_FETCH_NANOS_BY_MAP.clear();
             FETCHED_GENERATION_BY_MAP.clear();
         }
         SelectionContext context = new SelectionContext(worldGeneration, dimensionId,
                 normalizeUuid(playerUuid == null ? null : playerUuid.toString()),
-                playerName == null ? "" : playerName.toLowerCase(Locale.ROOT), playerX, playerZ);
+                playerName == null ? "" : playerName.toLowerCase(Locale.ROOT), playerX, playerZ,
+                observers == null ? List.of() : List.copyOf(observers), voxyWorldId);
         selectionContext = context;
+        String configuredMapId = VoxyMapSettings.vanillaSquadMap(context == null ? null : context.voxyWorldId()).mapId();
+        if (configuredMapId != null) {
+            activeMapId = configuredMapId;
+            if (VoxyMapSettings.vanillaSquadPlayersEnabled()) {
+                fetchIfNeeded(configuredMapId, context.generation());
+            }
+            return;
+        }
         for (String mapId : MAP_IDS) {
             fetchIfNeeded(mapId, context.generation());
         }
@@ -84,7 +95,7 @@ public final class VanillaSquadPlayerMapBridge {
     private static void fetchIfNeeded(String mapId, long generation) {
         long now = System.nanoTime();
         Long lastFetch = LAST_FETCH_NANOS_BY_MAP.get(mapId);
-        long intervalSeconds = activeMapId == null ? 5L : DEFAULT_INTERVAL_SECONDS;
+        long intervalSeconds = autoResolved ? DEFAULT_INTERVAL_SECONDS : 5L;
         if (lastFetch != null && now - lastFetch < intervalSeconds * 1_000_000_000L) {
             return;
         }
@@ -123,17 +134,33 @@ public final class VanillaSquadPlayerMapBridge {
     }
 
     private static void selectActiveMap(SelectionContext context) {
+        String configuredMapId = context == null ? null
+                : VoxyMapSettings.vanillaSquadMap(context.voxyWorldId()).mapId();
+        if (configuredMapId != null) {
+            activeMapId = configuredMapId;
+            return;
+        }
         if (context == null || context.generation() != worldGeneration
                 || MAP_IDS.stream().anyMatch(mapId -> FETCHED_GENERATION_BY_MAP.getOrDefault(mapId, -1L)
                         != context.generation())) {
             return;
         }
-        activeMapId = selectMapId(PLAYERS_BY_MAP, context.dimensionId(), context.uuid(), context.name(),
-                context.playerX(), context.playerZ());
+        String selected = selectMapId(PLAYERS_BY_MAP, context.dimensionId(), context.uuid(), context.name(),
+                context.playerX(), context.playerZ(), context.observers());
+        if (selected != null) {
+            activeMapId = selected;
+            autoResolved = true;
+        }
     }
 
     static String selectMapId(Map<String, List<RemotePlayer>> playersByMap, String dimensionId,
                               String uuid, String name, double playerX, double playerZ) {
+        return selectMapId(playersByMap, dimensionId, uuid, name, playerX, playerZ, List.of());
+    }
+
+    static String selectMapId(Map<String, List<RemotePlayer>> playersByMap, String dimensionId,
+                              String uuid, String name, double playerX, double playerZ,
+                              List<Observer> observers) {
         String world = dimensionId == null ? "" : dimensionId.replace(':', '_');
         String normalizedName = name == null ? "" : name.toLowerCase(Locale.ROOT);
         String bestMap = null;
@@ -141,13 +168,12 @@ public final class VanillaSquadPlayerMapBridge {
         double secondDistanceSquared = Double.POSITIVE_INFINITY;
         for (String mapId : MAP_IDS) {
             for (RemotePlayer player : playersByMap.getOrDefault(mapId, List.of())) {
-                boolean identityMatches = uuid != null && uuid.equals(player.uuid())
-                        || !normalizedName.isEmpty() && normalizedName.equals(player.name().toLowerCase(Locale.ROOT));
-                if (!world.equals(player.world()) || !identityMatches) {
+                Observer matchingObserver = matchingObserver(player, uuid, normalizedName, playerX, playerZ, observers);
+                if (!world.equals(player.world()) || matchingObserver == null) {
                     continue;
                 }
-                double dx = player.x() - playerX;
-                double dz = player.z() - playerZ;
+                double dx = player.x() - matchingObserver.x();
+                double dz = player.z() - matchingObserver.z();
                 double distanceSquared = dx * dx + dz * dz;
                 if (distanceSquared > 512.0 * 512.0) {
                     continue;
@@ -169,6 +195,30 @@ public final class VanillaSquadPlayerMapBridge {
             return null;
         }
         return bestMap;
+    }
+
+    private static Observer matchingObserver(RemotePlayer remote, String localUuid, String localName,
+                                             double localX, double localZ, List<Observer> observers) {
+        if (identityMatches(remote, localUuid, localName)) {
+            return new Observer(localUuid, localName, localX, localZ);
+        }
+        for (Observer observer : observers) {
+            if (observer != null && identityMatches(remote, observer.uuid(), observer.name())) {
+                return observer;
+            }
+        }
+        return null;
+    }
+
+    private static boolean identityMatches(RemotePlayer remote, String uuid, String name) {
+        String normalizedName = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        return uuid != null && uuid.equals(remote.uuid())
+                || !normalizedName.isEmpty() && normalizedName.equals(remote.name().toLowerCase(Locale.ROOT));
+    }
+
+    private static String fallbackMapId(String voxyWorldId) {
+        String configured = VoxyMapSettings.vanillaSquadMap(voxyWorldId).mapId();
+        return configured == null ? "build" : configured;
     }
 
     public static String activeMapId() {
@@ -259,8 +309,11 @@ public final class VanillaSquadPlayerMapBridge {
     public record RemotePlayer(String name, String world, double x, double y, double z, String uuid) {
     }
 
+    public record Observer(String uuid, String name, double x, double z) {
+    }
+
     private record SelectionContext(long generation, String dimensionId, String uuid, String name,
-                                    double playerX, double playerZ) {
+                                    double playerX, double playerZ, List<Observer> observers, String voxyWorldId) {
     }
 
     private static String safeText(String value, int maxLength) {

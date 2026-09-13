@@ -13,6 +13,8 @@ import com.voxymap.client.map.VoxyBridge;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapGuiRenderer;
 import com.voxymap.client.map.VoxyMapSettings;
+import me.cortex.voxy.commonImpl.WorldIdentifier;
+import me.cortex.voxy.commonImpl.WorldIdentifier;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
@@ -99,6 +101,7 @@ public class MapScreen extends Screen {
     private int cutawayRowY = -1;
     private int vanillaSquadRowY = -1;
     private int vanillaSquadFlagsRowY = -1;
+    private int vanillaSquadMapRowY = -1;
     private int ghastScannerRowY = -1;
     private static final int SETTINGS_ROW_HEIGHT = 24;
     private static final int SPEED_BUTTON_SIZE = 18;
@@ -292,8 +295,14 @@ public class MapScreen extends Screen {
         if (minecraft != null && minecraft.level != null) {
             String dimensionId = minecraft.level.dimension().identifier().toString();
             if (minecraft.player != null) {
+                List<VanillaSquadPlayerMapBridge.Observer> observers = minecraft.level.players().stream()
+                        .map(player -> new VanillaSquadPlayerMapBridge.Observer(
+                                VanillaSquadPlayerMapBridge.normalizeUuid(player.getUUID().toString()),
+                                player.getName().getString(), player.getX(), player.getZ()))
+                        .toList();
                 VanillaSquadPlayerMapBridge.tick(minecraft.level, dimensionId, minecraft.player.getUUID(),
-                        minecraft.player.getName().getString(), minecraft.player.getX(), minecraft.player.getZ());
+                        minecraft.player.getName().getString(), minecraft.player.getX(), minecraft.player.getZ(), observers,
+                        currentVoxyWorldId());
             }
             VanillaSquadFlagMapBridge.tick(VanillaSquadPlayerMapBridge.activeMapId(), dimensionId);
         }
@@ -395,6 +404,8 @@ public class MapScreen extends Screen {
             VoxyMapSettings.toggleVanillaSquadPlayers();
         } else if (isInsideSettingsRow(mouseX, mouseY, vanillaSquadFlagsRowY)) {
             VoxyMapSettings.toggleVanillaSquadFlags();
+        } else if (isInsideSettingsRow(mouseX, mouseY, vanillaSquadMapRowY)) {
+            VoxyMapSettings.cycleVanillaSquadMap(currentVoxyWorldId());
         } else if (isInsideSettingsRow(mouseX, mouseY, ghastScannerRowY)) {
             VoxyMapSettings.toggleGhastScannerRoute();
         }
@@ -1034,7 +1045,7 @@ public class MapScreen extends Screen {
     private void drawSettingsPanel(GuiGraphicsExtractor g, int footerTop) {
         boolean showGhastScannerRow = HappyGhastScannerBridge.isAvailable();
         settingsPanelW = Math.min(360, width - HUD_MARGIN * 2);
-        settingsPanelH = showGhastScannerRow ? 190 : 166;
+        settingsPanelH = showGhastScannerRow ? 214 : 190;
         settingsPanelX = width - settingsPanelW - HUD_MARGIN;
         settingsPanelY = Math.max(HUD_MARGIN, footerTop - settingsPanelH - HUD_GAP);
         drawGlassPanel(g, settingsPanelX, settingsPanelY, settingsPanelW, settingsPanelH, 0xDD030914, 0xFF3BA4FF);
@@ -1046,18 +1057,31 @@ public class MapScreen extends Screen {
         cutawayRowY = y + 68;
         vanillaSquadRowY = y + 92;
         vanillaSquadFlagsRowY = y + 116;
+        vanillaSquadMapRowY = y + 140;
         g.text(minecraft.font, Component.translatable("screen.voxymap.settings.title"), x, y, 0xFFFFFFFF);
         drawSettingValue(g, x, pauseRowY, "screen.voxymap.settings.pause", onOff(VoxyMapSettings.pauseSingleplayer()), 0);
         drawSettingValue(g, x, speedRowY, "screen.voxymap.settings.speed", String.format("%.2fx", VoxyMapSettings.cameraSpeedMultiplier()), 1);
         drawSettingValue(g, x, cutawayRowY, "screen.voxymap.settings.cutaway", onOff(VoxyMapSettings.roomCutawayEnabled()), 2);
         drawSettingValue(g, x, vanillaSquadRowY, "screen.voxymap.settings.vanillasquad", onOff(VoxyMapSettings.vanillaSquadPlayersEnabled()), 3);
         drawSettingValue(g, x, vanillaSquadFlagsRowY, "screen.voxymap.settings.vanillasquadflags", onOff(VoxyMapSettings.vanillaSquadFlagsEnabled()), 4);
+        VoxyMapSettings.VanillaSquadMap map = VoxyMapSettings.vanillaSquadMap(currentVoxyWorldId());
+        String mapValue = Component.translatable(map.translationKey()).getString();
+        if (map == VoxyMapSettings.VanillaSquadMap.AUTO) {
+            mapValue += " → " + VanillaSquadPlayerMapBridge.activeMapId();
+        }
+        drawSettingValue(g, x, vanillaSquadMapRowY, "screen.voxymap.settings.vanillasquadmap", mapValue, 6);
         if (showGhastScannerRow) {
-            ghastScannerRowY = y + 140;
+            ghastScannerRowY = y + 164;
             drawSettingValue(g, x, ghastScannerRowY, "screen.voxymap.settings.ghastscanner", onOff(VoxyMapSettings.ghastScannerRouteEnabled()), 5);
         } else {
             ghastScannerRowY = -1;
         }
+    }
+
+    private String currentVoxyWorldId() {
+        if (minecraft == null || minecraft.level == null) return null;
+        WorldIdentifier identifier = WorldIdentifier.of(minecraft.level);
+        return identifier == null ? null : identifier.getWorldId();
     }
 
     private void drawSettingValue(GuiGraphicsExtractor g, int x, int y, String labelKey, String value, int row) {

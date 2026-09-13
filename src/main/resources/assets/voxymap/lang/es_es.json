@@ -34,6 +34,11 @@
   "screen.voxymap.settings.cutaway": "Revelar salas/cuevas",
   "screen.voxymap.settings.vanillasquad": "Jugadores de VanillaSquad",
   "screen.voxymap.settings.vanillasquadflags": "Banderas de VanillaSquad",
+  "screen.voxymap.settings.vanillasquadmap": "Mapa de VanillaSquad",
+  "screen.voxymap.settings.map.auto": "Auto",
+  "screen.voxymap.settings.map.build": "Construcción",
+  "screen.voxymap.settings.map.farm": "Granjas",
+  "screen.voxymap.settings.map.art": "Arte",
   "screen.voxymap.settings.ghastscanner": "Ruta de escaneo del ghast",
   "screen.voxymap.settings.on": "Activado",
   "screen.voxymap.settings.off": "Desactivado"

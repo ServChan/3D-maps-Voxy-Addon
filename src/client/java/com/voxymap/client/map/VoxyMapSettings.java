@@ -10,9 +10,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 public final class VoxyMapSettings {
+    private static final String VANILLA_SQUAD_WORLD_PREFIX = "vanillaSquadWorld.";
+    private static final Pattern VOXY_WORLD_ID = Pattern.compile("[0-9a-f]{32}");
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("voxymap.properties");
     private static final Path BACKUP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".bak");
     private static final Path TEMP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
@@ -23,6 +28,7 @@ public final class VoxyMapSettings {
     private static boolean roomCutawayEnabled = true;
     private static boolean vanillaSquadPlayersEnabled = false;
     private static boolean vanillaSquadFlagsEnabled = false;
+    private static final Map<String, VanillaSquadMap> vanillaSquadWorldMaps = new ConcurrentHashMap<>();
     private static boolean ghastScannerRouteEnabled = true;
 
     private VoxyMapSettings() {
@@ -46,6 +52,15 @@ public final class VoxyMapSettings {
         roomCutawayEnabled = readBoolean(properties.getProperty("roomCutawayEnabled"), roomCutawayEnabled);
         vanillaSquadPlayersEnabled = readBoolean(properties.getProperty("vanillaSquadPlayersEnabled"), vanillaSquadPlayersEnabled);
         vanillaSquadFlagsEnabled = readBoolean(properties.getProperty("vanillaSquadFlagsEnabled"), vanillaSquadFlagsEnabled);
+        vanillaSquadWorldMaps.clear();
+        for (String key : properties.stringPropertyNames()) {
+            if (!key.startsWith(VANILLA_SQUAD_WORLD_PREFIX)) continue;
+            String worldId = key.substring(VANILLA_SQUAD_WORLD_PREFIX.length());
+            VanillaSquadMap map = VanillaSquadMap.parse(properties.getProperty(key));
+            if (validWorldId(worldId) && map != VanillaSquadMap.AUTO) {
+                vanillaSquadWorldMaps.put(worldId, map);
+            }
+        }
         ghastScannerRouteEnabled = readBoolean(properties.getProperty("ghastScannerRouteEnabled"), ghastScannerRouteEnabled);
     }
 
@@ -56,6 +71,8 @@ public final class VoxyMapSettings {
         properties.setProperty("roomCutawayEnabled", Boolean.toString(roomCutawayEnabled));
         properties.setProperty("vanillaSquadPlayersEnabled", Boolean.toString(vanillaSquadPlayersEnabled));
         properties.setProperty("vanillaSquadFlagsEnabled", Boolean.toString(vanillaSquadFlagsEnabled));
+        vanillaSquadWorldMaps.forEach((worldId, map) -> properties.setProperty(
+                VANILLA_SQUAD_WORLD_PREFIX + worldId, map.name().toLowerCase(Locale.ROOT)));
         properties.setProperty("ghastScannerRouteEnabled", Boolean.toString(ghastScannerRouteEnabled));
 
         try {
@@ -163,6 +180,65 @@ public final class VoxyMapSettings {
 
     private static Properties readProperties(Path path) {
         return readProperties(path, true);
+    }
+
+    public static VanillaSquadMap vanillaSquadMap(String worldId) {
+        load();
+        return validWorldId(worldId)
+                ? vanillaSquadWorldMaps.getOrDefault(worldId, VanillaSquadMap.AUTO)
+                : VanillaSquadMap.AUTO;
+    }
+
+    public static void cycleVanillaSquadMap(String worldId) {
+        load();
+        if (!validWorldId(worldId)) return;
+        VanillaSquadMap[] values = VanillaSquadMap.values();
+        VanillaSquadMap current = vanillaSquadWorldMaps.getOrDefault(worldId, VanillaSquadMap.AUTO);
+        VanillaSquadMap next = values[(current.ordinal() + 1) % values.length];
+        if (next == VanillaSquadMap.AUTO) {
+            vanillaSquadWorldMaps.remove(worldId);
+        } else {
+            vanillaSquadWorldMaps.put(worldId, next);
+        }
+        save();
+    }
+
+    private static boolean validWorldId(String worldId) {
+        return worldId != null && VOXY_WORLD_ID.matcher(worldId).matches();
+    }
+
+    public enum VanillaSquadMap {
+        AUTO(null, "screen.voxymap.settings.map.auto"),
+        BUILD("build", "screen.voxymap.settings.map.build"),
+        FARM("farm", "screen.voxymap.settings.map.farm"),
+        ART("art", "screen.voxymap.settings.map.art");
+
+        private final String mapId;
+        private final String translationKey;
+
+        VanillaSquadMap(String mapId, String translationKey) {
+            this.mapId = mapId;
+            this.translationKey = translationKey;
+        }
+
+        public String mapId() {
+            return mapId;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        private static VanillaSquadMap parse(String value) {
+            if (value != null) {
+                try {
+                    return valueOf(value.trim().toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException ignored) {
+                    // Preserve the safe automatic default for old or manually edited configs.
+                }
+            }
+            return AUTO;
+        }
     }
 
     private static Properties readProperties(Path path, boolean logFailure) {

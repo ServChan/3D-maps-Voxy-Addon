@@ -34,6 +34,11 @@
   "screen.voxymap.settings.cutaway": "\u0412\u0441\u043a\u0440\u044b\u0442\u0438\u0435 \u043a\u043e\u043c\u043d\u0430\u0442",
   "screen.voxymap.settings.vanillasquad": "\u0418\u0433\u0440\u043e\u043a\u0438 VanillaSquad",
   "screen.voxymap.settings.vanillasquadflags": "\u0424\u043b\u0430\u0433\u0438 VanillaSquad",
+  "screen.voxymap.settings.vanillasquadmap": "\u041a\u0430\u0440\u0442\u0430 VanillaSquad",
+  "screen.voxymap.settings.map.auto": "\u0410\u0432\u0442\u043e",
+  "screen.voxymap.settings.map.build": "\u0421\u0442\u0440\u043e\u0439",
+  "screen.voxymap.settings.map.farm": "\u0424\u0435\u0440\u043c\u044b",
+  "screen.voxymap.settings.map.art": "\u0410\u0440\u0442",
   "screen.voxymap.settings.ghastscanner": "\u041c\u0430\u0440\u0448\u0440\u0443\u0442 \u0441\u043a\u0430\u043d\u0430 \u0433\u0430\u0441\u0442\u0430",
   "screen.voxymap.settings.on": "\u0412\u043a\u043b.",
   "screen.voxymap.settings.off": "\u0412\u044b\u043a\u043b."
