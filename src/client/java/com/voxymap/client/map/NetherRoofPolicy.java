@@ -6,7 +6,7 @@ public final class NetherRoofPolicy {
     static final float MIN_APERTURE_Y_FROM_FLOOR = 48.0f;
     static final float CLOSE_ZOOM_BLOCKS_PER_PIXEL = 0.55f;
     static final float WIDE_ZOOM_BLOCKS_PER_PIXEL = 1.0f;
-    static final float CLOSE_ZOOM_HEADROOM = 30.0f;
+    static final float CLOSE_ZOOM_HEADROOM = 16.0f;
     static final float WIDE_ZOOM_HEADROOM = 46.0f;
 
     private NetherRoofPolicy() {
@@ -42,7 +42,7 @@ public final class NetherRoofPolicy {
                 + (WIDE_ZOOM_HEADROOM - CLOSE_ZOOM_HEADROOM) * smoothStep(zoomBlend);
         float apertureFloor = Math.min(roofCutoff, minY + MIN_APERTURE_Y_FROM_FLOOR);
         float innerCutoff = (float) clamp(safeViewY + headroom, apertureFloor, roofCutoff);
-        float radius = (float) clamp(safeViewportMinPixels * safeBlocksPerPixel * 0.48, 96.0, 768.0);
+        float radius = (float) clamp(safeViewportMinPixels * safeBlocksPerPixel * 0.62, 96.0, 768.0);
         return new Aperture(innerCutoff, radius);
     }
 

@@ -26,8 +26,8 @@ class NetherRoofPolicyTest {
     void closeViewOpensDeeperAroundTheInspectedHeight() {
         NetherRoofPolicy.Aperture aperture = NetherRoofPolicy.aperture(0, 128, 50.0, 0.55, 1095);
 
-        assertEquals(80.0f, aperture.innerCutoff());
-        assertEquals(289.08f, aperture.radius(), 0.01f);
+        assertEquals(66.0f, aperture.innerCutoff());
+        assertEquals(373.395f, aperture.radius(), 0.01f);
     }
 
     @Test
@@ -35,7 +35,7 @@ class NetherRoofPolicyTest {
         NetherRoofPolicy.Aperture aperture = NetherRoofPolicy.aperture(0, 128, 50.0, 1.0, 1095);
 
         assertEquals(96.0f, aperture.innerCutoff());
-        assertEquals(525.6f, aperture.radius(), 0.01f);
+        assertEquals(678.9f, aperture.radius(), 0.01f);
     }
 
     @Test
