@@ -56,8 +56,10 @@ public abstract class MDICSectionRendererMixin {
     }
 
     private static int voxymap$setCutawayUniforms(Shader shader) {
-        boolean enabled = RoomCutawayShaderPatcher.isSupported()
-                && RoomCutawayController.isActive() && RoomCutawayTexture.isEnabled();
+        if (!RoomCutawayShaderPatcher.isSupported()) {
+            return -1;
+        }
+        boolean enabled = RoomCutawayController.isActive() && RoomCutawayTexture.isEnabled();
         GL41C.glProgramUniform1i(shader.id(), RoomCutawayShaderPatcher.ENABLED_UNIFORM_LOCATION, enabled ? 1 : 0);
         if (enabled) {
             GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.ORIGIN_X_UNIFORM_LOCATION, RoomCutawayTexture.originX());
@@ -79,7 +81,10 @@ public abstract class MDICSectionRendererMixin {
      * map overlays it has no user-facing toggle: it applies whenever any ore has been discovered,
      * regardless of whether the room-cutaway effect is active. */
     private static int voxymap$setOreMaskUniforms(Shader shader) {
-        boolean enabled = RoomCutawayShaderPatcher.isSupported() && OreMaskTexture.hasAnyMarked();
+        if (!RoomCutawayShaderPatcher.isSupported()) {
+            return -1;
+        }
+        boolean enabled = OreMaskTexture.hasAnyMarked();
         GL41C.glProgramUniform1i(shader.id(), RoomCutawayShaderPatcher.ORE_MASK_ENABLED_UNIFORM_LOCATION, enabled ? 1 : 0);
         if (enabled) {
             int previousTexture = GL30C.glGetIntegeri(GL11C.GL_TEXTURE_BINDING_2D, OreMaskTexture.TEXTURE_UNIT);
