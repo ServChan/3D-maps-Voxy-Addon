@@ -31,6 +31,19 @@ loom {
     }
 }
 
+// Standalone waypoint sync server: a plain dependency-free Java program (no Minecraft/Fabric API),
+// shipped as its own jar so it can run on a machine that has no Minecraft install at all. It only
+// shares the wire-format code in src/main/java/com/voxymap/shared - never anything client-side.
+sourceSets {
+    syncServer {
+        java {
+            srcDir "src/syncServer/java"
+        }
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
@@ -40,9 +53,29 @@ dependencies {
     compileOnly("maven.modrinth:voxy:${project.voxy_version}") { transitive = false }
     compileOnly("maven.modrinth:iris:${project.iris_version}") { transitive = false }
     testImplementation sourceSets.client.output
+    testImplementation sourceSets.syncServer.output
     testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
     testImplementation "com.google.code.gson:gson:2.11.0"
+}
+
+tasks.register("syncServerJar", Jar) {
+    group = "build"
+    description = "Builds the standalone voxymap-sync-server.jar (waypoint sync server, no Minecraft required)."
+    archiveBaseName = "voxymap-sync-server"
+    archiveVersion = modVersion
+    from(sourceSets.syncServer.output)
+    from(sourceSets.main.output)
+    manifest {
+        attributes "Main-Class": "com.voxymap.syncserver.WaypointSyncServer"
+    }
+}
+
+tasks.register("runSyncServer", JavaExec) {
+    group = "application"
+    description = "Runs the waypoint sync server locally. Pass args with --args=\"--port 8642 --password secret\"."
+    mainClass = "com.voxymap.syncserver.WaypointSyncServer"
+    classpath = sourceSets.syncServer.runtimeClasspath
 }
 
 tasks.withType(ProcessResources).configureEach {
