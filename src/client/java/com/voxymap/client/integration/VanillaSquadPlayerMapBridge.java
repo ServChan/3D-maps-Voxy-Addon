@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 public final class VanillaSquadPlayerMapBridge {
     private static final String PLAYERS_URL_TEMPLATE = "https://vanillasquad.com/map/proxy/%s/tiles/players.json";
     private static final List<String> MAP_IDS = List.of("build", "farm", "art");
-    private static final long DEFAULT_INTERVAL_SECONDS = 60L;
+    private static final long DEFAULT_INTERVAL_SECONDS = 15L;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
     private static final int MAX_RESPONSE_CHARS = 2_000_000;
     private static final int MAX_PLAYERS = 2_048;
@@ -53,6 +53,13 @@ public final class VanillaSquadPlayerMapBridge {
     private static volatile boolean autoResolved;
     private static WeakReference<Object> lastWorldIdentity = new WeakReference<>(null);
     private static volatile long worldGeneration;
+    // selectActiveMap is already re-run from fetchIfNeeded's async completion callback whenever fresh
+    // remote data actually arrives - the per-tick call in tick() below only exists to catch up with the
+    // LOCAL player moving between overlapping map regions between fetches, so once a map has been
+    // resolved it doesn't need to redo that full players x maps x observers search at full 20Hz tick
+    // rate. See tick().
+    private static final long LOCAL_RESOLVE_INTERVAL_NANOS = 1_000_000_000L;
+    private static volatile long lastLocalResolveNanos;
 
     private VanillaSquadPlayerMapBridge() {
     }
@@ -89,7 +96,13 @@ public final class VanillaSquadPlayerMapBridge {
         for (String mapId : MAP_IDS) {
             fetchIfNeeded(mapId, context.generation());
         }
-        selectActiveMap(context);
+        // Resolve promptly (every tick) until the first successful auto-detection, then throttle -
+        // see LOCAL_RESOLVE_INTERVAL_NANOS's comment.
+        long now = System.nanoTime();
+        if (!autoResolved || now - lastLocalResolveNanos >= LOCAL_RESOLVE_INTERVAL_NANOS) {
+            lastLocalResolveNanos = now;
+            selectActiveMap(context);
+        }
     }
 
     private static void fetchIfNeeded(String mapId, long generation) {

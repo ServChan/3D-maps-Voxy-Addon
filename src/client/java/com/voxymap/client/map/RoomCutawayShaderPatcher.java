@@ -18,6 +18,7 @@ public final class RoomCutawayShaderPatcher {
     public static final int APERTURE_CENTER_Z_UNIFORM_LOCATION = 35;
     public static final int APERTURE_INNER_CUTOFF_UNIFORM_LOCATION = 36;
     public static final int APERTURE_RADIUS_UNIFORM_LOCATION = 37;
+    public static final int ORE_MASK_ENABLED_UNIFORM_LOCATION = 38;
 
     private static final String VERTEX_DECLARATIONS = """
             layout(location = 12) out vec3 voxymapWorldPos;
@@ -37,9 +38,11 @@ public final class RoomCutawayShaderPatcher {
             layout(location = 35) uniform float voxymapApertureCenterZ;
             layout(location = 36) uniform float voxymapApertureInnerY;
             layout(location = 37) uniform float voxymapApertureRadius;
+            layout(location = 38) uniform int voxymapOreMaskEnabled;
             layout(binding = %d) uniform sampler2D voxymapRoomHeightMap;
+            layout(binding = %d) uniform sampler2D voxymapOreMask;
 
-            """.formatted(RoomCutawayTexture.TEXTURE_UNIT);
+            """.formatted(RoomCutawayTexture.TEXTURE_UNIT, OreMaskTexture.TEXTURE_UNIT);
     private static final String VERTEX_ASSIGNMENT = """
                 vec2 voxymapCornerMask = vec2((cornerId >> 1) & 1u, cornerId & 1u) * quad.lodScale;
                 vec3 voxymapPoint = quad.basePoint + swizzelDataAxis(quad.axis, vec3(quad.quadSizeAddin * voxymapCornerMask, 0));
@@ -84,6 +87,18 @@ public final class RoomCutawayShaderPatcher {
                     if (voxymapWorldPos.y > voxymapCutY) {
                         discard;
                         return;
+                    }
+                }
+
+                if (voxymapOreMaskEnabled != 0) {
+                    // Independent of voxymapCutawayEnabled above: an ore can be exposed by the room
+                    // cutaway, by the Nether roof trim, or simply by Voxy meshing the boundary of its
+                    // cached data as an ordinary opaque wall (see OreMaskController) - there is no
+                    // signal here to tell those apart, so this masks every rendered ore uniformly.
+                    uint voxymapModelId = getModelId();
+                    ivec2 voxymapOreTexel = ivec2(voxymapModelId & 0xFFu, (voxymapModelId >> 8) & 0xFFu);
+                    if (texelFetch(voxymapOreMask, voxymapOreTexel, 0).r > 0.5) {
+                        colour = vec4(0.55, 0.55, 0.55, colour.a);
                     }
                 }""".formatted(RoomCutawayComputer.GRID_SIZE,
                     Float.toString(RoomCutawayTexture.NO_CUT_VALUE));
