@@ -490,6 +490,9 @@ public class MapScreen extends Screen {
         } else if (isInsideSettingsRow(mouseX, mouseY, mapReceiveRowY)) {
             if (MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.AWAITING_CONFIRMATION) {
                 MapShareClient.confirmReceive(minecraft);
+            } else if (MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.RECEIVING
+                    || MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.CONNECTING) {
+                MapShareClient.stopReceiving();
             } else {
                 String worldId = currentVoxyWorldId();
                 String address = worldId != null ? WaypointSyncSettings.address(worldId) : null;
@@ -2053,9 +2056,13 @@ public class MapScreen extends Screen {
             return true;
         }
         if (event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT && isInsideSettingsPanel(event.x(), event.y())) {
-            if (isInsideSettingsRow(event.x(), event.y(), mapReceiveRowY)
-                    && MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.AWAITING_CONFIRMATION) {
-                MapShareClient.declineReceive();
+            if (isInsideSettingsRow(event.x(), event.y(), mapReceiveRowY)) {
+                if (MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.AWAITING_CONFIRMATION) {
+                    MapShareClient.declineReceive();
+                } else if (MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.RECEIVING
+                        || MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.CONNECTING) {
+                    MapShareClient.stopReceiving();
+                }
             }
             return true;
         }

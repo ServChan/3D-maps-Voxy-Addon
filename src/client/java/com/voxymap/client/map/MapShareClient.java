@@ -26,6 +26,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -138,6 +139,8 @@ public final class MapShareClient {
     // not part of the same call chain) know where to send the receiver's decision.
     private static volatile String receivingBaseUrl = null;
     private static volatile String receivingCode = null;
+    private static Future<?> activeShareTask = null;
+    private static Future<?> activeReceiveTask = null;
 
     private MapShareClient() {
     }
@@ -211,7 +214,7 @@ public final class MapShareClient {
         shareSectionsSentThisAttempt = 0;
         shareError = null;
         String baseUrl = normalize(serverAddress);
-        WORKERS.submit(() -> shareLoop(worldId, bounds, baseUrl, code));
+        activeShareTask = WORKERS.submit(() -> shareLoop(worldId, bounds, baseUrl, code));
         return code;
     }
 
@@ -221,6 +224,10 @@ public final class MapShareClient {
         shareCode = null;
         sharingWorldId = null;
         sharingBounds = null;
+        if (activeShareTask != null) {
+            activeShareTask.cancel(true);
+            activeShareTask = null;
+        }
     }
 
     /** Call every client tick. Stops an active share/receive the moment it no longer belongs to the
@@ -229,13 +236,16 @@ public final class MapShareClient {
      * quitting to title, or joining a different world does that on its own otherwise, since the share
      * loop is a plain background thread with no lifecycle tie to any particular world or connection. */
     public static void stopIfWorldChanged(Minecraft minecraft) {
-        boolean receiveSessionActive = receiveStatus == ReceiveStatus.RECEIVING || receiveStatus == ReceiveStatus.AWAITING_CONFIRMATION;
+        boolean receiveSessionActive = receiveStatus == ReceiveStatus.RECEIVING
+                || receiveStatus == ReceiveStatus.AWAITING_CONFIRMATION
+                || receiveStatus == ReceiveStatus.CONNECTING;
         if (!sharingActive && !receiveSessionActive) return;
         WorldIdentifier currentWorldId = VoxySectionBridge.currentWorldIdentifier(minecraft);
         if (sharingActive && !java.util.Objects.equals(sharingWorldId, currentWorldId)) {
             stopSharing();
         }
         if (receiveSessionActive && !java.util.Objects.equals(receivingWorldId, currentWorldId)) {
+            stopReceiving();
             receiveStatus = ReceiveStatus.ERROR;
             receiveError = "World changed during receive";
         }
@@ -246,13 +256,24 @@ public final class MapShareClient {
             shareStatus = ShareStatus.WAITING;
             try {
                 sendOnce(worldId, bounds, baseUrl, code);
-            } catch (IOException | InterruptedException exception) {
-                if (exception instanceof InterruptedException) {
-                    Thread.currentThread().interrupt();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (IOException exception) {
+                if (!sharingActive) {
+                    break;
                 }
                 shareError = exception.toString();
                 shareStatus = ShareStatus.ERROR;
                 VoxyMapClient.LOGGER.warn("[VoxyMap] Map share attempt failed for code {}: {}", code, exception.toString());
+                sleepQuietly(3000);
+            } catch (RuntimeException exception) {
+                if (!sharingActive) {
+                    break;
+                }
+                shareError = exception.toString();
+                shareStatus = ShareStatus.ERROR;
+                VoxyMapClient.LOGGER.warn("[VoxyMap] Map share attempt failed with unexpected error for code {}: {}", code, exception.toString());
                 sleepQuietly(3000);
             }
         }
@@ -379,7 +400,7 @@ public final class MapShareClient {
         int[] sent = {0};
         IOException[] failure = new IOException[1];
         VoxySectionBridge.forEachExportedSectionKey(worldId, bounds, sectionKey -> {
-            if (failure[0] != null) {
+            if (failure[0] != null || !sharingActive) {
                 return;
             }
             try {
@@ -463,7 +484,18 @@ public final class MapShareClient {
         String baseUrl = normalize(serverAddress);
         receivingBaseUrl = baseUrl;
         receivingCode = code;
-        WORKERS.submit(() -> receiveInfoOnce(baseUrl, code));
+        activeReceiveTask = WORKERS.submit(() -> receiveInfoOnce(baseUrl, code));
+    }
+
+    public static void stopReceiving() {
+        if (activeReceiveTask != null) {
+            activeReceiveTask.cancel(true);
+            activeReceiveTask = null;
+        }
+        receiveStatus = ReceiveStatus.IDLE;
+        receivingWorldId = null;
+        receivingBaseUrl = null;
+        receivingCode = null;
     }
 
     private static void receiveInfoOnce(String baseUrl, String code) {
@@ -479,10 +511,10 @@ public final class MapShareClient {
                     .map(value -> { try { return Long.parseLong(value); } catch (NumberFormatException e) { return 0L; } })
                     .orElse(0L);
             receiveStatus = ReceiveStatus.AWAITING_CONFIRMATION;
-        } catch (IOException | InterruptedException exception) {
-            if (exception instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            receiveStatus = ReceiveStatus.IDLE;
+        } catch (Exception exception) {
             receiveError = exception.toString();
             receiveStatus = ReceiveStatus.ERROR;
             VoxyMapClient.LOGGER.warn("[VoxyMap] Map receive info for code {} failed: {}", code, exception.toString());
@@ -496,7 +528,7 @@ public final class MapShareClient {
         WorldIdentifier worldId = receivingWorldId;
         String baseUrl = receivingBaseUrl;
         String code = receivingCode;
-        WORKERS.submit(() -> {
+        activeReceiveTask = WORKERS.submit(() -> {
             try {
                 HttpRequest confirmRequest = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code + "/confirm"))
                         .POST(HttpRequest.BodyPublishers.noBody()).build();
@@ -507,10 +539,10 @@ public final class MapShareClient {
                     return;
                 }
                 receiveDataOnce(minecraft, worldId, baseUrl, code);
-            } catch (IOException | InterruptedException exception) {
-                if (exception instanceof InterruptedException) {
-                    Thread.currentThread().interrupt();
-                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                receiveStatus = ReceiveStatus.IDLE;
+            } catch (Exception exception) {
                 receiveError = exception.toString();
                 receiveStatus = ReceiveStatus.ERROR;
                 VoxyMapClient.LOGGER.warn("[VoxyMap] Map receive confirm for code {} failed: {}", code, exception.toString());
@@ -524,7 +556,7 @@ public final class MapShareClient {
         if (receiveStatus != ReceiveStatus.AWAITING_CONFIRMATION) return;
         String baseUrl = receivingBaseUrl;
         String code = receivingCode;
-        receiveStatus = ReceiveStatus.IDLE;
+        stopReceiving();
         WORKERS.submit(() -> {
             try {
                 HttpRequest declineRequest = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code + "/decline"))
@@ -559,10 +591,10 @@ public final class MapShareClient {
             }
             VoxyMapClient.LOGGER.info("[VoxyMap] Map receive {}: {}, {} imported, {} already had",
                     code, receiveStatus == ReceiveStatus.DONE ? "done" : "stopped", receiveImportedCount, receiveSkippedCount);
-        } catch (IOException | InterruptedException exception) {
-            if (exception instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            receiveStatus = ReceiveStatus.IDLE;
+        } catch (Exception exception) {
             receiveError = exception.toString();
             receiveStatus = ReceiveStatus.ERROR;
             VoxyMapClient.LOGGER.warn("[VoxyMap] Map receive for code {} failed: {}", code, exception.toString());
