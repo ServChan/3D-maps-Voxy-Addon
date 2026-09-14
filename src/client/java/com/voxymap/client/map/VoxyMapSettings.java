@@ -30,6 +30,13 @@ public final class VoxyMapSettings {
     private static boolean vanillaSquadFlagsEnabled = false;
     private static final Map<String, VanillaSquadMap> vanillaSquadWorldMaps = new ConcurrentHashMap<>();
     private static boolean ghastScannerRouteEnabled = true;
+    private static boolean waypointsEnabled = true;
+    private static boolean minimapEnabled = true;
+    private static TimeOfDay timeOfDayMode = TimeOfDay.AUTO;
+    private static boolean mobsEnabled = true;
+    private static boolean minimapRotates = false;
+    private static boolean chunkGridEnabled = false;
+    private static boolean deathPointsEnabled = true;
 
     private VoxyMapSettings() {
     }
@@ -62,6 +69,13 @@ public final class VoxyMapSettings {
             }
         }
         ghastScannerRouteEnabled = readBoolean(properties.getProperty("ghastScannerRouteEnabled"), ghastScannerRouteEnabled);
+        waypointsEnabled = readBoolean(properties.getProperty("waypointsEnabled"), waypointsEnabled);
+        minimapEnabled = readBoolean(properties.getProperty("minimapEnabled"), minimapEnabled);
+        timeOfDayMode = TimeOfDay.parse(properties.getProperty("timeOfDayMode"));
+        mobsEnabled = readBoolean(properties.getProperty("mobsEnabled"), mobsEnabled);
+        minimapRotates = readBoolean(properties.getProperty("minimapRotates"), minimapRotates);
+        chunkGridEnabled = readBoolean(properties.getProperty("chunkGridEnabled"), chunkGridEnabled);
+        deathPointsEnabled = readBoolean(properties.getProperty("deathPointsEnabled"), deathPointsEnabled);
     }
 
     public static void save() {
@@ -74,6 +88,13 @@ public final class VoxyMapSettings {
         vanillaSquadWorldMaps.forEach((worldId, map) -> properties.setProperty(
                 VANILLA_SQUAD_WORLD_PREFIX + worldId, map.name().toLowerCase(Locale.ROOT)));
         properties.setProperty("ghastScannerRouteEnabled", Boolean.toString(ghastScannerRouteEnabled));
+        properties.setProperty("waypointsEnabled", Boolean.toString(waypointsEnabled));
+        properties.setProperty("minimapEnabled", Boolean.toString(minimapEnabled));
+        properties.setProperty("timeOfDayMode", timeOfDayMode.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("mobsEnabled", Boolean.toString(mobsEnabled));
+        properties.setProperty("minimapRotates", Boolean.toString(minimapRotates));
+        properties.setProperty("chunkGridEnabled", Boolean.toString(chunkGridEnabled));
+        properties.setProperty("deathPointsEnabled", Boolean.toString(deathPointsEnabled));
 
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
@@ -162,6 +183,97 @@ public final class VoxyMapSettings {
         save();
     }
 
+    public static boolean waypointsEnabled() {
+        load();
+        return waypointsEnabled;
+    }
+
+    public static void toggleWaypointsVisible() {
+        load();
+        waypointsEnabled = !waypointsEnabled;
+        save();
+    }
+
+    public static boolean minimapEnabled() {
+        load();
+        return minimapEnabled;
+    }
+
+    public static void toggleMinimap() {
+        load();
+        minimapEnabled = !minimapEnabled;
+        save();
+    }
+
+    public static TimeOfDay timeOfDayMode() {
+        load();
+        return timeOfDayMode;
+    }
+
+    public static void cycleTimeOfDayMode() {
+        load();
+        TimeOfDay[] values = TimeOfDay.values();
+        timeOfDayMode = values[(timeOfDayMode.ordinal() + 1) % values.length];
+        save();
+    }
+
+    public static boolean mobsEnabled() {
+        load();
+        return mobsEnabled;
+    }
+
+    public static void toggleMobs() {
+        load();
+        mobsEnabled = !mobsEnabled;
+        save();
+    }
+
+    public static boolean minimapRotates() {
+        load();
+        return minimapRotates;
+    }
+
+    public static void toggleMinimapRotates() {
+        load();
+        minimapRotates = !minimapRotates;
+        save();
+    }
+
+    public static boolean chunkGridEnabled() {
+        load();
+        return chunkGridEnabled;
+    }
+
+    public static void toggleChunkGrid() {
+        load();
+        chunkGridEnabled = !chunkGridEnabled;
+        save();
+    }
+
+    public static boolean deathPointsEnabled() {
+        load();
+        return deathPointsEnabled;
+    }
+
+    public static void toggleDeathPoints() {
+        load();
+        deathPointsEnabled = !deathPointsEnabled;
+        save();
+    }
+
+    /** Null while the map is closed or the user picked AUTO - in both cases every lighting-forcing
+     * mixin ({@code LevelMixin}, {@code ClientClockManagerMixin}) should leave the real day/night cycle
+     * untouched. Otherwise, the mode those mixins should pin the map's lighting to. Shared here so the
+     * two mixins - one on {@code Level}, one on the unrelated {@code ClientClockManager} - agree on the
+     * exact same condition rather than drifting apart. */
+    public static TimeOfDay activeMapLightingOverride() {
+        if (!VoxyMapCameraController.isActive()) {
+            return null;
+        }
+        TimeOfDay mode = timeOfDayMode();
+        return mode == TimeOfDay.AUTO ? null : mode;
+    }
+
     private static double readDouble(String value, double fallback) {
         if (value == null) return fallback;
         try {
@@ -230,6 +342,37 @@ public final class VoxyMapSettings {
         }
 
         private static VanillaSquadMap parse(String value) {
+            if (value != null) {
+                try {
+                    return valueOf(value.trim().toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException ignored) {
+                    // Preserve the safe automatic default for old or manually edited configs.
+                }
+            }
+            return AUTO;
+        }
+    }
+
+    /** Governs the lighting forced onto the fullscreen 3D map while it's open (see
+     * {@code LevelMixin}) - by default the map always keeps itself readable by forcing midday, no
+     * rain/thunder. AUTO instead lets the real world clock and weather show through; DAY/NIGHT pin the
+     * map to one lighting look regardless of the actual time, e.g. for a consistent screenshot. */
+    public enum TimeOfDay {
+        AUTO("screen.voxymap.settings.timeofday.auto"),
+        DAY("screen.voxymap.settings.timeofday.day"),
+        NIGHT("screen.voxymap.settings.timeofday.night");
+
+        private final String translationKey;
+
+        TimeOfDay(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        private static TimeOfDay parse(String value) {
             if (value != null) {
                 try {
                     return valueOf(value.trim().toUpperCase(Locale.ROOT));
