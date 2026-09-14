@@ -186,8 +186,11 @@ class ProjectContractTest {
                 "src/client/java/com/voxymap/client/gui/MapScreen.java"), StandardCharsets.UTF_8);
         assertTrue(source.contains("marker.local && isViewCenteredOn(marker)"));
         assertTrue(source.contains("new ScreenPoint(width / 2, height / 2)"));
-        assertTrue(source.contains("double upX = -Math.sin(viewYaw) * Math.sin(pitch)"));
-        assertTrue(source.contains("double upZ = Math.cos(viewYaw) * Math.sin(pitch)"));
+        // The up-vector is computed once per camera update (see updateCameraBasis(), called from
+        // syncWorldCamera()) rather than recomputed by every projectToScreen/mapPointAt call - see the
+        // efficiency fix that moved it. camUpX/camUpZ are the cached fields projectToScreen reads.
+        assertTrue(source.contains("camUpX = -Math.sin(viewYaw) * Math.sin(pitch)"));
+        assertTrue(source.contains("camUpZ = Math.cos(viewYaw) * Math.sin(pitch)"));
     }
 
     @Test

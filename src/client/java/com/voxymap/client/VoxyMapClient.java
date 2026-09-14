@@ -2,6 +2,10 @@ package com.voxymap.client;
 
 import com.voxymap.client.gui.MapScreen;
 import com.voxymap.client.compat.MinecraftCompat;
+import com.voxymap.client.map.DeathWaypointTracker;
+import com.voxymap.client.map.MapShareClient;
+import com.voxymap.client.map.MobMarkerCache;
+import com.voxymap.client.map.OreMaskController;
 import com.voxymap.client.map.VoxyMapSettings;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
@@ -38,6 +42,14 @@ public class VoxyMapClient implements ClientModInitializer {
                 }
                 MinecraftCompat.showScreen(client, new MapScreen());
             }
+            // Map-share has no lifecycle hook of its own tied to a world/connection - this is what
+            // actually stops a forgotten "Share" from silently outliving the world it was started for.
+            MapShareClient.stopIfWorldChanged(client);
+            // Voxy renders its cached LOD terrain during ordinary gameplay too, not just while the
+            // fullscreen map is open, so this has to tick unconditionally rather than from MapScreen.
+            OreMaskController.tick(client);
+            DeathWaypointTracker.tick(client);
+            MobMarkerCache.tick(client);
         });
 
         LOGGER.info("[VoxyMap] Loaded. Press M to open the map.");

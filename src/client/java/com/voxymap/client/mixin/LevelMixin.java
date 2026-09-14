@@ -1,6 +1,7 @@
 package com.voxymap.client.mixin;
 
 import com.voxymap.client.map.VoxyMapCameraController;
+import com.voxymap.client.map.VoxyMapSettings;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,24 +16,33 @@ public abstract class LevelMixin {
                 && (Object) this instanceof ClientLevel;
     }
 
+    /** See {@link VoxyMapSettings#activeMapLightingOverride()} - gated here to only the client level,
+     * since this mixin also applies to a singleplayer world's integrated ServerLevel. */
+    private VoxyMapSettings.TimeOfDay voxymap$activeTimeOfDayOverride() {
+        return (Object) this instanceof ClientLevel ? VoxyMapSettings.activeMapLightingOverride() : null;
+    }
+
     @Inject(method = "isDarkOutside", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private void voxymap$keepMapBrightOutside(CallbackInfoReturnable<Boolean> cir) {
-        if (voxymap$isClientMapWeatherOverrideActive()) {
-            cir.setReturnValue(false);
+    private void voxymap$overrideMapDarkness(CallbackInfoReturnable<Boolean> cir) {
+        VoxyMapSettings.TimeOfDay mode = voxymap$activeTimeOfDayOverride();
+        if (mode != null) {
+            cir.setReturnValue(mode == VoxyMapSettings.TimeOfDay.NIGHT);
         }
     }
 
     @Inject(method = "getSkyDarken", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private void voxymap$keepMapSkyBright(CallbackInfoReturnable<Integer> cir) {
-        if (voxymap$isClientMapWeatherOverrideActive()) {
-            cir.setReturnValue(0);
+    private void voxymap$overrideMapSkyDarken(CallbackInfoReturnable<Integer> cir) {
+        VoxyMapSettings.TimeOfDay mode = voxymap$activeTimeOfDayOverride();
+        if (mode != null) {
+            cir.setReturnValue(mode == VoxyMapSettings.TimeOfDay.NIGHT ? 11 : 0);
         }
     }
 
     @Inject(method = {"getOverworldClockTime", "getDefaultClockTime"}, at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private void voxymap$forceDayForMap(CallbackInfoReturnable<Long> cir) {
-        if (voxymap$isClientMapWeatherOverrideActive()) {
-            cir.setReturnValue(6000L);
+    private void voxymap$overrideMapClockTime(CallbackInfoReturnable<Long> cir) {
+        VoxyMapSettings.TimeOfDay mode = voxymap$activeTimeOfDayOverride();
+        if (mode != null) {
+            cir.setReturnValue(mode == VoxyMapSettings.TimeOfDay.NIGHT ? 18000L : 6000L);
         }
     }
 
