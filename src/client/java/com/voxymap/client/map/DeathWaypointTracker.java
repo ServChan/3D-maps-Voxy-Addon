@@ -44,6 +44,11 @@ public final class DeathWaypointTracker {
         float health = minecraft.player.getHealth();
         if (VoxyMapSettings.deathPointsEnabled() && lastHealth > 0.0f && health <= 0.0f) {
             String name = Component.translatable("screen.voxymap.waypoint.death_name").getString();
+            for (WaypointManager.Waypoint wp : WaypointManager.forWorld(worldId.getWorldId())) {
+                if (!wp.shared() && name.equals(wp.name())) {
+                    WaypointManager.remove(worldId.getWorldId(), wp.id());
+                }
+            }
             WaypointManager.add(worldId.getWorldId(), name,
                     minecraft.player.getX(), minecraft.player.getY(), minecraft.player.getZ(),
                     DEATH_COLOR, false);

@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.concurrent.Executors;
 
@@ -154,7 +155,9 @@ public final class WaypointSyncServer {
 
         private boolean authorized(HttpExchange exchange) {
             if (password == null || password.isEmpty()) return false;
-            return password.equals(exchange.getRequestHeaders().getFirst("X-VoxyMap-Password"));
+            String presented = exchange.getRequestHeaders().getFirst("X-VoxyMap-Password");
+            if (presented == null) return false;
+            return MessageDigest.isEqual(password.getBytes(StandardCharsets.UTF_8), presented.getBytes(StandardCharsets.UTF_8));
         }
 
         private static String readBody(HttpExchange exchange) throws IOException {

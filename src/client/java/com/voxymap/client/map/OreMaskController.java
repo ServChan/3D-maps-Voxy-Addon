@@ -106,6 +106,9 @@ public final class OreMaskController {
         // sitting unbaked between two baked ones must never stall classification of everything after it,
         // so every not-yet-classified id in range is retried each tick rather than stopping at the first
         // gap.
+        while (firstUnclassified < knownCount && classified[firstUnclassified]) {
+            firstUnclassified++;
+        }
         for (int id = firstUnclassified; id < knownCount; id++) {
             if (classified[id]) {
                 if (id == firstUnclassified) {
@@ -133,6 +136,9 @@ public final class OreMaskController {
             if (id == firstUnclassified) {
                 firstUnclassified++;
             }
+        }
+        while (firstUnclassified < knownCount && classified[firstUnclassified]) {
+            firstUnclassified++;
         }
     }
 
