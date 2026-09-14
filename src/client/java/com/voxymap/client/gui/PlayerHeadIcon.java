@@ -14,11 +14,11 @@ import java.util.UUID;
  * multiplayer server list do, using whatever skin the client already has cached for that UUID via the
  * server's tab list — no extra network fetch of our own.
  */
-final class PlayerHeadIcon {
+public final class PlayerHeadIcon {
     private PlayerHeadIcon() {
     }
 
-    static Identifier resolveSkinTexture(Minecraft minecraft, UUID uuid) {
+    public static Identifier resolveSkinTexture(Minecraft minecraft, UUID uuid) {
         if (minecraft == null || uuid == null || minecraft.getConnection() == null) {
             return null;
         }
@@ -30,7 +30,7 @@ final class PlayerHeadIcon {
         return skin == null || skin.body() == null ? null : skin.body().texturePath();
     }
 
-    static void draw(GuiGraphicsExtractor g, Identifier skin, int x, int y, int size) {
+    public static void draw(GuiGraphicsExtractor g, Identifier skin, int x, int y, int size) {
         // Use the explicit pixel-region overload used by the game's player-head renderers. The
         // compact normalized-UV overload has destination-bounds and UV ordering that are easy to
         // confuse; both mistakes previously exposed strips or the full 64x64 skin sheet here.

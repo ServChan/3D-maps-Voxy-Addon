@@ -1,6 +1,10 @@
 package com.voxymap.client.mixin;
 
+import com.voxymap.client.map.MinimapRenderer;
 import com.voxymap.client.map.VoxyMapCameraController;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
@@ -22,5 +26,10 @@ public abstract class HudMixin {
         if (VoxyMapCameraController.isActive()) {
             ci.cancel();
         }
+    }
+
+    @Inject(method = "extractRenderState", at = @At("TAIL"), remap = false, require = 0)
+    private void voxymap$extractMinimap(GuiGraphicsExtractor g, DeltaTracker deltaTracker, CallbackInfo ci) {
+        MinimapRenderer.extract(g, Minecraft.getInstance());
     }
 }

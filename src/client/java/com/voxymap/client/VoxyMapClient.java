@@ -21,12 +21,15 @@ public class VoxyMapClient implements ClientModInitializer {
     private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
             Identifier.fromNamespaceAndPath(MOD_ID, "main"));
     private static KeyMapping openMapKey;
+    private static KeyMapping minimapZoomKey;
 
     @Override
     public void onInitializeClient() {
         VoxyMapSettings.load();
         openMapKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.voxymap.open_map", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_M, CATEGORY));
+        minimapZoomKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.voxymap.minimap_zoom", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_Z, CATEGORY));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openMapKey.consumeClick()) {
@@ -38,5 +41,9 @@ public class VoxyMapClient implements ClientModInitializer {
         });
 
         LOGGER.info("[VoxyMap] Loaded. Press M to open the map.");
+    }
+
+    public static boolean isMinimapZoomHeld() {
+        return minimapZoomKey != null && minimapZoomKey.isDown();
     }
 }
