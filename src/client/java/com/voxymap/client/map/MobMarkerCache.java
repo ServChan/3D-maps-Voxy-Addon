@@ -47,10 +47,16 @@ public final class MobMarkerCache {
 
         double px = minecraft.player.getX();
         double pz = minecraft.player.getZ();
+        double maxDistSq = 128.0 * 128.0;
 
         List<MobSnapshot> found = new ArrayList<>();
         for (Entity entity : minecraft.level.entitiesForRendering()) {
             if (!(entity instanceof Mob mob)) {
+                continue;
+            }
+            double dx = mob.getX() - px;
+            double dz = mob.getZ() - pz;
+            if (dx * dx + dz * dz > maxDistSq) {
                 continue;
             }
             found.add(new MobSnapshot(mob.getX(), mob.getY(), mob.getZ(), mob instanceof Enemy));

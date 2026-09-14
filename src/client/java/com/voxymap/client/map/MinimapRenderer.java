@@ -9,6 +9,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 
@@ -40,6 +41,7 @@ public final class MinimapRenderer {
     private static DynamicTexture texture;
     private static int centerChunkX = Integer.MIN_VALUE;
     private static int centerChunkZ = Integer.MIN_VALUE;
+    private static ResourceKey<Level> lastDimension = null;
 
     private MinimapRenderer() {
     }
@@ -54,9 +56,11 @@ public final class MinimapRenderer {
         Level level = minecraft.level;
         int playerChunkX = Math.floorDiv((int) Math.floor(player.getX()), 16);
         int playerChunkZ = Math.floorDiv((int) Math.floor(player.getZ()), 16);
+        ResourceKey<Level> dimension = level.dimension();
 
         ensureTexture(minecraft);
-        if (centerChunkX != playerChunkX || centerChunkZ != playerChunkZ) {
+        if (centerChunkX != playerChunkX || centerChunkZ != playerChunkZ || !dimension.equals(lastDimension)) {
+            lastDimension = dimension;
             rebuild(level, playerChunkX, playerChunkZ, (int) Math.floor(player.getY()));
         }
 

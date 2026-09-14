@@ -23,10 +23,12 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.lwjgl.glfw.GLFW;
 
@@ -1580,6 +1582,18 @@ public class MapScreen extends Screen {
         if (!minecraft.level.hasChunk(blockX >> 4, blockZ >> 4)) {
             return viewCenterY;
         }
+        if (minecraft.level.dimensionType().hasCeiling()) {
+            BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(blockX, (int) Math.min(viewCenterY + 4, 120), blockZ);
+            int minY = Math.max(minecraft.level.getMinY(), (int) viewCenterY - 48);
+            while (pos.getY() > minY) {
+                BlockState state = minecraft.level.getBlockState(pos);
+                if (!state.isAir() && state.canOcclude()) {
+                    return pos.getY() + 1.0;
+                }
+                pos.setY(pos.getY() - 1);
+            }
+            return viewCenterY;
+        }
         int height = minecraft.level.getHeight(Heightmap.Types.WORLD_SURFACE, blockX, blockZ);
         return height > minecraft.level.getMinY() ? height : viewCenterY;
     }
@@ -1964,14 +1978,15 @@ public class MapScreen extends Screen {
 
         MapShareBounds bounds = mapShareBounds;
         if (bounds != null) {
-            ScreenPoint a = projectToScreen(bounds.minBlockX(), viewCenterY, bounds.minBlockZ());
-            ScreenPoint b = projectToScreen(bounds.maxBlockXExclusive(), viewCenterY, bounds.minBlockZ());
-            ScreenPoint c = projectToScreen(bounds.maxBlockXExclusive(), viewCenterY, bounds.maxBlockZExclusive());
-            ScreenPoint d = projectToScreen(bounds.minBlockX(), viewCenterY, bounds.maxBlockZExclusive());
-            drawSelectionEdge(g, a, b);
-            drawSelectionEdge(g, b, c);
-            drawSelectionEdge(g, c, d);
-            drawSelectionEdge(g, d, a);
+            double minX = bounds.minBlockX();
+            double maxX = bounds.maxBlockXExclusive();
+            double minZ = bounds.minBlockZ();
+            double maxZ = bounds.maxBlockZExclusive();
+            int color = 0xFF55E7FF;
+            draw3DLine(g, minX, viewCenterY, minZ, maxX, viewCenterY, minZ, color);
+            draw3DLine(g, maxX, viewCenterY, minZ, maxX, viewCenterY, maxZ, color);
+            draw3DLine(g, maxX, viewCenterY, maxZ, minX, viewCenterY, maxZ, color);
+            draw3DLine(g, minX, viewCenterY, maxZ, minX, viewCenterY, minZ, color);
         } else if (mapShareFirstCorner != null) {
             ScreenPoint point = projectToScreen(mapShareFirstCorner.x, viewCenterY, mapShareFirstCorner.z);
             if (point != null) {
@@ -1993,9 +2008,36 @@ public class MapScreen extends Screen {
         }
     }
 
-    private void drawSelectionEdge(GuiGraphicsExtractor g, ScreenPoint a, ScreenPoint b) {
-        if (a != null && b != null) {
-            drawSolidLine(g, a.x, a.y, b.x, b.y, 0xFF55E7FF);
+    private void draw3DLine(GuiGraphicsExtractor g, double x1, double y1, double z1,
+                            double x2, double y2, double z2, int color) {
+        double cameraX = VoxyMapCameraController.cameraX();
+        double cameraY = VoxyMapCameraController.cameraY();
+        double cameraZ = VoxyMapCameraController.cameraZ();
+
+        double d1 = (x1 - cameraX) * camForwardX + (y1 - cameraY) * camForwardY + (z1 - cameraZ) * camForwardZ;
+        double d2 = (x2 - cameraX) * camForwardX + (y2 - cameraY) * camForwardY + (z2 - cameraZ) * camForwardZ;
+
+        double near = 0.15;
+        if (d1 < near && d2 < near) {
+            return;
+        }
+
+        if (d1 < near) {
+            double t = (near - d1) / (d2 - d1);
+            x1 = x1 + t * (x2 - x1);
+            y1 = y1 + t * (y2 - y1);
+            z1 = z1 + t * (z2 - z1);
+        } else if (d2 < near) {
+            double t = (near - d1) / (d2 - d1);
+            x2 = x1 + t * (x2 - x1);
+            y2 = y1 + t * (y2 - y1);
+            z2 = z1 + t * (z2 - z1);
+        }
+
+        ScreenPoint p1 = projectToScreen(x1, y1, z1);
+        ScreenPoint p2 = projectToScreen(x2, y2, z2);
+        if (p1 != null && p2 != null) {
+            drawSolidLine(g, p1.x, p1.y, p2.x, p2.y, color);
         }
     }
 
@@ -2260,8 +2302,15 @@ public class MapScreen extends Screen {
         String clipboard = minecraft.keyboardHandler.getClipboard();
         if (clipboard == null || clipboard.isEmpty()) return;
         int maxLength = activeInputMaxLength();
+        boolean digitsOnly = textInputKind == TextInputKind.RECEIVE_CODE;
         for (int i = 0; i < clipboard.length() && nameInputBuffer.length() < maxLength; i++) {
             char c = clipboard.charAt(i);
+            if (digitsOnly) {
+                if (Character.isDigit(c)) {
+                    nameInputBuffer.append(c);
+                }
+                continue;
+            }
             if (c == '\n' || c == '\r' || (c < 0x20 && c != '\t')) continue;
             nameInputBuffer.append(c);
         }
