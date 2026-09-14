@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Player-placed map pins, persisted per Voxy world id - the same identifier
@@ -131,7 +132,7 @@ public final class WaypointManager {
             return waypoint;
         }
 
-        List<Waypoint> list = byWorld.computeIfAbsent(worldId, key -> new ArrayList<>());
+        List<Waypoint> list = byWorld.computeIfAbsent(worldId, key -> new CopyOnWriteArrayList<>());
         Waypoint waypoint = new Waypoint(UUID.randomUUID().toString(), name.trim(), x, y, z, color, false);
         list.add(waypoint);
         localVersion++;
@@ -214,7 +215,7 @@ public final class WaypointManager {
         if (properties == null) properties = new Properties();
 
         byWorld.clear();
-        WaypointCodec.parse(properties).forEach((worldId, list) -> byWorld.put(worldId, new ArrayList<>(list)));
+        WaypointCodec.parse(properties).forEach((worldId, list) -> byWorld.put(worldId, new CopyOnWriteArrayList<>(list)));
         localVersion++;
     }
 
