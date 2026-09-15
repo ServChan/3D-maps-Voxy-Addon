@@ -1,6 +1,7 @@
 {
   "required": true,
   "package": "com.voxymap.client.mixin",
+  "plugin": "com.voxymap.client.mixin.VoxyMapMixinPlugin",
   "compatibilityLevel": "JAVA_17",
   "client": [
     "CameraMixin",
@@ -9,6 +10,8 @@
     "GameRendererMixin",
     "GuiMixin",
     "HudMixin",
+    "IrisCommonUniformsMixin",
+    "IrisIncludeProcessorMixin",
     "LevelMixin",
     "LevelRendererMixin",
     "MDICSectionRendererMixin",
