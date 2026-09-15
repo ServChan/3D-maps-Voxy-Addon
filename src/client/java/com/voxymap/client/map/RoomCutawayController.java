@@ -148,6 +148,40 @@ public final class RoomCutawayController {
         return VoxyMapCameraController.isActive() && cuttingSomething;
     }
 
+    /** Mirrors the local per-column fragment cut closely enough for CPU cursor picking. */
+    static boolean isHiddenForMapPick(int x, int y, int z) {
+        if (!cuttingSomething) return false;
+        if (result.hasCutaway()) {
+            int gx = x - result.minX;
+            int gz = z - result.minZ;
+            if (gx >= 0 && gx < RoomCutawayComputer.GRID_SIZE
+                    && gz >= 0 && gz < RoomCutawayComputer.GRID_SIZE) {
+                int ceiling = result.topY[gx][gz];
+                if (ceiling != RoomCutawayComputer.NO_CEILING
+                        && y > ceiling + RoomCutawayComputer.CEILING_MARGIN) {
+                    return true;
+                }
+            }
+        }
+        float global = RoomCutawayTexture.uniformCutoff();
+        if (global >= RoomCutawayTexture.NO_CUT_VALUE) return false;
+        float cutoff = global;
+        float radius = RoomCutawayTexture.apertureRadius();
+        if (radius > 0.0f) {
+            double distance = Math.hypot(x + 0.5 - RoomCutawayTexture.apertureCenterX(),
+                    z + 0.5 - RoomCutawayTexture.apertureCenterZ());
+            double blend = smoothStep((distance - radius * 0.55) / (radius * 0.45));
+            cutoff = (float) (RoomCutawayTexture.apertureInnerCutoff()
+                    + (global - RoomCutawayTexture.apertureInnerCutoff()) * blend);
+        }
+        return y >= cutoff;
+    }
+
+    private static double smoothStep(double value) {
+        double clamped = Math.max(0.0, Math.min(1.0, value));
+        return clamped * clamped * (3.0 - 2.0 * clamped);
+    }
+
     public static void deactivate() {
         result = RoomCutawayComputer.Result.OPEN;
         hasComputed = false;

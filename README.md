@@ -12,7 +12,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 
 - Full-screen Voxy terrain view opened with a configurable key, `M` by default.
 - Whole-quad Nether roof removal clears the upper bedrock/anti-xray shell without slicing decoy LODs into a checkerboard, with a zoom-aware inspection aperture that opens deeper around the current map center at close range.
-- Mouse dragging, middle-button rotation, cursor-centered zoom, and smooth keyboard movement.
+- Mouse dragging, right-button rotation, cursor-centered zoom, and smooth keyboard movement.
 - Exact player centering plus projected markers and adaptive facing indicators for nearby active players.
 - Optional VanillaSquad global player markers with compact skin heads and clustered territory outlines, isolated between the public build, farm, and art maps.
 - Connectivity-aware room cutaway computed in bounded slices outside the render-state loop.
@@ -20,7 +20,8 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 - Optional singleplayer pause and adjustable camera speed.
 - Optional handoff to Xaero's World Map with a return button.
 - Optional HappyGhastScanner route overlay: while that mod is actively scanning, its expanding square-spiral path is drawn on the map with lap numbers, so you can tell exactly which lap to resume from without re-covering already-loaded terrain.
-- Waypoints: right-click the map to drop a named pin, right-click an existing pin to delete it, left-click one to rename it. Pins persist per Voxy world and can be hidden from Settings.
+- Waypoints: double-click the actual visible Voxy surface to drop a named pin at that voxel, including caves and multi-level builds. Select a pin for explicit edit/delete actions; overlapping labels are de-cluttered and every object remains available in the searchable Objects panel.
+- Searchable Objects panel for players, waypoints and VanillaSquad territories, with center/edit/delete actions and live follow mode for a selected player.
 - Optional waypoint sync with a self-hosted server (see [Waypoint sync server](#waypoint-sync-server) below): give a world just an address to pull everyone's pins read-only, or an address and a password to add/edit them too.
 - Map sharing: send another player your explored Voxy terrain over a one-time 6-digit code, relayed live through the same sync server (nothing is stored server-side). The receiver only gets sections they don't already have - their own explored terrain is never overwritten.
 - Always-on minimap in the corner during normal gameplay, separate from the fullscreen map - nearby players and waypoints on top of terrain colored the same way vanilla's own map item is. Built entirely client-side from already-loaded chunks (no server involved at all): a cached texture only rebuilds when you cross into a new chunk, not every frame.
@@ -42,13 +43,16 @@ Iris, Xaero's World Map, and HappyGhastScanner are optional integrations. The mo
 | --- | --- |
 | `M` | Open or close the map; the opening binding can be changed in Controls |
 | Left mouse drag | Move the map |
-| Right click | Add a waypoint at the cursor (right-click an existing one to delete it) |
-| Left click a waypoint | Rename it |
-| Middle mouse drag | Rotate the camera |
+| Double left click terrain | Add a waypoint on the exact visible Voxy surface |
+| Left click a waypoint | Select it; click again or press `Enter` to rename |
+| `Delete` / `Ctrl+Z` | Delete the selected waypoint / undo deletion |
+| Right mouse drag | Rotate the camera |
 | Mouse wheel / `+` / `-` | Zoom toward the cursor |
 | `W/A/S/D` or arrow keys | Move the camera |
 | `Shift` | Move faster |
 | `C` | Center on the player |
+| `O` | Open or close the Objects panel |
+| `F` | Follow or stop following the selected player; manual movement stops following |
 | `Esc` | Close the map |
 
 Settings are stored in `config/voxymap.properties`, and waypoints in `config/voxymap-waypoints.properties`. Both write through a sibling temporary file and keep a `.bak` copy for recovery.

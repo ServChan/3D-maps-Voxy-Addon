@@ -50,7 +50,7 @@ final class VoxySectionBridge {
         return minecraft.level == null ? null : WorldIdentifier.of(minecraft.level);
     }
 
-    private static WorldEngine liveEngine(WorldIdentifier worldId) {
+    static WorldEngine liveEngine(WorldIdentifier worldId) {
         if (worldId == null) return null;
         VoxyInstance instance = VoxyCommon.getInstance();
         return instance == null ? null : instance.getNullable(worldId);

@@ -201,6 +201,24 @@ public final class WaypointManager {
         WaypointSyncClient.remove(worldId, address, password, id);
     }
 
+    /** Restores an exact waypoint snapshot, preserving its id for undo and remote reconciliation. */
+    public static boolean restore(String worldId, Waypoint waypoint) {
+        load();
+        if (!WaypointCodec.validWorldId(worldId) || waypoint == null) return false;
+        if (forWorld(worldId).stream().anyMatch(existing -> existing.id().equals(waypoint.id()))) return true;
+        if (waypoint.shared()) {
+            String address = WaypointSyncSettings.address(worldId);
+            String password = address != null ? WaypointSyncSettings.password(worldId) : null;
+            if (password == null) return false;
+            WaypointSyncClient.add(worldId, address, password, waypoint);
+            return true;
+        }
+        byWorld.computeIfAbsent(worldId, key -> new CopyOnWriteArrayList<>()).add(waypoint);
+        localVersion++;
+        save();
+        return true;
+    }
+
     public static void load() {
         if (loaded) return;
         loaded = true;
