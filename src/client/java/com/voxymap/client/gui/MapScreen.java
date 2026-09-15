@@ -6,7 +6,6 @@ import com.voxymap.client.integration.VanillaSquadFlagMapBridge;
 import com.voxymap.client.integration.VanillaSquadPlayerMapBridge;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
-import com.voxymap.client.map.ColoredLightCache;
 import com.voxymap.client.map.MapShareBounds;
 import com.voxymap.client.map.PlayerViewConeGeometry;
 import com.voxymap.client.map.RoomCutawayController;
@@ -357,7 +356,6 @@ public class MapScreen extends Screen {
                 minecraft, viewCenterX, viewCenterY, viewCenterZ, blocksPerPixel, Math.min(width, height));
         if (minecraft != null && minecraft.level != null && minecraft.player != null) {
             VoxyMapCameraController.update(minecraft, viewCenterX, viewCenterY, viewCenterZ, viewYaw, viewPitch, blocksPerPixel);
-            ColoredLightCache.request(minecraft, viewCenterX, viewCenterZ);
             updateCameraBasis();
         } else {
             VoxyMapCameraController.deactivate();

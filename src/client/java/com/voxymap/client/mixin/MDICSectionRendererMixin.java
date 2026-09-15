@@ -1,12 +1,9 @@
 package com.voxymap.client.mixin;
 
 import com.voxymap.client.map.OreMaskTexture;
-import com.voxymap.client.map.ColoredLightCache;
-import com.voxymap.client.map.ColoredLightTexture;
 import com.voxymap.client.map.RoomCutawayController;
 import com.voxymap.client.map.RoomCutawayShaderPatcher;
 import com.voxymap.client.map.RoomCutawayTexture;
-import com.voxymap.client.map.VoxyMapCameraController;
 import me.cortex.voxy.client.core.gl.shader.Shader;
 import me.cortex.voxy.client.core.rendering.section.backend.mdic.MDICSectionRenderer;
 import me.cortex.voxy.client.core.rendering.section.backend.mdic.MDICViewport;
@@ -21,28 +18,19 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.util.Map;
-import java.util.WeakHashMap;
-
 @Mixin(value = MDICSectionRenderer.class, remap = false)
 public abstract class MDICSectionRendererMixin {
-    // Shader objects are replaced on a pack reload. Weak keys avoid retaining an old Iris/Voxy pipeline,
-    // and unlike raw GL program ids cannot inherit stale locations when OpenGL later reuses a deleted id.
-    private static final Map<Shader, ColoredLightUniforms> VOXYMAP_COLORED_LIGHT_UNIFORMS = new WeakHashMap<>();
     @Shadow @Final private Shader terrainShader;
     @Shadow @Final private Shader translucentTerrainShader;
     private int voxymap$opaquePreviousTexture = -1;
     private int voxymap$translucentPreviousTexture = -1;
     private int voxymap$opaquePreviousOreTexture = -1;
     private int voxymap$translucentPreviousOreTexture = -1;
-    private int voxymap$opaquePreviousColoredLightTexture = -1;
-    private int voxymap$translucentPreviousColoredLightTexture = -1;
 
     @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"))
     private void voxymap$setOpaqueCutaway(MDICViewport viewport, CallbackInfo ci) {
         voxymap$opaquePreviousTexture = voxymap$setCutawayUniforms(terrainShader);
         voxymap$opaquePreviousOreTexture = voxymap$setOreMaskUniforms(terrainShader);
-        voxymap$opaquePreviousColoredLightTexture = voxymap$setColoredLightUniforms(terrainShader);
     }
 
     @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("RETURN"))
@@ -51,15 +39,12 @@ public abstract class MDICSectionRendererMixin {
         voxymap$opaquePreviousTexture = -1;
         voxymap$restoreTexture(voxymap$opaquePreviousOreTexture, OreMaskTexture.TEXTURE_UNIT);
         voxymap$opaquePreviousOreTexture = -1;
-        voxymap$restoreTexture(voxymap$opaquePreviousColoredLightTexture, ColoredLightTexture.TEXTURE_UNIT);
-        voxymap$opaquePreviousColoredLightTexture = -1;
     }
 
     @Inject(method = "renderTranslucent(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"))
     private void voxymap$setTranslucentCutaway(MDICViewport viewport, CallbackInfo ci) {
         voxymap$translucentPreviousTexture = voxymap$setCutawayUniforms(translucentTerrainShader);
         voxymap$translucentPreviousOreTexture = voxymap$setOreMaskUniforms(translucentTerrainShader);
-        voxymap$translucentPreviousColoredLightTexture = voxymap$setColoredLightUniforms(translucentTerrainShader);
     }
 
     @Inject(method = "renderTranslucent(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("RETURN"))
@@ -68,8 +53,6 @@ public abstract class MDICSectionRendererMixin {
         voxymap$translucentPreviousTexture = -1;
         voxymap$restoreTexture(voxymap$translucentPreviousOreTexture, OreMaskTexture.TEXTURE_UNIT);
         voxymap$translucentPreviousOreTexture = -1;
-        voxymap$restoreTexture(voxymap$translucentPreviousColoredLightTexture, ColoredLightTexture.TEXTURE_UNIT);
-        voxymap$translucentPreviousColoredLightTexture = -1;
     }
 
     private static int voxymap$setCutawayUniforms(Shader shader) {
@@ -109,33 +92,6 @@ public abstract class MDICSectionRendererMixin {
             return previousTexture;
         }
         return -1;
-    }
-
-    private static int voxymap$setColoredLightUniforms(Shader shader) {
-        ColoredLightTexture.uploadReady();
-        ColoredLightUniforms uniforms = VOXYMAP_COLORED_LIGHT_UNIFORMS.computeIfAbsent(shader, value ->
-                new ColoredLightUniforms(
-                        GL41C.glGetUniformLocation(value.id(), "voxymapColoredLightEnabled"),
-                        GL41C.glGetUniformLocation(value.id(), "voxymapColoredLightOrigin"),
-                        GL41C.glGetUniformLocation(value.id(), "voxymapColoredLightSpan")));
-        if (uniforms.enabled() < 0) return -1; // Non-Solas pack, or an include layout left untouched.
-        boolean enabled = VoxyMapCameraController.isActive() && ColoredLightTexture.isReady();
-        GL41C.glProgramUniform1i(shader.id(), uniforms.enabled(), enabled ? 1 : 0);
-        if (!enabled) return -1;
-
-        if (uniforms.origin() >= 0) {
-            GL41C.glProgramUniform2f(shader.id(), uniforms.origin(),
-                    ColoredLightTexture.originX(), ColoredLightTexture.originZ());
-        }
-        if (uniforms.span() >= 0) {
-            GL41C.glProgramUniform1f(shader.id(), uniforms.span(), ColoredLightCache.SPAN);
-        }
-        int previous = GL30C.glGetIntegeri(GL11C.GL_TEXTURE_BINDING_2D, ColoredLightTexture.TEXTURE_UNIT);
-        GL45C.glBindTextureUnit(ColoredLightTexture.TEXTURE_UNIT, ColoredLightTexture.textureId());
-        return previous;
-    }
-
-    private record ColoredLightUniforms(int enabled, int origin, int span) {
     }
 
     private static void voxymap$restoreTexture(int previousTexture, int textureUnit) {
