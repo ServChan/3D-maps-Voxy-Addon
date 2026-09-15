@@ -49,11 +49,15 @@ public final class SolasMapFogPatcher {
         }
 
         String patched = SENTINEL + "\n\n" + source;
-        patched = patched.replace(FUNCTION_MARKER, FUNCTION_MARKER
-                + "    float voxymapView = clamp(voxymapMapView, 0.0, 1.0);\n"
-                + "    float voxymapWetness = wetness * mix(1.0, 0.22, voxymapView);\n"
-                + "    float voxymapRainHaze = clamp(wetness * voxymapView, 0.0, 1.0);\n");
-        patched = patched.replace(DISTANCE_MARKER, DISTANCE_MARKER.replace("wetness", "voxymapWetness"));
+        // Solas compiles this shared function for every dimension. wetness is available only inside
+        // its OVERWORLD branch, so inserting these locals at the function entry makes the Nether
+        // variant fail with "undefined variable wetness" even though all original wetness uses are
+        // correctly preprocessor-guarded. Anchor the locals to the first real Overworld use instead.
+        patched = patched.replace(DISTANCE_MARKER,
+                "float voxymapView = clamp(voxymapMapView, 0.0, 1.0);\n"
+                        + "    float voxymapWetness = wetness * mix(1.0, 0.22, voxymapView);\n"
+                        + "    float voxymapRainHaze = clamp(wetness * voxymapView, 0.0, 1.0);\n"
+                        + "    " + DISTANCE_MARKER.replace("wetness", "voxymapWetness"));
         patched = patched.replace(ALTITUDE_MARKER, ALTITUDE_MARKER.replace("wetness", "voxymapWetness"));
         patched = patched.replace(DENSITY_MARKER, "+ voxymapWetness * 0.25;");
         patched = patched.replace(FINAL_FOG_MARKER, FINAL_FOG_MARKER

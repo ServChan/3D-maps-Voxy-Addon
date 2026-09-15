@@ -42,7 +42,7 @@ public final class OreMaskTexture {
         // as "not ore" from the first frame, not whatever garbage the driver handed back.
         ByteBuffer zeros = MemoryUtil.memCalloc(GRID * GRID);
         try {
-            GL45C.glTextureSubImage2D(textureId, 0, 0, 0, GRID, GRID, GL11C.GL_RED, GL11C.GL_UNSIGNED_BYTE, zeros);
+            GlClientTextureUpload.redBytes(textureId, 0, 0, GRID, GRID, zeros);
         } finally {
             MemoryUtil.memFree(zeros);
         }
@@ -57,7 +57,7 @@ public final class OreMaskTexture {
         ByteBuffer one = MemoryUtil.memAlloc(1);
         try {
             one.put(0, (byte) 0xFF).rewind();
-            GL45C.glTextureSubImage2D(textureId, 0, x, y, 1, 1, GL11C.GL_RED, GL11C.GL_UNSIGNED_BYTE, one);
+            GlClientTextureUpload.redBytes(textureId, x, y, 1, 1, one);
         } finally {
             MemoryUtil.memFree(one);
         }

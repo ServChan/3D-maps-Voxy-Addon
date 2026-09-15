@@ -69,7 +69,7 @@ public final class RoomCutawayTexture {
                     buffer.put(gz * size + gx, value);
                 }
             }
-            GL45C.glTextureSubImage2D(textureId, 0, 0, 0, size, size, GL11C.GL_RED, GL11C.GL_FLOAT, buffer);
+            GlClientTextureUpload.redFloats(textureId, 0, 0, size, size, buffer);
         } finally {
             MemoryUtil.memFree(buffer);
         }

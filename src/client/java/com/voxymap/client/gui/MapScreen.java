@@ -194,7 +194,9 @@ public class MapScreen extends Screen {
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
-        RoomCutawayController.tick(minecraft);
+        // RoomCutawayController may upload a GL texture. Do not do that from init(): dimension and
+        // shader-pipeline rebuilds can construct this screen while Voxy still owns transient pixel
+        // transfer state. The regular screen tick runs once the new renderer lifecycle is settled.
         if (!openLogged) {
             VoxyMapClient.LOGGER.info("[VoxyMap] Map opened.");
             openLogged = true;
