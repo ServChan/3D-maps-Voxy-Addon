@@ -77,15 +77,6 @@ public final class OreMaskController {
             return;
         }
         Mapper mapper = engine.getMapper();
-        int knownCount = mapper.getBlockStateCount();
-        if (firstUnclassified >= knownCount) {
-            return;
-        }
-        if (knownCount > classified.length) {
-            classified = java.util.Arrays.copyOf(classified, knownCount);
-            unbakedTicks = java.util.Arrays.copyOf(unbakedTicks, knownCount);
-        }
-
         VoxyRenderSystem renderSystem = IVoxyRenderSystemHolder.getNullable();
         if (renderSystem == null) {
             return;
@@ -107,6 +98,17 @@ public final class OreMaskController {
             unbakedTicks = new short[0];
             firstUnclassified = 0;
             OreMaskTexture.reset();
+        }
+
+        // Capacity must be established after the lifecycle reset above. Doing this before the reset
+        // left both arrays empty and crashed the very first tick of every newly-created Voxy factory.
+        int knownCount = mapper.getBlockStateCount();
+        if (firstUnclassified >= knownCount) {
+            return;
+        }
+        if (knownCount > classified.length) {
+            classified = java.util.Arrays.copyOf(classified, knownCount);
+            unbakedTicks = java.util.Arrays.copyOf(unbakedTicks, knownCount);
         }
 
         Registry<Block> blockRegistry = minecraft.level.registryAccess().lookupOrThrow(Registries.BLOCK);
