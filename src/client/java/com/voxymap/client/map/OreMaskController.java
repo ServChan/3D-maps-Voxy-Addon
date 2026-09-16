@@ -41,6 +41,8 @@ public final class OreMaskController {
     private static final Field MODEL_SERVICE_FIELD = resolveModelServiceField();
     private static boolean accessFailureLogged = false;
     private static WorldIdentifier lastWorldId;
+    /** Model ids are local to this factory and may be reassigned after an Iris shader/resource reload. */
+    private static ModelFactory lastModelFactory;
     /** classified[id] once that block id has been checked and (if it was baked yet) resolved - see
      * {@link #tick}'s comment on why this can't just be "highest id checked so far". */
     private static boolean[] classified = new boolean[0];
@@ -70,13 +72,6 @@ public final class OreMaskController {
         if (worldId == null) {
             return;
         }
-        if (!worldId.equals(lastWorldId)) {
-            lastWorldId = worldId;
-            classified = new boolean[0];
-            unbakedTicks = new short[0];
-            firstUnclassified = 0;
-        }
-
         WorldEngine engine = liveEngine(worldId);
         if (engine == null) {
             return;
@@ -100,6 +95,19 @@ public final class OreMaskController {
             return;
         }
         ModelFactory factory = modelService.factory;
+
+        // Toggling Iris shaders rebuilds Voxy's render pipeline/model bakery. Its numeric model ids
+        // are not stable across that rebuild: keeping the old R8 mask can therefore turn ordinary
+        // grass, leaves and stone into the mask's flat grey/white replacement. Reset both the GPU
+        // lookup and the CPU classification so ores are re-marked against the new factory.
+        if (!worldId.equals(lastWorldId) || factory != lastModelFactory) {
+            lastWorldId = worldId;
+            lastModelFactory = factory;
+            classified = new boolean[0];
+            unbakedTicks = new short[0];
+            firstUnclassified = 0;
+            OreMaskTexture.reset();
+        }
 
         Registry<Block> blockRegistry = minecraft.level.registryAccess().lookupOrThrow(Registries.BLOCK);
         // Voxy bakes models as they're first rendered, not in id-assignment order - a rarely-seen id

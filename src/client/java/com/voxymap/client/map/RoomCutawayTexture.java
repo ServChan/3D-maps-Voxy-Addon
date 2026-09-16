@@ -16,7 +16,10 @@ import java.nio.FloatBuffer;
 public final class RoomCutawayTexture {
     // Voxy itself uses texture unit 3 for its post-process colour buffer. Overwriting that binding
     // turns the height map into the post-process input and produces screen-sized coloured rectangles.
-    public static final int TEXTURE_UNIT = 15;
+    // Kept well clear of Iris's dynamically-sized sampler range too - see the longer explanation on
+    // OreMaskTexture.TEXTURE_UNIT, which used to sit at 14 (one below this) and collided with it for
+    // sufficiently complex shaderpacks.
+    public static final int TEXTURE_UNIT = 31;
     public static final float NO_CUT_VALUE = 1.0e8f;
 
     private static int textureId = 0;
