@@ -68,11 +68,11 @@ final class MapObjectPanel {
 
     void render(GuiGraphicsExtractor g, Font font, int screenWidth, int screenHeight, int mouseX, int mouseY) {
         toggleX = 12;
-        toggleY = 59;
+        toggleY = 72;
         String toggleLabel = Component.translatable("screen.voxymap.objects").getString();
         toggleW = Math.max(92, font.width(toggleLabel) + 24);
         panelX = 12;
-        panelY = 88;
+        panelY = 101;
         panelH = Math.max(128, screenHeight - panelY - 38);
 
         drawPanel(g, toggleX, toggleY, toggleW, 22, 0xCC030914, open ? 0xFFFFC94D : 0xFF3BA4FF);

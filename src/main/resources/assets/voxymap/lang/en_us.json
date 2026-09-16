@@ -11,6 +11,7 @@
   "overlay.voxymap.camera": "Camera",
   "overlay.voxymap.zoom": "zoom",
   "overlay.voxymap.slice": "slice",
+  "overlay.voxymap.cursor": "Cursor",
   "overlay.voxymap.xaero": "Xaero 2D Map",
   "overlay.voxymap.xaero.transition": "Opening Xaero World Map...",
   "overlay.voxymap.return_3d": "VoxyMap 3D",

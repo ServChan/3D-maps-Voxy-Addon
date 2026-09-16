@@ -157,6 +157,15 @@ public class MapScreen extends Screen {
     private long pickFailureUntilNanos;
     private boolean surfacePickPending;
     private long surfacePickRequest;
+    // Independent from surfacePickPending/surfacePickRequest above, which drive the click-to-place
+    // waypoint flow (including the "picking..." transient message) - the HUD cursor readout must not
+    // interfere with that, so it throttles/tracks its own async surface pick separately.
+    private VoxyMapPicker.Hit hoverCursorHit;
+    private boolean hoverCursorPickPending;
+    private long hoverCursorPickRequest;
+    private long lastHoverCursorPickNanos;
+    private double lastHoverCursorPickMouseX = Double.NaN;
+    private double lastHoverCursorPickMouseY = Double.NaN;
     private TextInputKind textInputKind = null;
     private String renamingWaypointId = null;
     private boolean waypointDraftActive = false;
@@ -371,6 +380,48 @@ public class MapScreen extends Screen {
             } else {
                 resultConsumer.accept(hit);
             }
+        }));
+    }
+
+    /**
+     * Refreshes {@link #hoverCursorHit} for the HUD "cursor" coordinate readout. Runs its own
+     * throttled async pick (at most ~10/s, and only when the mouse actually moved) instead of
+     * reusing {@link #pickSurfaceAt}, since that method drives waypoint placement and its
+     * "picking..." transient message.
+     */
+    private void updateHoverCursorHit(double mouseX, double mouseY) {
+        if (minecraft == null || minecraft.level == null || width <= 0 || height <= 0
+                || !VoxyMapCameraController.isActive()
+                || mouseX < 0 || mouseY < 0 || mouseX >= width || mouseY >= height) {
+            hoverCursorHit = null;
+            return;
+        }
+
+        boolean moved = Math.abs(mouseX - lastHoverCursorPickMouseX) > 0.5
+                || Math.abs(mouseY - lastHoverCursorPickMouseY) > 0.5;
+        long now = System.nanoTime();
+        if (hoverCursorPickPending || (!moved && now - lastHoverCursorPickNanos < 100_000_000L)) {
+            return;
+        }
+
+        VoxyMapPicker.Ray ray = mapRayAt(mouseX, mouseY);
+        WorldIdentifier world = WorldIdentifier.of(minecraft.level);
+        if (ray == null || world == null) {
+            hoverCursorHit = null;
+            return;
+        }
+
+        lastHoverCursorPickMouseX = mouseX;
+        lastHoverCursorPickMouseY = mouseY;
+        lastHoverCursorPickNanos = now;
+        String expectedWorldId = world.getWorldId();
+        long request = ++hoverCursorPickRequest;
+        hoverCursorPickPending = true;
+        VoxyMapPicker.pickAsync(world, ray, 32_768.0).whenComplete((hit, throwable) -> minecraft.execute(() -> {
+            if (request != hoverCursorPickRequest) return;
+            hoverCursorPickPending = false;
+            if (throwable != null || !expectedWorldId.equals(currentVoxyWorldId())) return;
+            hoverCursorHit = hit;
         }));
     }
 
@@ -665,14 +716,20 @@ public class MapScreen extends Screen {
         if (RoomCutawayController.isActive()) {
             cameraText += "   " + Component.translatable("overlay.voxymap.slice").getString();
         }
-        int topW = Math.max(1, Math.min(width - HUD_MARGIN * 2, Math.max(minecraft.font.width(title), Math.max(minecraft.font.width(playerText), minecraft.font.width(cameraText))) + 20));
-        int topH = minecraft.player != null ? 42 : 30;
+        updateHoverCursorHit(mouseX, mouseY);
+        VoxyMapPicker.Hit cursorHit = hoverCursorHit;
+        String cursorText = Component.translatable("overlay.voxymap.cursor").getString() + "  "
+                + (cursorHit != null ? cursorHit.blockX() + " / " + cursorHit.blockY() + " / " + cursorHit.blockZ() : "—");
+        int topW = Math.max(1, Math.min(width - HUD_MARGIN * 2, Math.max(minecraft.font.width(title),
+                Math.max(minecraft.font.width(playerText), Math.max(minecraft.font.width(cameraText), minecraft.font.width(cursorText)))) + 20));
+        int topH = (minecraft.player != null ? 42 : 30) + 13;
         drawGlassPanel(g, topX, topY, topW, topH, 0xAA030914, 0xFF3BA4FF);
         g.text(minecraft.font, Component.literal(title), topX + 10, topY + 5, 0xFFFFFFFF);
         if (minecraft.player != null) {
             g.text(minecraft.font, playerText, topX + 10, topY + 18, 0xFFDFF8FF);
         }
         g.text(minecraft.font, cameraText, topX + 10, topY + (minecraft.player != null ? 31 : 18), 0xFF9FD8FF);
+        g.text(minecraft.font, cursorText, topX + 10, topY + (minecraft.player != null ? 44 : 31), 0xFF7FE8B8);
 
         int footerTop = drawFooter(g, slide);
         drawXaeroButton(g, mouseX, mouseY, slide, topX, topY, topW, topH);
@@ -2559,6 +2616,9 @@ public class MapScreen extends Screen {
     public void onClose() {
         surfacePickRequest++;
         surfacePickPending = false;
+        hoverCursorPickRequest++;
+        hoverCursorPickPending = false;
+        hoverCursorHit = null;
         closeMapView();
         super.onClose();
     }
@@ -2567,6 +2627,9 @@ public class MapScreen extends Screen {
     public void removed() {
         surfacePickRequest++;
         surfacePickPending = false;
+        hoverCursorPickRequest++;
+        hoverCursorPickPending = false;
+        hoverCursorHit = null;
         closeMapView();
         if (openLogged) {
             VoxyMapClient.LOGGER.info("[VoxyMap] Map closed.");
