@@ -18,6 +18,10 @@ public final class VoxyBridge {
 
     public static void suppressEnvironmentalFogForMap() {
         if (FOG_FIELD == null) return;
+        if (!VoxyMapSettings.fogSuppressionEnabled()) {
+            restoreEnvironmentalFogAfterMap();
+            return;
+        }
 
         try {
             VoxyConfig config = VoxyConfig.CONFIG;

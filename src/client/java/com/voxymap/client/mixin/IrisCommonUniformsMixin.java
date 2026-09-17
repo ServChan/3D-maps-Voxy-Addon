@@ -1,6 +1,7 @@
 package com.voxymap.client.mixin;
 
 import com.voxymap.client.map.VoxyMapCameraController;
+import com.voxymap.client.map.VoxyMapSettings;
 import net.irisshaders.iris.gl.uniform.UniformHolder;
 import net.irisshaders.iris.gl.uniform.UniformUpdateFrequency;
 import net.irisshaders.iris.shaderpack.properties.PackDirectives;
@@ -21,6 +22,6 @@ public abstract class IrisCommonUniformsMixin {
             PackDirectives directives,
             CallbackInfo ci) {
         uniforms.uniform1f(UniformUpdateFrequency.PER_FRAME, "voxymapMapView",
-                () -> VoxyMapCameraController.isActive() ? 1.0f : 0.0f);
+                () -> VoxyMapCameraController.isActive() && VoxyMapSettings.fogSuppressionEnabled() ? 1.0f : 0.0f);
     }
 }

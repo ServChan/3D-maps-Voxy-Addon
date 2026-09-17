@@ -63,6 +63,11 @@ public final class OreMaskController {
     private OreMaskController() {
     }
 
+    /** Whether this Voxy build exposes the model service required for the anti-xray ore mask. */
+    public static boolean isSupported() {
+        return MODEL_SERVICE_FIELD != null && !accessFailureLogged;
+    }
+
     public static void tick(Minecraft minecraft) {
         if (minecraft == null || minecraft.level == null || MODEL_SERVICE_FIELD == null) {
             return;

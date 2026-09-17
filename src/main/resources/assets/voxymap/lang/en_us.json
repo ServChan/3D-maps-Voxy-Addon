@@ -95,6 +95,7 @@
   "screen.voxymap.settings.minimaprotate": "Rotate minimap",
   "screen.voxymap.settings.chunkgrid": "Chunk grid",
   "screen.voxymap.settings.deathpoints": "Death points",
+  "screen.voxymap.settings.fogsuppression": "Fog suppression",
   "screen.voxymap.waypoint.death_name": "Death point",
   "screen.voxymap.waypoint.no_surface": "No loaded terrain under the cursor",
   "screen.voxymap.waypoint.picking": "Finding the visible surface…",
@@ -113,5 +114,10 @@
   "screen.voxymap.objects.edit": "Edit",
   "screen.voxymap.objects.delete": "Delete",
   "screen.voxymap.settings.on": "On",
-  "screen.voxymap.settings.off": "Off"
+  "screen.voxymap.settings.off": "Off",
+  "screen.voxymap.settings.diagnostics": "Diagnostics",
+  "screen.voxymap.config.title": "VoxyMap settings",
+  "screen.voxymap.diagnostics.ok": "All integrations ready",
+  "screen.voxymap.diagnostics.shader_unsupported": "Voxy shader unsupported",
+  "screen.voxymap.diagnostics.ore_mask_unsupported": "Ore mask unavailable"
 }

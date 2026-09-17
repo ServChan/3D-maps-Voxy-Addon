@@ -95,6 +95,7 @@
   "screen.voxymap.settings.minimaprotate": "Girar minimapa",
   "screen.voxymap.settings.chunkgrid": "Cuadrícula de chunks",
   "screen.voxymap.settings.deathpoints": "Puntos de muerte",
+  "screen.voxymap.settings.fogsuppression": "Supresión de niebla",
   "screen.voxymap.waypoint.death_name": "Punto de muerte",
   "screen.voxymap.waypoint.no_surface": "No hay terreno cargado bajo el cursor",
   "screen.voxymap.waypoint.picking": "Buscando la superficie visible…",
@@ -113,5 +114,10 @@
   "screen.voxymap.objects.edit": "Editar",
   "screen.voxymap.objects.delete": "Eliminar",
   "screen.voxymap.settings.on": "Activado",
-  "screen.voxymap.settings.off": "Desactivado"
+  "screen.voxymap.settings.off": "Desactivado",
+  "screen.voxymap.settings.diagnostics": "Diagnóstico",
+  "screen.voxymap.config.title": "Ajustes de VoxyMap",
+  "screen.voxymap.diagnostics.ok": "Todas las integraciones listas",
+  "screen.voxymap.diagnostics.shader_unsupported": "Shader de Voxy incompatible",
+  "screen.voxymap.diagnostics.ore_mask_unsupported": "Máscara de minerales no disponible"
 }

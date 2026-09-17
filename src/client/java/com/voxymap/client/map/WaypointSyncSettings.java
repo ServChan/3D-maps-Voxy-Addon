@@ -5,13 +5,10 @@ import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -113,23 +110,8 @@ public final class WaypointSyncSettings {
             }
         });
 
-        try {
-            Files.createDirectories(CONFIG_PATH.getParent());
-            try (Writer writer = new OutputStreamWriter(Files.newOutputStream(TEMP_PATH), StandardCharsets.UTF_8)) {
-                properties.store(writer, "VoxyMap remote waypoint sync settings");
-            }
-            if (readProperties(CONFIG_PATH, false) != null) {
-                Files.copy(CONFIG_PATH, BACKUP_PATH, StandardCopyOption.REPLACE_EXISTING);
-            }
-            replaceAtomically(TEMP_PATH, CONFIG_PATH);
-        } catch (IOException exception) {
-            VoxyMapClient.LOGGER.error("[VoxyMap] Could not save sync settings to {}", CONFIG_PATH, exception);
-            try {
-                Files.deleteIfExists(TEMP_PATH);
-            } catch (IOException cleanupException) {
-                exception.addSuppressed(cleanupException);
-            }
-        }
+        AtomicPropertiesWriter.save(CONFIG_PATH, BACKUP_PATH, TEMP_PATH, properties,
+                "VoxyMap remote waypoint sync settings");
     }
 
     private static Properties readProperties(Path path) {
@@ -150,11 +132,4 @@ public final class WaypointSyncSettings {
         }
     }
 
-    private static void replaceAtomically(Path source, Path target) throws IOException {
-        try {
-            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
-            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
-        }
-    }
 }

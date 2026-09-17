@@ -88,8 +88,12 @@ final class MapRelayHandler implements HttpHandler {
     // game, got distracted, whatever - so this map entry would otherwise sit "pending" forever.
     private static final long CONFIRMATION_TIMEOUT_SECONDS = 120;
     private static final long REAP_INTERVAL_SECONDS = 30;
+    private static final long MAX_ESTIMATED_BYTES = 1L << 40; // 1 TiB is already far beyond a practical transfer.
+    private static final int CLAIM_ATTEMPTS_PER_MINUTE = 120;
 
     private final ConcurrentHashMap<String, PendingSender> pending = new ConcurrentHashMap<>();
+    private final RelayClaimRateLimiter claimRateLimiter =
+            new RelayClaimRateLimiter(CLAIM_ATTEMPTS_PER_MINUTE, 1, TimeUnit.MINUTES);
     private final ScheduledExecutorService reaper = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "voxymap-relay-reaper");
         thread.setDaemon(true);
@@ -101,6 +105,7 @@ final class MapRelayHandler implements HttpHandler {
     }
 
     private void reapAbandonedClaims() {
+        claimRateLimiter.prune();
         long now = System.nanoTime();
         for (Map.Entry<String, PendingSender> entry : pending.entrySet()) {
             PendingSender sender = entry.getValue();
@@ -200,6 +205,10 @@ final class MapRelayHandler implements HttpHandler {
     private void handleSendWait(HttpExchange exchange, String code) throws IOException {
         PendingSender sender = new PendingSender();
         sender.estimatedBytes = parseEstimatedBytes(exchange);
+        if (sender.estimatedBytes < 0) {
+            respond(exchange, 400);
+            return;
+        }
         if (pending.putIfAbsent(code, sender) != null) {
             respond(exchange, 409); // This code already has a sender waiting or transferring.
             return;
@@ -225,14 +234,20 @@ final class MapRelayHandler implements HttpHandler {
         String header = exchange.getRequestHeaders().getFirst(ESTIMATED_BYTES_HEADER);
         if (header == null) return 0;
         try {
-            return Math.max(0, Long.parseLong(header.trim()));
+            long value = Long.parseLong(header.trim());
+            return value >= 0 && value <= MAX_ESTIMATED_BYTES ? value : -1;
         } catch (NumberFormatException malformed) {
-            return 0;
+            return -1;
         }
     }
 
     /** Receiver: claim the code and learn its size estimate, without touching any terrain data. */
     private void handleReceiveInfo(HttpExchange exchange, String code) throws IOException {
+        String remoteAddress = exchange.getRemoteAddress().getAddress().getHostAddress();
+        if (!claimRateLimiter.allow(remoteAddress)) {
+            respond(exchange, 429);
+            return;
+        }
         PendingSender sender = pending.get(code);
         if (sender == null) {
             respond(exchange, 404); // No one is currently sharing under this code.

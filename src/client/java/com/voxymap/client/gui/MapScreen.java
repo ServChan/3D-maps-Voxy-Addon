@@ -7,8 +7,10 @@ import com.voxymap.client.integration.VanillaSquadPlayerMapBridge;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
 import com.voxymap.client.map.MapShareBounds;
+import com.voxymap.client.map.OreMaskController;
 import com.voxymap.client.map.PlayerViewConeGeometry;
 import com.voxymap.client.map.RoomCutawayController;
+import com.voxymap.client.map.RoomCutawayShaderPatcher;
 import com.voxymap.client.map.SpiralRouteGeometry;
 import com.voxymap.client.map.VoxyBridge;
 import com.voxymap.client.map.VoxyMapCameraController;
@@ -72,8 +74,6 @@ public class MapScreen extends Screen {
     private double viewCenterZ;
     private double blocksPerPixel = 4.0;
     private double viewYaw = Math.toRadians(45.0);
-    // TODO(voxymap): make pitch adjustable after input, horizon clipping and label placement have
-    // one shared camera model. Keeping it fixed is intentional for the first interaction overhaul.
     private double viewPitch = 0.68;
 
     // The camera-basis vectors below depend only on viewYaw/camera pitch/fov, which are constant for
@@ -122,6 +122,8 @@ public class MapScreen extends Screen {
     private int settingsPanelY = -1;
     private int settingsPanelW = 0;
     private int settingsPanelH = 0;
+    private int settingsScroll = 0;
+    private int settingsMaxScroll = 0;
     private int speedMinusX = -1;
     private int speedMinusY = -1;
     private int speedPlusX = -1;
@@ -145,6 +147,8 @@ public class MapScreen extends Screen {
     private int minimapRotateRowY = -1;
     private int chunkGridRowY = -1;
     private int deathPointsRowY = -1;
+    private int fogSuppressionRowY = -1;
+    private int diagnosticsRowY = -1;
     private final MapObjectPanel objectPanel = new MapObjectPanel();
     private long lastObjectPanelRefreshNanos;
     private String selectedObjectId;
@@ -545,6 +549,7 @@ public class MapScreen extends Screen {
     private boolean handleSettingsClick(double mouseX, double mouseY) {
         if (isInsideSettingsButton(mouseX, mouseY)) {
             settingsOpen = !settingsOpen;
+            if (settingsOpen) settingsScroll = 0;
             return true;
         }
         if (!isInsideSettingsPanel(mouseX, mouseY)) {
@@ -626,14 +631,20 @@ public class MapScreen extends Screen {
             VoxyMapSettings.toggleChunkGrid();
         } else if (isInsideSettingsRow(mouseX, mouseY, deathPointsRowY)) {
             VoxyMapSettings.toggleDeathPoints();
+        } else if (isInsideSettingsRow(mouseX, mouseY, fogSuppressionRowY)) {
+            VoxyMapSettings.toggleFogSuppression();
         }
         return true;
     }
 
     private boolean isInsideSettingsRow(double mouseX, double mouseY, int rowY) {
-        return rowY >= 0
+        return isSettingsRowVisible(rowY)
                 && mouseX >= settingsPanelX + 8 && mouseX <= settingsPanelX + settingsPanelW - 8
                 && mouseY >= rowY && mouseY <= rowY + SETTINGS_ROW_HEIGHT - 2;
+    }
+
+    private boolean isSettingsRowVisible(int rowY) {
+        return SettingsPanelLayout.rowVisible(rowY, settingsPanelY, settingsPanelH, SETTINGS_ROW_HEIGHT);
     }
 
     private void startXaeroTransition() {
@@ -1418,43 +1429,7 @@ public class MapScreen extends Screen {
     /** Liang-Barsky clipping bounds work per edge to at most the screen diagonal - for two endpoints
      * that both faithfully represent where their 3D point sits relative to the screen plane. */
     private double[] clipLineToViewport(double x1, double y1, double x2, double y2) {
-        double dx = x2 - x1;
-        double dy = y2 - y1;
-        double t0 = 0.0;
-        double t1 = 1.0;
-        double[] p = {-dx, dx, -dy, dy};
-        double[] q = {x1 + 2.0, width + 2.0 - x1, y1 + 2.0, height + 2.0 - y1};
-        for (int i = 0; i < 4; i++) {
-            if (p[i] == 0.0) {
-                if (q[i] < 0.0) return null;
-                continue;
-            }
-            double ratio = q[i] / p[i];
-            if (p[i] < 0.0) {
-                if (ratio > t1) return null;
-                t0 = Math.max(t0, ratio);
-            } else {
-                if (ratio < t0) return null;
-                t1 = Math.min(t1, ratio);
-            }
-        }
-        double clippedX1 = x1 + t0 * dx;
-        double clippedY1 = y1 + t0 * dy;
-        double clippedX2 = x1 + t1 * dx;
-        double clippedY2 = y1 + t1 * dy;
-        // A world point almost edge-on to the camera (depth just past the near-plane cutoff) still
-        // projects to a technically finite screen coordinate, just a wildly wrong one - projection is
-        // only meaningful for points in front of the camera, and 2D-clipping an already-bad coordinate
-        // cannot recover that. Such a point can still fall inside the padded rectangle above and pass
-        // every check, producing a "clipped" segment that streaks across (and past) the whole screen.
-        // No legitimate on-screen line needs to be longer than a couple of screen diagonals; a fill
-        // loop stepping across one this long - times every such segment drawn that frame - is a severe,
-        // silent frame-time hit rather than the outright freeze an unbounded coordinate would cause.
-        double maxSpan = 2.0 * Math.hypot(width, height) + 64.0;
-        if (Math.abs(clippedX2 - clippedX1) > maxSpan || Math.abs(clippedY2 - clippedY1) > maxSpan) {
-            return null;
-        }
-        return new double[]{clippedX1, clippedY1, clippedX2, clippedY2};
+        return MapProjection.clipLine(x1, y1, x2, y2, width, height);
     }
 
     private void drawPlayerMarkers(GuiGraphicsExtractor g, int mouseX, int mouseY) {
@@ -1508,48 +1483,16 @@ public class MapScreen extends Screen {
      * Unlike the former screen-cell allocator, membership and ordering do not depend on hash-map or
      * cell-claim order, so a one-pixel camera movement cannot reshuffle a whole crowd's labels. */
     private List<PlayerMarkerCluster> clusterPlayerMarkers(List<ProjectedPlayerMarker> projected) {
-        List<PlayerMarkerCluster> result = new ArrayList<>();
-        boolean[] visited = new boolean[projected.size()];
-        for (int start = 0; start < projected.size(); start++) {
-            if (visited[start]) {
-                continue;
-            }
-            List<ProjectedPlayerMarker> members = new ArrayList<>();
-            List<Integer> pending = new ArrayList<>();
-            pending.add(start);
-            visited[start] = true;
-            for (int cursor = 0; cursor < pending.size(); cursor++) {
-                int index = pending.get(cursor);
-                ProjectedPlayerMarker candidate = projected.get(index);
-                members.add(candidate);
-                for (int other = 0; other < projected.size(); other++) {
-                    if (!visited[other] && playerLabelsOverlap(candidate, projected.get(other))) {
-                        visited[other] = true;
-                        pending.add(other);
-                    }
-                }
-            }
-
-            int sumX = 0;
-            int sumY = 0;
-            for (ProjectedPlayerMarker member : members) {
-                sumX += member.point.x;
-                sumY += member.point.y;
-            }
-            result.add(new PlayerMarkerCluster(List.copyOf(members),
-                    new ScreenPoint(Math.round((float) sumX / members.size()),
-                            Math.round((float) sumY / members.size()))));
-        }
-        return result;
-    }
-
-    private boolean playerLabelsOverlap(ProjectedPlayerMarker first, ProjectedPlayerMarker second) {
-        int firstWidth = playerLabelWidth(first.marker);
-        int secondWidth = playerLabelWidth(second.marker);
-        int xDistance = Math.max(PLAYER_CLUSTER_MIN_X_DISTANCE,
-                (firstWidth + secondWidth) / 2 + PLAYER_CLUSTER_LABEL_GAP);
-        return Math.abs(first.point.x - second.point.x) <= xDistance
-                && Math.abs(first.point.y - second.point.y) <= PLAYER_CLUSTER_Y_DISTANCE;
+        List<PlayerMarkerClusterer.Marker> inputs = projected.stream()
+                .map(entry -> new PlayerMarkerClusterer.Marker(
+                        entry.point.x, entry.point.y, playerLabelWidth(entry.marker)))
+                .toList();
+        return PlayerMarkerClusterer.cluster(inputs, PLAYER_CLUSTER_MIN_X_DISTANCE,
+                        PLAYER_CLUSTER_Y_DISTANCE, PLAYER_CLUSTER_LABEL_GAP).stream()
+                .map(cluster -> new PlayerMarkerCluster(
+                        cluster.memberIndexes().stream().map(projected::get).toList(),
+                        new ScreenPoint(cluster.anchorX(), cluster.anchorY())))
+                .toList();
     }
 
     private int playerLabelWidth(PlayerMarker marker) {
@@ -1627,7 +1570,7 @@ public class MapScreen extends Screen {
         String label = playerLabel(representative) + " +" + (cluster.members.size() - 1);
         int headGap = resolveCachedSkin(representative.uuid) == null ? 0 : 13;
         int labelWidth = minecraft.font.width(label) + 8 + headGap;
-        int labelX = Mth.clamp(cluster.anchor.x - labelWidth / 2, 3, Math.max(3, width - labelWidth - 3));
+        int labelX = ClusterLayout.clampOrigin(cluster.anchor.x - labelWidth / 2, labelWidth, width, 3);
         int labelY = cluster.anchor.y - markerRadius(representative) - 15;
         return new ScreenRect(labelX, labelY, labelWidth, 11);
     }
@@ -1647,8 +1590,8 @@ public class MapScreen extends Screen {
         panelWidth = Math.max(panelWidth, 56);
         int rows = visibleRows + (truncated ? 1 : 0);
         int panelHeight = rows * 12 + 4;
-        int panelX = Mth.clamp(cluster.anchor.x - panelWidth / 2, 3, Math.max(3, width - panelWidth - 3));
-        int panelY = Mth.clamp(cluster.anchor.y + 12, 3, Math.max(3, height - panelHeight - 3));
+        int panelX = ClusterLayout.clampOrigin(cluster.anchor.x - panelWidth / 2, panelWidth, width, 3);
+        int panelY = ClusterLayout.clampOrigin(cluster.anchor.y + 12, panelHeight, height, 3);
         return new ScreenRect(panelX, panelY, panelWidth, panelHeight);
     }
 
@@ -1817,36 +1760,14 @@ public class MapScreen extends Screen {
     }
 
     private ScreenPoint projectToScreen(double worldX, double worldY, double worldZ) {
-        double cameraX = VoxyMapCameraController.cameraX();
-        double cameraY = VoxyMapCameraController.cameraY();
-        double cameraZ = VoxyMapCameraController.cameraZ();
-
-        double relativeX = worldX - cameraX;
-        double relativeY = worldY - cameraY;
-        double relativeZ = worldZ - cameraZ;
-
-        double depth = relativeX * camForwardX + relativeY * camForwardY + relativeZ * camForwardZ;
-        if (depth <= 0.1 || !Double.isFinite(depth)) {
-            return null;
-        }
-
-        double horizontal = relativeX * camRightX + relativeZ * camRightZ;
-        double vertical = relativeX * camUpX + relativeY * camUpY + relativeZ * camUpZ;
-        double screenX = width * 0.5 * (1.0 - horizontal / (depth * camTanX));
-        double screenY = height * 0.5 * (1.0 - vertical / (depth * camTanY));
-        if (!Double.isFinite(screenX) || !Double.isFinite(screenY)) {
-            return null;
-        }
-        // A point almost edge-on to the camera (depth just above the 0.1 cutoff) can still project to
-        // an astronomically large but finite pixel coordinate. Math.round(double) returns a long, and
-        // narrowing that to int silently wraps around instead of clamping, turning a far off-screen
-        // point into a garbage coordinate that can still look like it is inside the viewport to the
-        // line clipper - producing clipped segments hundreds of millions of pixels "long" and freezing
-        // the per-pixel fill loop that draws them. Clamp far outside any real screen size first so the
-        // narrowing conversion is always exact.
-        double clampedX = Mth.clamp(screenX, -1.0E6, 1.0E6);
-        double clampedY = Mth.clamp(screenY, -1.0E6, 1.0E6);
-        return new ScreenPoint((int) Math.round(clampedX), (int) Math.round(clampedY));
+        MapProjection.Point point = MapProjection.project(
+                worldX, worldY, worldZ,
+                VoxyMapCameraController.cameraX(), VoxyMapCameraController.cameraY(), VoxyMapCameraController.cameraZ(),
+                camForwardX, camForwardY, camForwardZ,
+                camRightX, camRightZ,
+                camUpX, camUpY, camUpZ,
+                camTanX, camTanY, width, height);
+        return point == null ? null : new ScreenPoint(point.x(), point.y());
     }
 
     private static void drawDiamond(GuiGraphicsExtractor g, int centerX, int centerY, int radius, int color) {
@@ -1890,20 +1811,27 @@ public class MapScreen extends Screen {
         String syncErrorDetail = panelSyncStatus == WaypointManager.SyncStatus.ERROR
                 ? WaypointManager.syncErrorDetail(panelWorldId) : null;
         settingsPanelW = Math.min(360, width - HUD_MARGIN * 2);
-        settingsPanelH = (showGhastScannerRow ? 214 : 190) + 24 + 72 + 168 + 24 + (syncErrorDetail != null ? 12 : 0);
+        int naturalPanelH = (showGhastScannerRow ? 214 : 190) + 24 + 72 + 168 + 48 + 24
+                + (syncErrorDetail != null ? 12 : 0);
+        SettingsPanelLayout.Result panelLayout = SettingsPanelLayout.calculate(
+                naturalPanelH, footerTop, HUD_MARGIN, HUD_GAP, settingsScroll);
+        settingsPanelH = panelLayout.panelHeight();
+        settingsMaxScroll = panelLayout.maxScroll();
+        settingsScroll = panelLayout.scroll();
         settingsPanelX = width - settingsPanelW - HUD_MARGIN;
         settingsPanelY = Math.max(HUD_MARGIN, footerTop - settingsPanelH - HUD_GAP);
         drawGlassPanel(g, settingsPanelX, settingsPanelY, settingsPanelW, settingsPanelH, 0xDD030914, 0xFF3BA4FF);
 
         int x = settingsPanelX + 12;
-        int y = settingsPanelY + 10;
+        int y = settingsPanelY + 10 - settingsScroll;
+        speedMinusX = speedMinusY = speedPlusX = speedPlusY = -1;
         pauseRowY = y + 20;
         speedRowY = y + 44;
         cutawayRowY = y + 68;
         vanillaSquadRowY = y + 92;
         vanillaSquadFlagsRowY = y + 116;
         vanillaSquadMapRowY = y + 140;
-        g.text(minecraft.font, Component.translatable("screen.voxymap.settings.title"), x, y, 0xFFFFFFFF);
+        g.text(minecraft.font, Component.translatable("screen.voxymap.settings.title"), x, settingsPanelY + 10, 0xFFFFFFFF);
         drawSettingValue(g, x, pauseRowY, "screen.voxymap.settings.pause", onOff(VoxyMapSettings.pauseSingleplayer()), 0);
         drawSettingValue(g, x, speedRowY, "screen.voxymap.settings.speed", String.format("%.2fx", VoxyMapSettings.cameraSpeedMultiplier()), 1);
         drawSettingValue(g, x, cutawayRowY, "screen.voxymap.settings.cutaway", onOff(VoxyMapSettings.roomCutawayEnabled()), 2);
@@ -1941,7 +1869,10 @@ public class MapScreen extends Screen {
         int afterSyncStatus = syncStatusRowY + SETTINGS_ROW_HEIGHT;
         if (syncErrorDetail != null) {
             String detailText = syncErrorDetail.length() > 60 ? syncErrorDetail.substring(0, 57) + "..." : syncErrorDetail;
-            g.text(minecraft.font, detailText, x, afterSyncStatus, 0xFFFF8080);
+            if (afterSyncStatus >= settingsPanelY + 28
+                    && afterSyncStatus + 10 <= settingsPanelY + settingsPanelH - 6) {
+                g.text(minecraft.font, detailText, x, afterSyncStatus, 0xFFFF8080);
+            }
             afterSyncStatus += 12;
         }
 
@@ -2020,9 +1951,33 @@ public class MapScreen extends Screen {
 
         deathPointsRowY = chunkGridRowY + 24;
         drawSettingValue(g, x, deathPointsRowY, "screen.voxymap.settings.deathpoints", onOff(VoxyMapSettings.deathPointsEnabled()), 18);
+
+        fogSuppressionRowY = deathPointsRowY + 24;
+        drawSettingValue(g, x, fogSuppressionRowY, "screen.voxymap.settings.fogsuppression", onOff(VoxyMapSettings.fogSuppressionEnabled()), 19);
+        diagnosticsRowY = fogSuppressionRowY + 24;
+        String diagnosticsValue;
+        if (!RoomCutawayShaderPatcher.isSupported()) {
+            diagnosticsValue = Component.translatable("screen.voxymap.diagnostics.shader_unsupported").getString();
+        } else if (!OreMaskController.isSupported()) {
+            diagnosticsValue = Component.translatable("screen.voxymap.diagnostics.ore_mask_unsupported").getString();
+        } else {
+            diagnosticsValue = Component.translatable("screen.voxymap.diagnostics.ok").getString();
+        }
+        drawSettingValue(g, x, diagnosticsRowY, "screen.voxymap.settings.diagnostics", diagnosticsValue, 20);
+        if (settingsMaxScroll > 0) {
+            int trackTop = settingsPanelY + 30;
+            int trackH = settingsPanelH - 40;
+            int thumbH = Math.max(18, trackH * settingsPanelH / naturalPanelH);
+            int thumbY = trackTop + (trackH - thumbH) * settingsScroll / settingsMaxScroll;
+            g.fill(settingsPanelX + settingsPanelW - 4, trackTop,
+                    settingsPanelX + settingsPanelW - 2, trackTop + trackH, 0x553BA4FF);
+            g.fill(settingsPanelX + settingsPanelW - 4, thumbY,
+                    settingsPanelX + settingsPanelW - 2, thumbY + thumbH, 0xFF7DEBFF);
+        }
     }
 
     private void drawSyncStatusRow(GuiGraphicsExtractor g, int x, int y, WaypointManager.SyncStatus status) {
+        if (!isSettingsRowVisible(y)) return;
         int rowX = settingsPanelX + 8;
         int rowW = settingsPanelW - 16;
         g.fill(rowX, y, rowX + rowW, y + SETTINGS_ROW_HEIGHT - 2, 0x66102034);
@@ -2056,6 +2011,7 @@ public class MapScreen extends Screen {
     }
 
     private void drawSettingValue(GuiGraphicsExtractor g, int x, int y, String labelKey, String value, int row) {
+        if (!isSettingsRowVisible(y)) return;
         int rowX = settingsPanelX + 8;
         int rowW = settingsPanelW - 16;
         g.fill(rowX, y, rowX + rowW, y + SETTINGS_ROW_HEIGHT - 2, 0x66102034);
@@ -2089,6 +2045,8 @@ public class MapScreen extends Screen {
             valueColor = VoxyMapSettings.chunkGridEnabled() ? 0xFF55FF55 : 0xFFFF5555;
         } else if (row == 18) {
             valueColor = VoxyMapSettings.deathPointsEnabled() ? 0xFF55FF55 : 0xFFFF5555;
+        } else if (row == 19) {
+            valueColor = VoxyMapSettings.fogSuppressionEnabled() ? 0xFF55FF55 : 0xFFFF5555;
         } else {
             valueColor = 0xFFFFFFFF;
         }
@@ -2312,6 +2270,10 @@ public class MapScreen extends Screen {
             refreshObjectPanel();
             return true;
         }
+        if (isInsideSettingsPanel(mouseX, mouseY) && settingsMaxScroll > 0 && scrollY != 0.0) {
+            settingsScroll = Mth.clamp(settingsScroll - (int) Math.signum(scrollY) * 24, 0, settingsMaxScroll);
+            return true;
+        }
         if (scrollY == 0.0) {
             return true;
         }
@@ -2473,6 +2435,7 @@ public class MapScreen extends Screen {
         }
         if (rightDragging) {
             viewYaw += deltaX * 0.01;
+            viewPitch = Mth.clamp(viewPitch + deltaY * 0.006, 0.0, 1.285);
             syncWorldCamera();
             return true;
         }

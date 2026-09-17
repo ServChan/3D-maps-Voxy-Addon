@@ -95,6 +95,7 @@
   "screen.voxymap.settings.minimaprotate": "\u041f\u043e\u0432\u043e\u0440\u043e\u0442 \u043c\u0438\u043d\u0438\u043a\u0430\u0440\u0442\u044b",
   "screen.voxymap.settings.chunkgrid": "\u0421\u0435\u0442\u043a\u0430 \u0447\u0430\u043d\u043a\u043e\u0432",
   "screen.voxymap.settings.deathpoints": "\u0422\u043e\u0447\u043a\u0438 \u0441\u043c\u0435\u0440\u0442\u0438",
+  "screen.voxymap.settings.fogsuppression": "\u041f\u043e\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0442\u0443\u043c\u0430\u043d\u0430",
   "screen.voxymap.waypoint.death_name": "\u0422\u043e\u0447\u043a\u0430 \u0441\u043c\u0435\u0440\u0442\u0438",
   "screen.voxymap.waypoint.no_surface": "Под курсором нет загруженной поверхности",
   "screen.voxymap.waypoint.picking": "Ищу видимую поверхность…",
@@ -113,5 +114,10 @@
   "screen.voxymap.objects.edit": "Править",
   "screen.voxymap.objects.delete": "Удалить",
   "screen.voxymap.settings.on": "\u0412\u043a\u043b.",
-  "screen.voxymap.settings.off": "\u0412\u044b\u043a\u043b."
+  "screen.voxymap.settings.off": "\u0412\u044b\u043a\u043b.",
+  "screen.voxymap.settings.diagnostics": "\u0414\u0438\u0430\u0433\u043d\u043e\u0441\u0442\u0438\u043a\u0430",
+  "screen.voxymap.config.title": "\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 VoxyMap",
+  "screen.voxymap.diagnostics.ok": "\u0412\u0441\u0435 \u0438\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438 \u0440\u0430\u0431\u043e\u0442\u0430\u044e\u0442",
+  "screen.voxymap.diagnostics.shader_unsupported": "\u0428\u0435\u0439\u0434\u0435\u0440 Voxy \u043d\u0435\u0441\u043e\u0432\u043c\u0435\u0441\u0442\u0438\u043c",
+  "screen.voxymap.diagnostics.ore_mask_unsupported": "\u041c\u0430\u0441\u043a\u0438\u0440\u043e\u0432\u043a\u0430 \u0440\u0443\u0434 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430"
 }

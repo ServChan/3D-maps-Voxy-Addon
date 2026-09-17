@@ -95,6 +95,7 @@
   "screen.voxymap.settings.minimaprotate": "Obr\u00f3t minimapy",
   "screen.voxymap.settings.chunkgrid": "Siatka czank\u00f3w",
   "screen.voxymap.settings.deathpoints": "Punkty \u015bmierci",
+  "screen.voxymap.settings.fogsuppression": "T\u0142umienie mg\u0142y",
   "screen.voxymap.waypoint.death_name": "Punkt \u015bmierci",
   "screen.voxymap.waypoint.no_surface": "Brak wczytanego terenu pod kursorem",
   "screen.voxymap.waypoint.picking": "Szukanie widocznej powierzchni…",
@@ -113,5 +114,10 @@
   "screen.voxymap.objects.edit": "Edytuj",
   "screen.voxymap.objects.delete": "Usuń",
   "screen.voxymap.settings.on": "W\u0142.",
-  "screen.voxymap.settings.off": "Wy\u0142."
+  "screen.voxymap.settings.off": "Wy\u0142.",
+  "screen.voxymap.settings.diagnostics": "Diagnostyka",
+  "screen.voxymap.config.title": "Ustawienia VoxyMap",
+  "screen.voxymap.diagnostics.ok": "Wszystkie integracje dzia\u0142aj\u0105",
+  "screen.voxymap.diagnostics.shader_unsupported": "Shader Voxy nieobs\u0142ugiwany",
+  "screen.voxymap.diagnostics.ore_mask_unsupported": "Maska rud niedost\u0119pna"
 }

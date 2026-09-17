@@ -19,6 +19,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -89,6 +90,9 @@ public final class MapShareClient {
     // one to actually free the code first.
     private static final long CONFIRMATION_POLL_TIMEOUT_SECONDS = 130;
     private static final long CONFIRMATION_POLL_INTERVAL_MILLIS = 400;
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration CONTROL_REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    private static final Duration TRANSFER_REQUEST_TIMEOUT = Duration.ofMinutes(31);
 
     // HTTP/1.1 is forced: the relay server is a plain com.sun.net.httpserver.HttpServer that never
     // speaks h2c, but HttpClient's default HTTP_2 preference still attempts a cleartext upgrade
@@ -96,13 +100,14 @@ public final class MapShareClient {
     // hangs forever instead of falling back, which is what "infinite connecting" turned out to be.
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
-            .executor(Executors.newCachedThreadPool(runnable -> {
+            .connectTimeout(CONNECT_TIMEOUT)
+            .executor(Executors.newFixedThreadPool(4, runnable -> {
                 Thread thread = new Thread(runnable, "VoxyMap-MapShare-Http");
                 thread.setDaemon(true);
                 return thread;
             }))
             .build();
-    private static final ExecutorService WORKERS = Executors.newCachedThreadPool(runnable -> {
+    private static final ExecutorService WORKERS = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "VoxyMap-MapShare-Worker");
         thread.setDaemon(true);
         return thread;
@@ -287,9 +292,11 @@ public final class MapShareClient {
         shareSectionsTotalThisAttempt = 0;
         shareEstimatedBytes = 0;
 
-        long estimatedBytes = VoxySectionBridge.estimateExportBytes(worldId, bounds);
+        long estimatedBytes = MapShareProtocolLimits.estimatedBytes(
+                VoxySectionBridge.estimateExportBytes(worldId, bounds));
         HttpRequest waitRequest = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code + "/wait"))
                 .header(ESTIMATED_BYTES_HEADER, Long.toString(estimatedBytes))
+                .timeout(TRANSFER_REQUEST_TIMEOUT)
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
         shareStatus = ShareStatus.WAITING;
@@ -331,10 +338,18 @@ public final class MapShareClient {
 
         HttpRequest dataRequest = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code))
                 .header(SENDER_TOKEN_HEADER, token)
+                .timeout(TRANSFER_REQUEST_TIMEOUT)
                 .POST(HttpRequest.BodyPublishers.ofInputStream(() -> pipeIn))
                 .build();
         shareStatus = ShareStatus.SENDING;
-        HttpResponse<Void> dataResponse = HTTP.send(dataRequest, HttpResponse.BodyHandlers.discarding());
+        HttpResponse<Void> dataResponse;
+        try {
+            dataResponse = HTTP.send(dataRequest, HttpResponse.BodyHandlers.discarding());
+        } finally {
+            pipeIn.close();
+            writer.interrupt();
+            writer.join(1000);
+        }
         if (dataResponse.statusCode() == 200) {
             shareCompletedCount++;
             shareError = null;
@@ -351,7 +366,8 @@ public final class MapShareClient {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(CONFIRMATION_POLL_TIMEOUT_SECONDS);
         while (sharingActive && System.nanoTime() < deadline) {
             try {
-                HttpRequest statusRequest = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code + "/status")).GET().build();
+                HttpRequest statusRequest = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code + "/status"))
+                        .timeout(CONTROL_REQUEST_TIMEOUT).GET().build();
                 HttpResponse<String> statusResponse = HTTP.send(statusRequest, HttpResponse.BodyHandlers.ofString());
                 if (statusResponse.statusCode() == 404) {
                     return null; // Declined (frees the code immediately) or reaped as abandoned.
@@ -374,11 +390,14 @@ public final class MapShareClient {
         out.writeByte(PROTOCOL_VERSION);
 
         List<VoxySectionBridge.MappingRow> mappings = VoxySectionBridge.exportMappings(worldId);
-        out.writeInt(mappings.size());
+        out.writeInt(MapShareProtocolLimits.mappingCount(mappings.size()));
+        long mappingBytes = 0;
         for (VoxySectionBridge.MappingRow row : mappings) {
             out.writeInt(row.packedKey());
-            out.writeInt(row.data().length);
+            int rowLength = MapShareProtocolLimits.mappingRowLength(row.data().length, mappingBytes);
+            out.writeInt(rowLength);
             out.write(row.data());
+            mappingBytes += rowLength;
         }
 
         long sectionCount = VoxySectionBridge.exportedSectionCount(worldId, bounds);
@@ -387,7 +406,16 @@ public final class MapShareClient {
 
         // Upper bound, not exact - a key can still turn out to have no data by the time we get to it
         // (see the null check below) and yield fewer than 8 chunk-sections. Good enough for a progress %.
-        int total = (int) (sectionCount * 8);
+        long chunkSectionCount;
+        try {
+            chunkSectionCount = Math.multiplyExact(sectionCount, 8L);
+        } catch (ArithmeticException overflow) {
+            throw new IOException("Map-share section count overflow", overflow);
+        }
+        if (chunkSectionCount > Integer.MAX_VALUE) {
+            throw new IOException("Map-share selection contains too many sections");
+        }
+        int total = MapShareProtocolLimits.declaredSectionCount((int) chunkSectionCount);
         shareSectionsTotalThisAttempt = total;
         out.writeInt(total);
 
@@ -400,7 +428,7 @@ public final class MapShareClient {
         int[] sent = {0};
         IOException[] failure = new IOException[1];
         VoxySectionBridge.forEachExportedSectionKey(worldId, bounds, sectionKey -> {
-            if (failure[0] != null || !sharingActive) {
+            if (failure[0] != null || !sharingActive || Thread.currentThread().isInterrupted()) {
                 return;
             }
             try {
@@ -500,16 +528,16 @@ public final class MapShareClient {
 
     private static void receiveInfoOnce(String baseUrl, String code) {
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code + "/info")).GET().build();
+            HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code + "/info"))
+                    .timeout(CONTROL_REQUEST_TIMEOUT).GET().build();
             HttpResponse<Void> response = HTTP.send(request, HttpResponse.BodyHandlers.discarding());
             if (response.statusCode() != 200) {
                 receiveError = "HTTP " + response.statusCode();
                 receiveStatus = ReceiveStatus.ERROR;
                 return;
             }
-            receiveEstimatedBytes = response.headers().firstValue(ESTIMATED_BYTES_HEADER)
-                    .map(value -> { try { return Long.parseLong(value); } catch (NumberFormatException e) { return 0L; } })
-                    .orElse(0L);
+            receiveEstimatedBytes = MapShareProtocolLimits.estimatedBytes(
+                    response.headers().firstValue(ESTIMATED_BYTES_HEADER).orElse("0"));
             receiveStatus = ReceiveStatus.AWAITING_CONFIRMATION;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -531,6 +559,7 @@ public final class MapShareClient {
         activeReceiveTask = WORKERS.submit(() -> {
             try {
                 HttpRequest confirmRequest = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code + "/confirm"))
+                        .timeout(CONTROL_REQUEST_TIMEOUT)
                         .POST(HttpRequest.BodyPublishers.noBody()).build();
                 HttpResponse<Void> confirmResponse = HTTP.send(confirmRequest, HttpResponse.BodyHandlers.discarding());
                 if (confirmResponse.statusCode() != 200) {
@@ -560,6 +589,7 @@ public final class MapShareClient {
         WORKERS.submit(() -> {
             try {
                 HttpRequest declineRequest = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code + "/decline"))
+                        .timeout(CONTROL_REQUEST_TIMEOUT)
                         .POST(HttpRequest.BodyPublishers.noBody()).build();
                 HTTP.send(declineRequest, HttpResponse.BodyHandlers.discarding());
             } catch (IOException | InterruptedException exception) {
@@ -573,7 +603,8 @@ public final class MapShareClient {
 
     private static void receiveDataOnce(Minecraft minecraft, WorldIdentifier worldId, String baseUrl, String code) {
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code)).GET().build();
+            HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/relay/" + code))
+                    .timeout(TRANSFER_REQUEST_TIMEOUT).GET().build();
             HttpResponse<InputStream> response = HTTP.send(request, HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() != 200) {
                 receiveError = "HTTP " + response.statusCode();
@@ -581,7 +612,8 @@ public final class MapShareClient {
                 return;
             }
             receiveStatus = ReceiveStatus.RECEIVING;
-            try (DataInputStream in = new DataInputStream(new GZIPInputStream(new BufferedInputStream(response.body(), 1 << 16)))) {
+            try (DataInputStream in = new DataInputStream(MapShareProtocolLimits.limitDecompressed(
+                    new GZIPInputStream(new BufferedInputStream(response.body(), 1 << 16))))) {
                 readImport(minecraft, worldId, in, code);
             }
             // stopIfWorldChanged can have already moved this to ERROR mid-loop (readImport's while
@@ -609,25 +641,28 @@ public final class MapShareClient {
             throw new IOException("Unsupported protocol version " + version);
         }
 
-        int mappingCount = in.readInt();
-        List<VoxySectionBridge.MappingRow> mappings = new ArrayList<>(Math.max(0, mappingCount));
+        int mappingCount = MapShareProtocolLimits.mappingCount(in.readInt());
+        List<VoxySectionBridge.MappingRow> mappings = new ArrayList<>(mappingCount);
+        long mappingBytes = 0;
         for (int i = 0; i < mappingCount; i++) {
             int key = in.readInt();
-            int length = in.readInt();
+            int length = MapShareProtocolLimits.mappingRowLength(in.readInt(), mappingBytes);
             byte[] data = new byte[length];
             in.readFully(data);
             mappings.add(new VoxySectionBridge.MappingRow(key, data));
+            mappingBytes += length;
         }
         VoxySectionBridge.IdTranslation translation = VoxySectionBridge.buildTranslation(minecraft, worldId, mappings);
         // Version 3 added this field - an older sender's stream jumps straight from the mapping table
         // into chunk-sections, so reading it unconditionally would misparse the first one's chunkX.
-        receiveTotalCount = version >= 3 ? in.readInt() : 0;
+        receiveTotalCount = version >= 3 ? MapShareProtocolLimits.declaredSectionCount(in.readInt()) : 0;
         VoxyMapClient.LOGGER.info("[VoxyMap] Map receive {}: got {} mapping rows (sender protocol v{}), importing{}...",
                 code, mappings.size(), version, receiveTotalCount > 0 ? " up to " + receiveTotalCount + " sections" : "");
 
         // Shared across the whole session - see the "already explored" cache note on importChunkSection.
         Map<VoxySectionBridge.WorldSectionKey, Boolean> worldSectionCache = new HashMap<>();
         long[] voxels = new long[CHUNK_SECTION_VOXELS];
+        int sectionIndex = 0;
         while (receiveStatus == ReceiveStatus.RECEIVING) {
             int chunkX;
             try {
@@ -637,6 +672,8 @@ public final class MapShareClient {
             }
             int chunkY = in.readInt();
             int chunkZ = in.readInt();
+            MapShareProtocolLimits.sectionIndex(sectionIndex, receiveTotalCount);
+            MapShareProtocolLimits.coordinates(chunkX, chunkY, chunkZ);
             for (int i = 0; i < voxels.length; i++) {
                 voxels[i] = in.readLong();
             }
@@ -645,6 +682,7 @@ public final class MapShareClient {
             } else {
                 receiveSkippedCount++;
             }
+            sectionIndex++;
             int total = receiveImportedCount + receiveSkippedCount;
             if (total % PROGRESS_LOG_INTERVAL == 0) {
                 VoxyMapClient.LOGGER.info("[VoxyMap] Map receive {}: {} imported, {} already had, still going...",

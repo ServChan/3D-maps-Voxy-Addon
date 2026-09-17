@@ -13,12 +13,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.List;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Standalone HTTP server backing two VoxyMap features. Plain Java, no Minecraft/Fabric dependency -
  * run it anywhere with
- * {@code java -jar voxymap-sync-server.jar [--port 8642] [--password <secret>] [--data <dir>]}.
+ * {@code java -jar voxymap-sync-server.jar [--bind 127.0.0.1] [--port 8642]
+ * [--password <secret>] [--data <dir>]}.
  *
  * <p>Waypoint sync (JSON bodies, UTF-8 - see {@link WaypointJson}):
  * <pre>
@@ -42,31 +45,35 @@ import java.util.concurrent.Executors;
  * public deployment. Put it behind a reverse proxy with TLS if it needs to be internet-facing.
  */
 public final class WaypointSyncServer {
+    private static final int MAX_WAYPOINT_BODY_BYTES = 64 * 1024;
+
     private WaypointSyncServer() {
     }
 
     public static void main(String[] args) throws IOException {
         int port = 8642;
+        String bindAddress = "127.0.0.1";
         String password = null;
         Path dataDir = Path.of("voxymap-sync-data");
 
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--port" -> port = Integer.parseInt(args[++i]);
+                case "--bind" -> bindAddress = args[++i];
                 case "--password" -> password = args[++i];
                 case "--data" -> dataDir = Path.of(args[++i]);
                 default -> {
                     System.err.println("Unknown argument: " + args[i]);
-                    System.err.println("Usage: java -jar voxymap-sync-server.jar [--port 8642] [--password secret] [--data ./voxymap-sync-data]");
+                    System.err.println("Usage: java -jar voxymap-sync-server.jar [--bind 127.0.0.1] [--port 8642] [--password secret] [--data ./voxymap-sync-data]");
                     System.exit(1);
                     return;
                 }
             }
         }
 
-        HttpServer server = start(port, password, dataDir);
+        HttpServer server = start(bindAddress, port, password, dataDir);
 
-        System.out.println("[voxymap-sync-server] Listening on port " + server.getAddress().getPort() + ", data dir " + dataDir.toAbsolutePath());
+        System.out.println("[voxymap-sync-server] Listening on " + server.getAddress() + ", data dir " + dataDir.toAbsolutePath());
         System.out.println("[voxymap-sync-server] Write access is "
                 + (password == null || password.isEmpty()
                         ? "DISABLED (read-only server - pass --password <secret> to enable adding/editing)"
@@ -75,15 +82,27 @@ public final class WaypointSyncServer {
 
     /** Package-private so tests can start a server on an ephemeral port (0) and stop it afterward. */
     static HttpServer start(int port, String password, Path dataDir) throws IOException {
+        return start("127.0.0.1", port, password, dataDir);
+    }
+
+    static HttpServer start(String bindAddress, int port, String password, Path dataDir) throws IOException {
         WaypointStore store = new WaypointStore(dataDir);
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(bindAddress, port), 128);
         server.createContext("/waypoints/", new WaypointHandler(store, password));
         server.createContext("/relay/", new MapRelayHandler());
-        server.setExecutor(Executors.newCachedThreadPool(runnable -> {
+        int processors = Runtime.getRuntime().availableProcessors();
+        server.setExecutor(new ThreadPoolExecutor(
+                Math.max(4, Math.min(8, processors)),
+                Math.max(8, Math.min(32, processors * 2)),
+                60L,
+                TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(256),
+                runnable -> {
             Thread thread = new Thread(runnable, "voxymap-sync-server");
             thread.setDaemon(true);
             return thread;
-        }));
+                },
+                new ThreadPoolExecutor.AbortPolicy()));
         server.start();
         return server;
     }
@@ -93,6 +112,8 @@ public final class WaypointSyncServer {
         public void handle(HttpExchange exchange) throws IOException {
             try {
                 route(exchange);
+            } catch (RequestTooLargeException exception) {
+                respond(exchange, 413, "");
             } catch (RuntimeException exception) {
                 System.err.println("[voxymap-sync-server] Unhandled error handling " + exchange.getRequestURI() + ": " + exception);
                 respond(exchange, 500, "");
@@ -162,8 +183,15 @@ public final class WaypointSyncServer {
 
         private static String readBody(HttpExchange exchange) throws IOException {
             try (InputStream input = exchange.getRequestBody()) {
-                return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+                byte[] bytes = input.readNBytes(MAX_WAYPOINT_BODY_BYTES + 1);
+                if (bytes.length > MAX_WAYPOINT_BODY_BYTES) {
+                    throw new RequestTooLargeException();
+                }
+                return new String(bytes, StandardCharsets.UTF_8);
             }
+        }
+
+        private static final class RequestTooLargeException extends IOException {
         }
 
         private static void respondJson(HttpExchange exchange, int status, String body) throws IOException {

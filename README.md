@@ -46,7 +46,7 @@ Iris, Xaero's World Map, and HappyGhastScanner are optional integrations. The mo
 | Double left click terrain | Add a waypoint on the exact visible Voxy surface |
 | Left click a waypoint | Select it; click again or press `Enter` to rename |
 | `Delete` / `Ctrl+Z` | Delete the selected waypoint / undo deletion |
-| Right mouse drag | Rotate the camera |
+| Right mouse drag | Rotate and tilt the camera |
 | Mouse wheel / `+` / `-` | Zoom toward the cursor |
 | `W/A/S/D` or arrow keys | Move the camera |
 | `Shift` | Move faster |
@@ -67,22 +67,25 @@ The build targets Minecraft 26.2 and produces the distributable JAR:
 
 The normal non-sources JAR is written to `build/libs/voxy-map-<version>.jar`.
 
+Before publishing, complete the [runtime regression checklist](docs/runtime-regression-checklist.md).
+It covers shader, Nether, crowded-player, minimap and two-client paths that unit tests cannot prove.
+
 ## Waypoint sync server
 
 `voxymap-sync-server` is a small standalone program (no Minecraft/Fabric, no other dependency) that lets several VoxyMap clients share one waypoint list per Voxy world over HTTP. It's a separate build from the mod itself:
 
 ```powershell
 .\gradlew.bat syncServerJar
-java -jar build\libs\voxymap-sync-server-<version>.jar --port 8642 --password mysecret
+java -jar build\libs\voxymap-sync-server-<version>.jar --bind 0.0.0.0 --port 8642 --password mysecret
 ```
 
 or run it directly from the Gradle build with `.\gradlew.bat runSyncServer --args="--port 8642 --password mysecret"`.
 
-Arguments (all optional): `--port <int>` (default `8642`), `--password <secret>` (omit to run permanently read-only), `--data <dir>` (default `./voxymap-sync-data`, one JSON file per Voxy world).
+Arguments (all optional): `--bind <address>` (default `127.0.0.1`; use `0.0.0.0` deliberately for LAN access), `--port <int>` (default `8642`), `--password <secret>` (omit to run permanently read-only), `--data <dir>` (default `./voxymap-sync-data`, one JSON file per Voxy world).
 
 In VoxyMap's map Settings panel, set **Sync address** to `host:port` for a world to pull that world's waypoints from the server read-only; also set **Sync password** to match the server's `--password` to add, rename, and delete through it too. There's exactly one password for the whole server - not a per-player account system - so "knows the address" and "knows the address and the password" are the only two access levels.
 
-Traffic is plain HTTP with no encryption, by design: this is meant for a trusted LAN or a small friend group's own server, not a public deployment. Put a TLS-terminating reverse proxy in front of it if it needs to be reachable over the open internet.
+Traffic is plain HTTP with no encryption, by design: this is meant for a trusted LAN or a small friend group's own server, not a public deployment. It binds only to localhost by default. Put a TLS-terminating reverse proxy with request-rate limits in front of it if it needs to be reachable over the open internet. The built-in server bounds waypoint request bodies, worker concurrency and relay-code claim attempts, but it is not an internet-facing identity or authorization service.
 
 ### Map sharing
 

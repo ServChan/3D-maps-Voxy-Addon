@@ -120,7 +120,11 @@ final class VoxySectionBridge {
     }
 
     static long estimateExportBytes(WorldIdentifier worldId, MapShareBounds bounds) {
-        return exportedSectionCount(worldId, bounds) * 8L * 4096L * 8L;
+        try {
+            return Math.multiplyExact(exportedSectionCount(worldId, bounds), 8L * 4096L * 8L);
+        } catch (ArithmeticException overflow) {
+            return Long.MAX_VALUE;
+        }
     }
 
     /** Copies one level-0 section's raw 32x32x32 voxel data out (still in the sender's own local

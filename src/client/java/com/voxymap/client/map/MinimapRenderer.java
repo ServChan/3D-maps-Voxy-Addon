@@ -128,7 +128,7 @@ public final class MinimapRenderer {
         g.centeredText(minecraft.font, text, x + width / 2, y + 3, 0xFFDFF8FF);
     }
 
-    private static int coord(double value) {
+    static int coord(double value) {
         return (int) Math.floor(value);
     }
 
@@ -162,7 +162,7 @@ public final class MinimapRenderer {
         texture.upload();
     }
 
-    private static int argbToAbgr(int argb) {
+    static int argbToAbgr(int argb) {
         int a = (argb >>> 24) & 0xFF;
         int r = (argb >>> 16) & 0xFF;
         int gr = (argb >>> 8) & 0xFF;
@@ -222,11 +222,11 @@ public final class MinimapRenderer {
         drawDot(g, centerX, centerY, MARKER_RADIUS, 0xFF55E7FF);
     }
 
-    private static double rotatedX(double dx, double dz, double cosA, double sinA) {
+    static double rotatedX(double dx, double dz, double cosA, double sinA) {
         return dx * cosA - dz * sinA;
     }
 
-    private static double rotatedZ(double dx, double dz, double cosA, double sinA) {
+    static double rotatedZ(double dx, double dz, double cosA, double sinA) {
         return dx * sinA + dz * cosA;
     }
 
@@ -317,22 +317,32 @@ public final class MinimapRenderer {
      * short tail pointing further outward, distinguishing it from an in-range dot at a glance. */
     private static void drawOffscreenWaypoint(GuiGraphicsExtractor g, int centerX, int centerY, double edgeHalf,
                                                double dx, double dz, int color) {
-        double distance = Math.hypot(dx, dz);
-        if (distance < 0.001) {
+        if (Math.hypot(dx, dz) < 0.001) {
             return;
         }
+        SquareEdgePoint edge = squareEdgeIntersection(dx, dz, edgeHalf);
+        int ex = centerX + edge.x();
+        int ey = centerY + edge.y();
+        int tailX = ex + (int) Math.round(edge.dirX() * 6.0);
+        int tailY = ey + (int) Math.round(edge.dirZ() * 6.0);
+        drawLine(g, ex, ey, tailX, tailY, color);
+        drawDot(g, ex, ey, MARKER_RADIUS + 1, 0xEE0A0A12);
+        drawDot(g, ex, ey, MARKER_RADIUS, color);
+    }
+
+    /** Where the ray from the center toward (dx, dz) crosses a square of half-size {@code edgeHalf} -
+     * used to pin an off-screen waypoint's indicator to the minimap's edge. */
+    static SquareEdgePoint squareEdgeIntersection(double dx, double dz, double edgeHalf) {
+        double distance = Math.hypot(dx, dz);
         double dirX = dx / distance;
         double dirZ = dz / distance;
         double t = Math.min(
                 dirX == 0.0 ? Double.MAX_VALUE : edgeHalf / Math.abs(dirX),
                 dirZ == 0.0 ? Double.MAX_VALUE : edgeHalf / Math.abs(dirZ));
-        int ex = centerX + (int) Math.round(dirX * t);
-        int ey = centerY + (int) Math.round(dirZ * t);
-        int tailX = ex + (int) Math.round(dirX * 6.0);
-        int tailY = ey + (int) Math.round(dirZ * 6.0);
-        drawLine(g, ex, ey, tailX, tailY, color);
-        drawDot(g, ex, ey, MARKER_RADIUS + 1, 0xEE0A0A12);
-        drawDot(g, ex, ey, MARKER_RADIUS, color);
+        return new SquareEdgePoint((int) Math.round(dirX * t), (int) Math.round(dirZ * t), dirX, dirZ);
+    }
+
+    record SquareEdgePoint(int x, int y, double dirX, double dirZ) {
     }
 
     /** A short wedge pointing where the player is currently facing - the only facing cue on the minimap

@@ -321,4 +321,23 @@ class MapRelayHandlerTest {
                 HttpResponse.BodyHandlers.discarding());
         assertEquals(404, response.statusCode());
     }
+
+    @Test
+    void invalidOrImplausiblyLargeEstimateIsRejected() throws Exception {
+        startServer();
+
+        HttpResponse<Void> malformed = CLIENT.send(
+                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/123123/wait"))
+                        .header("X-VoxyMap-Estimated-Bytes", "not-a-number")
+                        .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
+                HttpResponse.BodyHandlers.discarding());
+        HttpResponse<Void> enormous = CLIENT.send(
+                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/123124/wait"))
+                        .header("X-VoxyMap-Estimated-Bytes", Long.toString((1L << 40) + 1))
+                        .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
+                HttpResponse.BodyHandlers.discarding());
+
+        assertEquals(400, malformed.statusCode());
+        assertEquals(400, enormous.statusCode());
+    }
 }

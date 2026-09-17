@@ -1,0 +1,31 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+      - name: Build mod and sync server
+        run: .\gradlew.bat clean test build syncServerJar --warning-mode all
+      - name: Verify patch cleanliness
+        run: git diff --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voxymap-build
+          path: |
+            build/libs/voxy-map-*.jar
+            build/libs/voxymap-sync-server-*.jar
+          if-no-files-found: error

@@ -15,6 +15,9 @@
   "entrypoints": {
     "client": [
       "com.voxymap.client.VoxyMapClient"
+    ],
+    "modmenu": [
+      "com.voxymap.client.compat.VoxyMapModMenu"
     ]
   },
   "mixins": [

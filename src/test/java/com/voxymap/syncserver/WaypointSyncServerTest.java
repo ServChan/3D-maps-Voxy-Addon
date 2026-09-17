@@ -19,7 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WaypointSyncServerTest {
     private static final String WORLD = "0123456789abcdef0123456789abcdef";
-    private static final HttpClient CLIENT = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    private static final HttpClient CLIENT = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
 
     private HttpServer server;
 
@@ -108,6 +111,18 @@ class WaypointSyncServerTest {
 
         HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(baseUrl() + "/waypoints/not-a-world-id")).GET());
         assertEquals(404, response.statusCode());
+    }
+
+    @Test
+    void oversizedWaypointBodyIsRejectedBeforeJsonParsing() throws Exception {
+        server = WaypointSyncServer.start(0, "secret", tempDataDir());
+        String oversized = "x".repeat(64 * 1024 + 1);
+
+        HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(baseUrl() + "/waypoints/" + WORLD + "/id-1"))
+                .header("X-VoxyMap-Password", "secret")
+                .PUT(HttpRequest.BodyPublishers.ofString(oversized)));
+
+        assertEquals(413, response.statusCode());
     }
 
     private static HttpResponse<String> send(HttpRequest.Builder request) throws IOException, InterruptedException {

@@ -5,10 +5,8 @@ import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
@@ -37,6 +35,7 @@ public final class VoxyMapSettings {
     private static boolean minimapRotates = false;
     private static boolean chunkGridEnabled = false;
     private static boolean deathPointsEnabled = true;
+    private static boolean fogSuppressionEnabled = true;
 
     private VoxyMapSettings() {
     }
@@ -76,6 +75,7 @@ public final class VoxyMapSettings {
         minimapRotates = readBoolean(properties.getProperty("minimapRotates"), minimapRotates);
         chunkGridEnabled = readBoolean(properties.getProperty("chunkGridEnabled"), chunkGridEnabled);
         deathPointsEnabled = readBoolean(properties.getProperty("deathPointsEnabled"), deathPointsEnabled);
+        fogSuppressionEnabled = readBoolean(properties.getProperty("fogSuppressionEnabled"), fogSuppressionEnabled);
     }
 
     public static void save() {
@@ -95,26 +95,9 @@ public final class VoxyMapSettings {
         properties.setProperty("minimapRotates", Boolean.toString(minimapRotates));
         properties.setProperty("chunkGridEnabled", Boolean.toString(chunkGridEnabled));
         properties.setProperty("deathPointsEnabled", Boolean.toString(deathPointsEnabled));
+        properties.setProperty("fogSuppressionEnabled", Boolean.toString(fogSuppressionEnabled));
 
-        try {
-            Files.createDirectories(CONFIG_PATH.getParent());
-            try (OutputStream output = Files.newOutputStream(TEMP_PATH)) {
-                properties.store(output, "VoxyMap client settings");
-            }
-            // Preserve the last known-good backup if the primary file is corrupt. Blindly copying
-            // an unreadable primary here would destroy the only recoverable settings snapshot.
-            if (readProperties(CONFIG_PATH, false) != null) {
-                Files.copy(CONFIG_PATH, BACKUP_PATH, StandardCopyOption.REPLACE_EXISTING);
-            }
-            replaceAtomically(TEMP_PATH, CONFIG_PATH);
-        } catch (IOException exception) {
-            VoxyMapClient.LOGGER.error("[VoxyMap] Could not save settings to {}", CONFIG_PATH, exception);
-            try {
-                Files.deleteIfExists(TEMP_PATH);
-            } catch (IOException cleanupException) {
-                exception.addSuppressed(cleanupException);
-            }
-        }
+        AtomicPropertiesWriter.save(CONFIG_PATH, BACKUP_PATH, TEMP_PATH, properties, "VoxyMap client settings");
     }
 
     public static boolean pauseSingleplayer() {
@@ -136,6 +119,15 @@ public final class VoxyMapSettings {
     public static void changeCameraSpeed(double delta) {
         load();
         cameraSpeedMultiplier = clamp(cameraSpeedMultiplier + delta, 0.25, 4.0);
+        save();
+    }
+
+    /** Single-button variant of {@link #changeCameraSpeed} for the Mod Menu config screen, which (unlike
+     * the in-map settings panel) has no separate -/+ buttons - wraps back to the minimum past the
+     * maximum instead of clamping, like {@link #cycleTimeOfDayMode()}. */
+    public static void cycleCameraSpeed() {
+        load();
+        cameraSpeedMultiplier = cameraSpeedMultiplier >= 4.0 - 1e-9 ? 0.25 : clamp(cameraSpeedMultiplier + 0.25, 0.25, 4.0);
         save();
     }
 
@@ -258,6 +250,20 @@ public final class VoxyMapSettings {
     public static void toggleDeathPoints() {
         load();
         deathPointsEnabled = !deathPointsEnabled;
+        save();
+    }
+
+    /** Whether VoxyMap should suppress environmental/shader-pack fog while the map is open. Defaults
+     * to on since the fullscreen map view reads poorly through normal ground-level fog; players who
+     * prefer the atmospheric look (or hit a shader incompatibility) can turn it back off. */
+    public static boolean fogSuppressionEnabled() {
+        load();
+        return fogSuppressionEnabled;
+    }
+
+    public static void toggleFogSuppression() {
+        load();
+        fogSuppressionEnabled = !fogSuppressionEnabled;
         save();
     }
 
@@ -395,14 +401,6 @@ public final class VoxyMapSettings {
                 VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read settings from {}", path, exception);
             }
             return null;
-        }
-    }
-
-    private static void replaceAtomically(Path source, Path target) throws IOException {
-        try {
-            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
-            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 

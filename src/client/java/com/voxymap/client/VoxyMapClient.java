@@ -2,6 +2,7 @@ package com.voxymap.client;
 
 import com.voxymap.client.gui.MapScreen;
 import com.voxymap.client.compat.MinecraftCompat;
+import com.voxymap.client.map.AtomicPropertiesWriter;
 import com.voxymap.client.map.DeathWaypointTracker;
 import com.voxymap.client.map.MapShareClient;
 import com.voxymap.client.map.MobMarkerCache;
@@ -10,6 +11,7 @@ import com.voxymap.client.map.VoxyMapSettings;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.resources.Identifier;
@@ -51,6 +53,7 @@ public class VoxyMapClient implements ClientModInitializer {
             DeathWaypointTracker.tick(client);
             MobMarkerCache.tick(client);
         });
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> AtomicPropertiesWriter.flush());
 
         LOGGER.info("[VoxyMap] Loaded. Press M to open the map.");
     }

@@ -3,6 +3,7 @@ package com.voxymap.client.mixin;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.voxymap.client.map.VoxyMapCameraController;
+import com.voxymap.client.map.VoxyMapSettings;
 import net.minecraft.client.renderer.fog.FogRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -17,7 +18,7 @@ public abstract class FogRendererMixin {
 
     @Inject(method = "getBuffer", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void voxymap$disableFogInMap(FogRenderer.FogMode fogMode, CallbackInfoReturnable<GpuBufferSlice> cir) {
-        if (VoxyMapCameraController.isActive()) {
+        if (VoxyMapCameraController.isActive() && VoxyMapSettings.fogSuppressionEnabled()) {
             cir.setReturnValue(emptyBuffer.slice(0L, FogRenderer.FOG_UBO_SIZE));
         }
     }
