@@ -44,7 +44,8 @@ public abstract class MDICSectionRendererMixin {
 
     private record VoxymapUniformLocations(int enabled, int originX, int originZ, int globalCutoff,
                                             int apertureCenterX, int apertureCenterZ, int apertureInnerCutoff,
-                                            int apertureRadius, int oreMaskEnabled) {
+                                            int apertureRadius, int oreMaskEnabled, int sphereCenterX,
+                                            int sphereCenterY, int sphereCenterZ, int sphereRadius) {
     }
 
     private static VoxymapUniformLocations voxymap$locationsFor(int programId) {
@@ -58,7 +59,11 @@ public abstract class MDICSectionRendererMixin {
                     GL20C.glGetUniformLocation(id, "voxymapApertureCenterZ"),
                     GL20C.glGetUniformLocation(id, "voxymapApertureInnerY"),
                     GL20C.glGetUniformLocation(id, "voxymapApertureRadius"),
-                    GL20C.glGetUniformLocation(id, "voxymapOreMaskEnabled"));
+                    GL20C.glGetUniformLocation(id, "voxymapOreMaskEnabled"),
+                    GL20C.glGetUniformLocation(id, "voxymapSphereCenterX"),
+                    GL20C.glGetUniformLocation(id, "voxymapSphereCenterY"),
+                    GL20C.glGetUniformLocation(id, "voxymapSphereCenterZ"),
+                    GL20C.glGetUniformLocation(id, "voxymapSphereRadius"));
             if (locations.enabled() < 0) {
                 VoxyMapClient.LOGGER.warn("[VoxyMap] Room-cutaway uniform 'voxymapCutawayEnabled' was not found "
                         + "in the compiled Voxy shader (program {}, expected location {}) - the shader source "
@@ -103,7 +108,11 @@ public abstract class MDICSectionRendererMixin {
             return -1;
         }
         VoxymapUniformLocations locations = voxymap$locationsFor(shader.id());
-        boolean enabled = RoomCutawayController.isActive() && RoomCutawayTexture.isEnabled();
+        // Two independent reasons to have anything bound at all: the enclosed-room search found (and
+        // uploaded) a real ceiling, or the camera-centered reveal sphere is active - either alone must
+        // still turn the whole effect on, not just the one that happened to trigger it.
+        boolean enabled = RoomCutawayController.isActive()
+                && (RoomCutawayTexture.isEnabled() || RoomCutawayTexture.sphereRadius() > 0.0f);
         if (locations.enabled() >= 0) {
             GL41C.glProgramUniform1i(shader.id(), locations.enabled(), enabled ? 1 : 0);
         }
@@ -129,6 +138,22 @@ public abstract class MDICSectionRendererMixin {
             if (locations.apertureRadius() >= 0) {
                 GL41C.glProgramUniform1f(shader.id(), locations.apertureRadius(), RoomCutawayTexture.apertureRadius());
             }
+            if (locations.sphereCenterX() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.sphereCenterX(), (float) RoomCutawayTexture.sphereCenterX());
+            }
+            if (locations.sphereCenterY() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.sphereCenterY(), (float) RoomCutawayTexture.sphereCenterY());
+            }
+            if (locations.sphereCenterZ() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.sphereCenterZ(), (float) RoomCutawayTexture.sphereCenterZ());
+            }
+            if (locations.sphereRadius() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.sphereRadius(), RoomCutawayTexture.sphereRadius());
+            }
+            // Safe to bind unconditionally now even when only the sphere triggered `enabled` and the
+            // room search itself found nothing this cycle - RoomCutawayTexture seeds newly created
+            // storage to NO_CUT_VALUE (see its ensureCreated()), so an unbound-by-real-data texture
+            // samples as "nothing confirmed here" instead of stale/undefined contents.
             int previousTexture = GL30C.glGetIntegeri(GL11C.GL_TEXTURE_BINDING_2D, RoomCutawayTexture.TEXTURE_UNIT);
             GL45C.glBindTextureUnit(RoomCutawayTexture.TEXTURE_UNIT, RoomCutawayTexture.textureId());
             return previousTexture;

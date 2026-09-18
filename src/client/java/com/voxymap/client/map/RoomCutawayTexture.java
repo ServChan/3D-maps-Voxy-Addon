@@ -3,6 +3,7 @@ package com.voxymap.client.map;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL30C;
 import org.lwjgl.opengl.GL33C;
+import org.lwjgl.opengl.GL44C;
 import org.lwjgl.opengl.GL45C;
 import org.lwjgl.system.MemoryUtil;
 
@@ -31,6 +32,10 @@ public final class RoomCutawayTexture {
     private static float apertureCenterZ;
     private static float apertureInnerCutoff = NO_CUT_VALUE;
     private static float apertureRadius;
+    private static double sphereCenterX;
+    private static double sphereCenterY;
+    private static double sphereCenterZ;
+    private static float sphereRadius;
 
     private RoomCutawayTexture() {
     }
@@ -46,6 +51,13 @@ public final class RoomCutawayTexture {
         GL45C.glTextureParameteri(textureId, GL33C.GL_TEXTURE_MAG_FILTER, GL33C.GL_NEAREST);
         GL45C.glTextureParameteri(textureId, GL33C.GL_TEXTURE_WRAP_S, GL33C.GL_CLAMP_TO_EDGE);
         GL45C.glTextureParameteri(textureId, GL33C.GL_TEXTURE_WRAP_T, GL33C.GL_CLAMP_TO_EDGE);
+        // Immutable storage starts with driver-defined (commonly zero) contents. The shader treats a
+        // sampled 0.0f as "cut everything above world Y 0" rather than "nothing confirmed here" - if
+        // the texture were ever sampled before the first real update() (e.g. bound only because the
+        // sphere reveal is active while the room search hasn't found anything yet), an uncleared
+        // texture would silently carve up unrelated terrain. Seeding it to NO_CUT_VALUE up front makes
+        // "never updated" behave exactly like "nothing to cut" everywhere update() itself already does.
+        GL44C.glClearTexImage(textureId, 0, GL11C.GL_RED, GL11C.GL_FLOAT, new float[] {NO_CUT_VALUE});
     }
 
     /**
@@ -101,6 +113,36 @@ public final class RoomCutawayTexture {
     public static void clearAperture() {
         apertureInnerCutoff = NO_CUT_VALUE;
         apertureRadius = 0.0f;
+    }
+
+    /** A simple camera-centered reveal bubble, independent of {@link RoomCutawayComputer}'s enclosed-
+     * room search - see the fragment shader comment in {@link RoomCutawayShaderPatcher} for why this
+     * exists alongside it. */
+    public static void setSphere(double centerX, double centerY, double centerZ, float radius) {
+        sphereCenterX = centerX;
+        sphereCenterY = centerY;
+        sphereCenterZ = centerZ;
+        sphereRadius = radius;
+    }
+
+    public static void clearSphere() {
+        sphereRadius = 0.0f;
+    }
+
+    public static double sphereCenterX() {
+        return sphereCenterX;
+    }
+
+    public static double sphereCenterY() {
+        return sphereCenterY;
+    }
+
+    public static double sphereCenterZ() {
+        return sphereCenterZ;
+    }
+
+    public static float sphereRadius() {
+        return sphereRadius;
     }
 
     public static boolean isEnabled() {

@@ -19,6 +19,10 @@ public final class RoomCutawayShaderPatcher {
     public static final int APERTURE_INNER_CUTOFF_UNIFORM_LOCATION = 36;
     public static final int APERTURE_RADIUS_UNIFORM_LOCATION = 37;
     public static final int ORE_MASK_ENABLED_UNIFORM_LOCATION = 38;
+    public static final int SPHERE_CENTER_X_UNIFORM_LOCATION = 39;
+    public static final int SPHERE_CENTER_Y_UNIFORM_LOCATION = 40;
+    public static final int SPHERE_CENTER_Z_UNIFORM_LOCATION = 41;
+    public static final int SPHERE_RADIUS_UNIFORM_LOCATION = 42;
 
     private static final String VERTEX_DECLARATIONS = """
             layout(location = 12) out vec3 voxymapWorldPos;
@@ -39,6 +43,10 @@ public final class RoomCutawayShaderPatcher {
             layout(location = 36) uniform float voxymapApertureInnerY;
             layout(location = 37) uniform float voxymapApertureRadius;
             layout(location = 38) uniform int voxymapOreMaskEnabled;
+            layout(location = 39) uniform float voxymapSphereCenterX;
+            layout(location = 40) uniform float voxymapSphereCenterY;
+            layout(location = 41) uniform float voxymapSphereCenterZ;
+            layout(location = 42) uniform float voxymapSphereRadius;
             layout(binding = %d) uniform sampler2D voxymapRoomHeightMap;
             layout(binding = %d) uniform sampler2D voxymapOreMask;
 
@@ -62,6 +70,20 @@ public final class RoomCutawayShaderPatcher {
 
 
                 if (voxymapCutawayEnabled != 0) {
+                    // A simple camera-centered "reveal bubble", independent of the room-enclosure
+                    // search above: always on while the map is open (voxymapSphereRadius is 0 - and
+                    // this a no-op - whenever it isn't), so the player's own position stays visible
+                    // from the detached map camera regardless of whether it sits in a fully enclosed
+                    // pocket. Never touches anti-xray-sensitive data - it is a pure distance cut from
+                    // the camera, not a guess about unverified geometry.
+                    if (voxymapSphereRadius > 0.0) {
+                        vec3 voxymapSphereCenter = vec3(voxymapSphereCenterX, voxymapSphereCenterY, voxymapSphereCenterZ);
+                        if (distance(voxymapWorldPos, voxymapSphereCenter) < voxymapSphereRadius) {
+                            discard;
+                            return;
+                        }
+                    }
+
                     // The global Nether threshold removes only complete quads belonging to the roof
                     // band. Per-fragment clipping here would expose fake anti-xray volume as a tiled
                     // cross-section. Local verified-air columns may still use a precise clip plane.

@@ -14,6 +14,11 @@ public final class RoomCutawayController {
     private static final long OPEN_RECOMPUTE_INTERVAL_NANOS = 10_000_000_000L;
     private static final int SCAN_NODE_BUDGET_PER_TICK = 1024;
     private static final int RECOMPUTE_MOVE_THRESHOLD = 2;
+    // Caps the camera-centered reveal sphere (see tick()) so panning the detached map camera far away
+    // from the player - where "distance to player" could otherwise be thousands of blocks - never
+    // carves out an absurdly large chunk of terrain; only matters for the sphere reveal, never for the
+    // room-enclosure search above, which already has its own independent radius.
+    private static final double MAX_SPHERE_RADIUS = 128.0;
     private static RoomCutawayComputer.Result result = RoomCutawayComputer.Result.OPEN;
     private static long lastComputeNanos = 0L;
     private static boolean hasComputed = false;
@@ -57,10 +62,12 @@ public final class RoomCutawayController {
 
         if (VoxyMapSettings.roomCutawayEnabled()) {
             recomputeRoomIfNeeded(minecraft);
+            updateSphere(minecraft);
         } else {
             result = RoomCutawayComputer.Result.OPEN;
             hasComputed = false;
             pendingSearch = null;
+            RoomCutawayTexture.clearSphere();
         }
 
         // This threshold no longer slices through cached voxels. The shader removes only complete
@@ -71,7 +78,8 @@ public final class RoomCutawayController {
                         level.dimensionType().logicalHeight())
                 : RoomCutawayTexture.NO_CUT_VALUE;
 
-        cuttingSomething = result.hasCutaway() || netherRoofCutoff != RoomCutawayTexture.NO_CUT_VALUE;
+        cuttingSomething = result.hasCutaway() || netherRoofCutoff != RoomCutawayTexture.NO_CUT_VALUE
+                || RoomCutawayTexture.sphereRadius() > 0.0f;
         if (cuttingSomething) {
             if (!RoomCutawayTexture.isEnabled() || !result.equals(uploadedResult)) {
                 RoomCutawayTexture.update(result, netherRoofCutoff);
@@ -85,6 +93,26 @@ public final class RoomCutawayController {
         } else {
             RoomCutawayTexture.disable();
         }
+    }
+
+    /** A simple camera-centered reveal bubble, computed fresh every tick (a single distance calculation
+     * - no flood fill, no throttling needed) as a companion to the enclosed-room search above: sized so
+     * the player always sits exactly on its edge, it keeps the player visible from the detached map
+     * camera looking down at them even when they aren't standing in anything the stricter, connectivity-
+     * aware search would call a fully verified room. */
+    private static void updateSphere(Minecraft minecraft) {
+        if (!VoxyMapCameraController.isActive()) {
+            RoomCutawayTexture.clearSphere();
+            return;
+        }
+        double camX = VoxyMapCameraController.cameraX();
+        double camY = VoxyMapCameraController.cameraY();
+        double camZ = VoxyMapCameraController.cameraZ();
+        double dx = minecraft.player.getX() - camX;
+        double dy = minecraft.player.getY() - camY;
+        double dz = minecraft.player.getZ() - camZ;
+        double radius = Math.min(Math.sqrt(dx * dx + dy * dy + dz * dz), MAX_SPHERE_RADIUS);
+        RoomCutawayTexture.setSphere(camX, camY, camZ, (float) radius);
     }
 
     private static void recomputeRoomIfNeeded(Minecraft minecraft) {
@@ -218,6 +246,7 @@ public final class RoomCutawayController {
         pendingSearch = null;
         lastDimensionId = null;
         RoomCutawayTexture.clearAperture();
+        RoomCutawayTexture.clearSphere();
         RoomCutawayTexture.disable();
     }
 }
