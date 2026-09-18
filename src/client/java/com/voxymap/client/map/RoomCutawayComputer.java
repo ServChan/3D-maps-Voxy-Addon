@@ -9,9 +9,14 @@ package com.voxymap.client.map;
  * cells actually reachable from the player without crossing a solid block are considered part of the
  * room, so a cave on the other side of a wall, or open sky/terrain above, never gets touched.
  *
- * <p>Normal searches only return a cutaway for a fully enclosed pocket. A remote-server Nether
- * search can instead retain the verified portion when it reaches unknown data or its safety bounds:
- * this reveals only connected air the server actually sent, never guessed anti-xray contents.
+ * <p>Every search keeps whatever it verified when it runs into the search-bubble edge or the node-
+ * count safety cap - neither ever involves data the client hasn't actually confirmed, so there's
+ * nothing to distrust there; a room or cave that simply extends past 48/32 blocks still gets a
+ * cutaway over the space that was actually walked, instead of the whole scan being thrown away.
+ * Only an {@code UNKNOWN} cell (a chunk the client has no data for at all) is trust-sensitive, and
+ * only a remote-server Nether search is allowed to retain a verified partial result there too - see
+ * {@code retainVerifiedPartial}: this reveals only connected air the server actually sent, never
+ * guessed anti-xray contents. Every other search voids the whole cutaway on that same UNKNOWN case.
  */
 public final class RoomCutawayComputer {
     public static final int MAX_CELLS = 96000;
@@ -120,12 +125,14 @@ public final class RoomCutawayComputer {
 
                     if (Math.abs(nx - feetX) > HORIZONTAL_RADIUS || Math.abs(nz - feetZ) > HORIZONTAL_RADIUS
                             || Math.abs(ny - feetY) > VERTICAL_RADIUS) {
-                        if (retainVerifiedPartial) {
-                            truncated = true;
-                            continue;
-                        }
-                        finishUnenclosed();
-                        return true;
+                        // Running past the search bubble is a scope/cost cap, not a trust question - it
+                        // never touches unverified data, so unlike the UNKNOWN branch below it is always
+                        // safe to keep whatever was verified before the edge (a real cave or a base that
+                        // simply extends past the radius) instead of discarding the whole scan. This is
+                        // what makes an ordinary, non-tiny room actually get a cutaway at all instead of
+                        // silently doing nothing the moment the connected space exceeds 48/32 blocks.
+                        truncated = true;
+                        continue;
                     }
 
                     int index = index(nx, ny, nz, feetX, feetY, feetZ);
@@ -152,8 +159,10 @@ public final class RoomCutawayComputer {
                     cells[index] = REACHABLE;
                     visitedCount++;
                     if (visitedCount > MAX_CELLS) {
-                        finishUnenclosed();
-                        return true;
+                        // Same reasoning as the search-bubble edge above: a node-count safety cap, not
+                        // untrusted data - stop growing the frontier but keep what was already verified.
+                        truncated = true;
+                        continue;
                     }
                     enqueue(nx, ny, nz);
                 }

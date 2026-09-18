@@ -75,11 +75,32 @@ class RoomCutawayComputerTest {
     }
 
     @Test
-    void massiveCavernExceedingTheCellBudgetIsTreatedAsOpen() {
+    void massiveCavernExceedingTheCellBudgetKeepsTheVerifiedCeilingNearThePlayer() {
+        // The cavern extends well past both HORIZONTAL_RADIUS and the MAX_CELLS budget, so it can
+        // never fully enclose - but the real ceiling only 20 blocks straight up is confirmed well
+        // before the budget runs out. Hitting a scope/cost cap never touches unverified data, so that
+        // confirmed ceiling should still show instead of the whole result vanishing to "nothing cut"
+        // just because the far reaches of the cavern were never (and could never be) fully explored.
         RoomCutawayComputer.Result result = RoomCutawayComputer.compute(0, 0, 0, (x, y, z) ->
                 passable(Math.abs(x) <= 40 && Math.abs(y) <= 20 && Math.abs(z) <= 40));
 
         assertFalse(result.enclosed);
+        assertTrue(result.hasCutaway());
+        assertEquals(20, result.ceilingAt(0, 0));
+    }
+
+    @Test
+    void aCorridorThatExtendsPastTheSearchRadiusStillKeepsAVerifiedCeilingNearThePlayer() {
+        // A 3-wide, 2-tall corridor with a floor, ceiling and west wall, open forever to the east -
+        // it can never fully enclose (it never terminates), but the floor and ceiling right where the
+        // player stands were verified beyond doubt, so that part of the result should survive instead
+        // of the whole cutaway vanishing just because the corridor runs past the search radius.
+        RoomCutawayComputer.Result result = RoomCutawayComputer.compute(0, 0, 0, (x, y, z) ->
+                passable(x >= -1 && z >= -1 && z <= 1 && y >= 0 && y <= 1));
+
+        assertFalse(result.enclosed);
+        assertTrue(result.hasCutaway());
+        assertEquals(1, result.ceilingAt(0, 0));
     }
 
     @Test
