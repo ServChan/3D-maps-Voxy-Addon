@@ -13,10 +13,12 @@ package com.voxymap.client.map;
  * count safety cap - neither ever involves data the client hasn't actually confirmed, so there's
  * nothing to distrust there; a room or cave that simply extends past 48/32 blocks still gets a
  * cutaway over the space that was actually walked, instead of the whole scan being thrown away.
- * Only an {@code UNKNOWN} cell (a chunk the client has no data for at all) is trust-sensitive, and
- * only a remote-server Nether search is allowed to retain a verified partial result there too - see
- * {@code retainVerifiedPartial}: this reveals only connected air the server actually sent, never
- * guessed anti-xray contents. Every other search voids the whole cutaway on that same UNKNOWN case.
+ * Only an {@code UNKNOWN} cell (a chunk the client has no data for at all) is trust-sensitive:
+ * {@link #start} voids the whole result the moment it hits one, while {@link #startVerifiedPartial}
+ * keeps everything confirmed before that point - both still never treat the UNKNOWN cell itself as
+ * open air, so picking the lenient mode reveals only connected air the server actually sent, never
+ * guessed anti-xray contents. {@link RoomCutawayController} always uses the lenient mode; the strict
+ * one remains for callers that would rather show nothing than an incomplete pocket.
  */
 public final class RoomCutawayComputer {
     public static final int MAX_CELLS = 96000;

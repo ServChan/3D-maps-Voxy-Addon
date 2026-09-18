@@ -54,10 +54,9 @@ public final class RoomCutawayController {
         Level level = minecraft.level;
         String dimensionId = level.dimension().identifier().toString();
         boolean isNether = "minecraft:the_nether".equals(dimensionId);
-        boolean trustedLocalWorld = minecraft.isLocalServer();
 
         if (VoxyMapSettings.roomCutawayEnabled()) {
-            recomputeRoomIfNeeded(minecraft, isNether && !trustedLocalWorld);
+            recomputeRoomIfNeeded(minecraft);
         } else {
             result = RoomCutawayComputer.Result.OPEN;
             hasComputed = false;
@@ -88,7 +87,7 @@ public final class RoomCutawayController {
         }
     }
 
-    private static void recomputeRoomIfNeeded(Minecraft minecraft, boolean retainVerifiedPartial) {
+    private static void recomputeRoomIfNeeded(Minecraft minecraft) {
         BlockPos feet = minecraft.player.blockPosition();
         long now = System.nanoTime();
         String dimensionId = minecraft.level.dimension().identifier().toString();
@@ -111,9 +110,12 @@ public final class RoomCutawayController {
         // bounded search, publish its still-safe (possibly slightly trailing) mask, then the moved
         // check starts a fresh scan from the player's latest position on the next tick.
         if (pendingSearch == null && (moved || stale)) {
-            pendingSearch = retainVerifiedPartial
-                    ? RoomCutawayComputer.startVerifiedPartial(feet.getX(), feet.getY(), feet.getZ())
-                    : RoomCutawayComputer.start(feet.getX(), feet.getY(), feet.getZ());
+            // Always the verified-partial mode: hitting the search-radius/budget cap or an UNKNOWN
+            // (unloaded/withheld) cell never treats that cell as passable air either way - the only
+            // difference is whether everything else that WAS actually verified nearby still gets shown
+            // instead of the whole cutaway vanishing because one unrelated chunk at the edge of a large
+            // area (or a busy server's reduced simulation distance) hasn't loaded yet.
+            pendingSearch = RoomCutawayComputer.startVerifiedPartial(feet.getX(), feet.getY(), feet.getZ());
             lastFeetX = feet.getX();
             lastFeetY = feet.getY();
             lastFeetZ = feet.getZ();
