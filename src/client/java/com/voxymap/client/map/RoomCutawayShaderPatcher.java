@@ -69,6 +69,15 @@ public final class RoomCutawayShaderPatcher {
     private static final String FRAGMENT_CLIP = """
 
 
+                // TEMPORARY, maximally blunt diagnostic: paints every fragment that reaches this point
+                // solid green, unconditionally - no uniform, no camera state, no Java-side logic
+                // involved at all. If the in-game view does NOT turn solid green while this build is
+                // running, the patched quads.frag source is conclusively not the shader actually bound
+                // for these draws (a build/deploy mismatch, a shader cache, or something replacing the
+                // program before the real render), regardless of anything else this file does. Remove
+                // this block first once that is confirmed either way.
+                colour = vec4(0.0, 1.0, 0.0, 1.0);
+
                 if (voxymapCutawayEnabled != 0) {
                     // A simple camera-centered "reveal bubble", independent of the room-enclosure
                     // search above: always on while the map is open (voxymapSphereRadius is 0 - and
