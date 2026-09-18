@@ -9,6 +9,7 @@ import com.voxymap.client.map.MinimapRenderer;
 import com.voxymap.client.map.MobMarkerCache;
 import com.voxymap.client.map.OreMaskController;
 import com.voxymap.client.map.VoxyMapSettings;
+import com.voxymap.client.map.WaypointBeaconRenderer;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -47,6 +48,7 @@ public class VoxyMapClient implements ClientModInitializer {
                 "key.voxymap.open_map", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_M, CATEGORY));
         minimapZoomKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.voxymap.minimap_zoom", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_Z, CATEGORY));
+        WaypointBeaconRenderer.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openMapKey.consumeClick()) {
