@@ -69,14 +69,13 @@ public final class RoomCutawayShaderPatcher {
     private static final String FRAGMENT_CLIP = """
 
 
-                // TEMPORARY, maximally blunt diagnostic: paints every fragment that reaches this point
-                // solid green, unconditionally - no uniform, no camera state, no Java-side logic
-                // involved at all. If the in-game view does NOT turn solid green while this build is
-                // running, the patched quads.frag source is conclusively not the shader actually bound
-                // for these draws (a build/deploy mismatch, a shader cache, or something replacing the
-                // program before the real render), regardless of anything else this file does. Remove
-                // this block first once that is confirmed either way.
-                colour = vec4(0.0, 1.0, 0.0, 1.0);
+                // TEMPORARY diagnostic: the whole-screen green from the previous build confirmed this
+                // patched shader source is genuinely what's bound for rendering. This narrows it further
+                // - paint red if the shader itself reads voxymapCutawayEnabled as nonzero, blue if it
+                // reads zero, completely unconditionally (no sphere/room logic involved). Tells us
+                // directly whether the uniform WRITE from MDICSectionRendererMixin is actually visible
+                // to this exact draw call, independent of every other condition in this file.
+                colour = voxymapCutawayEnabled != 0 ? vec4(1.0, 0.0, 0.0, 1.0) : vec4(0.0, 0.0, 1.0, 1.0);
 
                 if (voxymapCutawayEnabled != 0) {
                     // A simple camera-centered "reveal bubble", independent of the room-enclosure
