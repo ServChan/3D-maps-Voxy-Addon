@@ -69,14 +69,6 @@ public final class RoomCutawayShaderPatcher {
     private static final String FRAGMENT_CLIP = """
 
 
-                // TEMPORARY diagnostic: the whole-screen green from the previous build confirmed this
-                // patched shader source is genuinely what's bound for rendering. This narrows it further
-                // - paint red if the shader itself reads voxymapCutawayEnabled as nonzero, blue if it
-                // reads zero, completely unconditionally (no sphere/room logic involved). Tells us
-                // directly whether the uniform WRITE from MDICSectionRendererMixin is actually visible
-                // to this exact draw call, independent of every other condition in this file.
-                colour = voxymapCutawayEnabled != 0 ? vec4(1.0, 0.0, 0.0, 1.0) : vec4(0.0, 0.0, 1.0, 1.0);
-
                 if (voxymapCutawayEnabled != 0) {
                     // A simple camera-centered "reveal bubble", independent of the room-enclosure
                     // search above: always on while the map is open (voxymapSphereRadius is 0 - and
@@ -86,18 +78,9 @@ public final class RoomCutawayShaderPatcher {
                     // the camera, not a guess about unverified geometry.
                     if (voxymapSphereRadius > 0.0) {
                         vec3 voxymapSphereCenter = vec3(voxymapSphereCenterX, voxymapSphereCenterY, voxymapSphereCenterZ);
-                        float voxymapSphereDist = distance(voxymapWorldPos, voxymapSphereCenter);
-                        if (voxymapSphereDist < voxymapSphereRadius) {
+                        if (distance(voxymapWorldPos, voxymapSphereCenter) < voxymapSphereRadius) {
                             discard;
                             return;
-                        }
-                        // TEMPORARY diagnostic halo: paints a bright magenta band just outside the cut
-                        // sphere instead of discarding, so "does our patched shader code run and affect
-                        // the frame at all" is answerable from a single screenshot, independent of
-                        // whether discard itself behaves as expected. Remove once cutaway is confirmed
-                        // visible in-game.
-                        if (voxymapSphereDist < voxymapSphereRadius * 1.15) {
-                            colour = vec4(1.0, 0.0, 1.0, 1.0);
                         }
                     }
 

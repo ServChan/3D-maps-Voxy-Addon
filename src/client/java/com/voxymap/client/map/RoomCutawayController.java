@@ -14,11 +14,16 @@ public final class RoomCutawayController {
     private static final long OPEN_RECOMPUTE_INTERVAL_NANOS = 10_000_000_000L;
     private static final int SCAN_NODE_BUDGET_PER_TICK = 1024;
     private static final int RECOMPUTE_MOVE_THRESHOLD = 2;
-    // Caps the camera-centered reveal sphere (see tick()) so panning the detached map camera far away
-    // from the player - where "distance to player" could otherwise be thousands of blocks - never
+    // Caps the camera-centered reveal sphere (see updateSphere()) so panning the detached map camera far
+    // away from the player - where "distance to player" could otherwise be thousands of blocks - never
     // carves out an absurdly large chunk of terrain; only matters for the sphere reveal, never for the
     // room-enclosure search above, which already has its own independent radius.
     private static final double MAX_SPHERE_RADIUS = 128.0;
+    // The degenerate end of the same problem: the map's default/common view looks straight down with
+    // the camera essentially AT the player's own position, where distance-to-player collapses to ~0 -
+    // exactly the moment a "can I see myself" check matters most, and exactly when a bare distance-based
+    // radius would disable the reveal entirely. A floor keeps a real bubble around the player even then.
+    private static final double MIN_SPHERE_RADIUS = 24.0;
     private static RoomCutawayComputer.Result result = RoomCutawayComputer.Result.OPEN;
     private static long lastComputeNanos = 0L;
     private static boolean hasComputed = false;
@@ -111,7 +116,8 @@ public final class RoomCutawayController {
         double dx = minecraft.player.getX() - camX;
         double dy = minecraft.player.getY() - camY;
         double dz = minecraft.player.getZ() - camZ;
-        double radius = Math.min(Math.sqrt(dx * dx + dy * dy + dz * dz), MAX_SPHERE_RADIUS);
+        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        double radius = Math.max(MIN_SPHERE_RADIUS, Math.min(distance, MAX_SPHERE_RADIUS));
         RoomCutawayTexture.setSphere(camX, camY, camZ, (float) radius);
     }
 
