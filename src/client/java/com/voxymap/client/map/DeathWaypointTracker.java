@@ -4,6 +4,9 @@ import me.cortex.voxy.commonImpl.WorldIdentifier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Drops a waypoint at the player's position the moment their health crosses to zero - an automatic
  * death point, Xaero-style. Tracked by watching the health transition rather than any death event: there
@@ -13,6 +16,11 @@ import net.minecraft.network.chat.Component;
  */
 public final class DeathWaypointTracker {
     private static final int DEATH_COLOR = 0xFF8B2020;
+    // Keeps a short history of deaths instead of just the latest one - dying again used to silently
+    // delete every earlier death point sharing the same name, which threw away exactly the information
+    // (where past deaths happened) the feature exists to keep. Capped so a rough session doesn't leave
+    // dozens of markers behind: once the cap is hit, only the single oldest one is dropped to make room.
+    private static final int MAX_DEATH_WAYPOINTS = 5;
 
     private static float lastHealth = -1.0f;
     private static WorldIdentifier lastWorldId;
@@ -44,10 +52,17 @@ public final class DeathWaypointTracker {
         float health = minecraft.player.getHealth();
         if (VoxyMapSettings.deathPointsEnabled() && lastHealth > 0.0f && health <= 0.0f) {
             String name = Component.translatable("screen.voxymap.waypoint.death_name").getString();
+            List<WaypointManager.Waypoint> previousDeaths = new ArrayList<>();
             for (WaypointManager.Waypoint wp : WaypointManager.forWorld(worldId.getWorldId())) {
                 if (!wp.shared() && name.equals(wp.name())) {
-                    WaypointManager.remove(worldId.getWorldId(), wp.id());
+                    previousDeaths.add(wp);
                 }
+            }
+            // forWorld() returns local waypoints in insertion order, so index 0 is the oldest - trim
+            // from the front until there's room for the new one instead of wiping the whole history.
+            while (previousDeaths.size() >= MAX_DEATH_WAYPOINTS) {
+                WaypointManager.Waypoint oldest = previousDeaths.remove(0);
+                WaypointManager.remove(worldId.getWorldId(), oldest.id());
             }
             WaypointManager.add(worldId.getWorldId(), name,
                     minecraft.player.getX(), minecraft.player.getY(), minecraft.player.getZ(),

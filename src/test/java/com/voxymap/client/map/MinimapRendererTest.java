@@ -3,6 +3,7 @@ package com.voxymap.client.map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MinimapRendererTest {
     @Test
@@ -54,5 +55,35 @@ class MinimapRendererTest {
         MinimapRenderer.SquareEdgePoint edge = MinimapRenderer.squareEdgeIntersection(1.0, 100.0, 30.0);
         assertEquals(30, edge.y());
         assertEquals(0, edge.x());
+    }
+
+    @Test
+    void verticalAlphaIsFullStrengthCloseToThePlayersOwnAltitude() {
+        assertEquals(0xFF, MinimapRenderer.verticalAlpha(70.0, 64.0));
+    }
+
+    @Test
+    void verticalAlphaIsDimmedFarFromThePlayersOwnAltitude() {
+        assertEquals(0x50, MinimapRenderer.verticalAlpha(200.0, 64.0));
+    }
+
+    @Test
+    void verticalAlphaFadesMonotonicallyBetweenTheNearAndFarThresholds() {
+        int nearer = MinimapRenderer.verticalAlpha(64.0 + 30.0, 64.0);
+        int farther = MinimapRenderer.verticalAlpha(64.0 + 50.0, 64.0);
+        assertTrue(nearer > farther);
+        assertTrue(nearer < 0xFF);
+        assertTrue(farther > 0x50);
+    }
+
+    @Test
+    void scaleAlphaKeepsRgbAndMultipliesOnlyAlpha() {
+        // 0x80 (~50%) of a base alpha of 0xFF should land at exactly half.
+        assertEquals(0x80112233, MinimapRenderer.scaleAlpha(0xFF112233, 0x80));
+    }
+
+    @Test
+    void scaleAlphaAtFullStrengthIsUnchanged() {
+        assertEquals(0xFF112233, MinimapRenderer.scaleAlpha(0xFF112233, 0xFF));
     }
 }

@@ -25,6 +25,7 @@ import java.util.List;
  */
 public final class MobMarkerCache {
     private static final int MAX_MARKERS = 150;
+    private static final double MAX_RANGE_BLOCKS = 128.0;
 
     public record MobSnapshot(double x, double y, double z, boolean hostile) {
     }
@@ -47,29 +48,38 @@ public final class MobMarkerCache {
 
         double px = minecraft.player.getX();
         double pz = minecraft.player.getZ();
-        double maxDistSq = 128.0 * 128.0;
 
-        List<MobSnapshot> found = new ArrayList<>();
+        List<MobSnapshot> candidates = new ArrayList<>();
         for (Entity entity : minecraft.level.entitiesForRendering()) {
             if (!(entity instanceof Mob mob)) {
                 continue;
             }
-            double dx = mob.getX() - px;
-            double dz = mob.getZ() - pz;
-            if (dx * dx + dz * dz > maxDistSq) {
-                continue;
+            candidates.add(new MobSnapshot(mob.getX(), mob.getY(), mob.getZ(), mob instanceof Enemy));
+        }
+        snapshot = filterAndCap(candidates, px, pz, MAX_RANGE_BLOCKS, MAX_MARKERS);
+    }
+
+    /** The distance/cap logic on its own, decoupled from real {@link Entity}/{@link Mob} - {@link
+     * MobSnapshot} is already a plain record, so this needs no Minecraft classes at all and is
+     * regression-testable directly. */
+    static List<MobSnapshot> filterAndCap(List<MobSnapshot> candidates, double px, double pz,
+                                           double maxRangeBlocks, int maxMarkers) {
+        double maxDistSq = maxRangeBlocks * maxRangeBlocks;
+        List<MobSnapshot> found = new ArrayList<>();
+        for (MobSnapshot mob : candidates) {
+            if (horizontalDistanceSq(mob, px, pz) <= maxDistSq) {
+                found.add(mob);
             }
-            found.add(new MobSnapshot(mob.getX(), mob.getY(), mob.getZ(), mob instanceof Enemy));
         }
 
-        if (found.size() > MAX_MARKERS) {
+        if (found.size() > maxMarkers) {
             // Nearest mobs matter most on a small overlay - if a farm/grinder produced far more than can
-            // usefully be drawn anyway, keep the closest MAX_MARKERS instead of an arbitrary iteration
+            // usefully be drawn anyway, keep the closest maxMarkers instead of an arbitrary iteration
             // order slice.
             found.sort(Comparator.comparingDouble(m -> horizontalDistanceSq(m, px, pz)));
-            found = new ArrayList<>(found.subList(0, MAX_MARKERS));
+            found = new ArrayList<>(found.subList(0, maxMarkers));
         }
-        snapshot = List.copyOf(found);
+        return List.copyOf(found);
     }
 
     private static double horizontalDistanceSq(MobSnapshot mob, double px, double pz) {

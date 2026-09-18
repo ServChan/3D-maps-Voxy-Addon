@@ -17,10 +17,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * anything Voxy-specific. The minimap only ever shows chunks the client already has loaded, the same
  * "never load or reveal anything new" rule the rest of VoxyMap follows.
  *
- * <p>A tile is computed once and kept forever - if a player edits terrain in an already-cached chunk,
- * the minimap won't reflect it until the client restarts. That is an accepted simplification: proper
- * invalidation needs a block-change listener, real complexity for staleness a small gameplay overlay
- * can tolerate.
+ * <p>A tile is computed once and kept forever, with one exception: {@link MinimapRenderer} force-
+ * refreshes the single tile the player is currently standing in on every rebuild (see the
+ * {@code forceRefresh} parameter below), so digging straight down from the surface into a cave updates
+ * that one tile instead of keeping the stale surface color for the rest of the session. Every other
+ * cached tile still isn't touched by terrain edits elsewhere in an already-cached chunk until the client
+ * restarts - proper invalidation for those needs a block-change listener, real complexity for staleness
+ * a small gameplay overlay can tolerate.
  */
 final class MinimapTileCache {
     static final int TILE_SIZE = 16;
@@ -35,23 +38,34 @@ final class MinimapTileCache {
     private Level currentLevel;
 
     /** Returns the cached tile for this chunk (computing and caching it first if needed), or null if
-     * the chunk isn't currently loaded - never forces a chunk load. {@code playerY} is only consulted
-     * the first time a given chunk is cached (see the class doc) - it anchors the downward surface scan
-     * in {@link #computeTile} to roughly where the player was standing at that moment. */
+     * the chunk isn't currently loaded - never forces a chunk load. {@code playerY} anchors the downward
+     * surface scan in {@link #computeTile} to roughly where the player was standing when the tile was
+     * (re)computed. */
     int[] tileFor(Level level, int chunkX, int chunkZ, int playerY) {
+        return tileFor(level, chunkX, chunkZ, playerY, false);
+    }
+
+    /** As {@link #tileFor(Level, int, int, int)}, but {@code forceRefresh} bypasses a warm cache entry
+     * and recomputes the tile from the chunk's current state anyway - used for the chunk the player is
+     * standing in, so its color tracks the player's current altitude instead of whatever it was the
+     * first time this chunk got cached (see the class doc). If the chunk isn't loaded when a forced
+     * refresh is requested, the previous cached value (if any) is kept rather than being wiped to null. */
+    int[] tileFor(Level level, int chunkX, int chunkZ, int playerY, boolean forceRefresh) {
         if (level != currentLevel) {
             tiles.clear();
             currentLevel = level;
         }
         long key = ChunkPos.pack(chunkX, chunkZ);
-        int[] cached = tiles.get(key);
-        if (cached != null) {
-            return cached;
+        if (!forceRefresh) {
+            int[] cached = tiles.get(key);
+            if (cached != null) {
+                return cached;
+            }
         }
 
         ChunkAccess chunk = level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
         if (chunk == null) {
-            return null;
+            return forceRefresh ? tiles.get(key) : null;
         }
 
         int[] colors = computeTile(level, chunk, chunkX, chunkZ, playerY);
@@ -73,7 +87,10 @@ final class MinimapTileCache {
         BlockPos.MutableBlockPos scan = new BlockPos.MutableBlockPos();
         for (int lz = 0; lz < TILE_SIZE; lz++) {
             for (int lx = 0; lx < TILE_SIZE; lx++) {
-                heights[lz * TILE_SIZE + lx] = surfaceHeight(chunk, scan, baseX + lx, baseZ + lz, startY, minY);
+                int x = baseX + lx;
+                int z = baseZ + lz;
+                heights[lz * TILE_SIZE + lx] = surfaceHeight(
+                        (sx, sy, sz) -> chunk.getBlockState(scan.set(sx, sy, sz)).isAir(), x, z, startY, minY);
             }
         }
 
@@ -94,20 +111,47 @@ final class MinimapTileCache {
                     continue;
                 }
                 int northHeight = lz > 0 ? heights[(lz - 1) * TILE_SIZE + lx] : height;
-                MapColor.Brightness brightness = northHeight > height ? MapColor.Brightness.LOW
-                        : northHeight < height ? MapColor.Brightness.HIGH : MapColor.Brightness.NORMAL;
-                colors[lz * TILE_SIZE + lx] = color.calculateARGBColor(brightness);
+                colors[lz * TILE_SIZE + lx] = color.calculateARGBColor(toMapColorBrightness(shadeOf(height, northHeight)));
             }
         }
         return colors;
     }
 
+    /** North-relative shading used to give the flat top-down tile a sense of depth: a column whose
+     * northern neighbor is taller reads as being in that neighbor's shadow ({@link Shade#LOW}), one
+     * whose northern neighbor is shorter reads as catching more light ({@link Shade#HIGH}), matching the
+     * same convention vanilla's own item map uses. Kept Minecraft-free (returns this class's own enum
+     * instead of {@link MapColor.Brightness} directly) so the 3-way comparison itself is unit-testable
+     * without needing a real {@code MapColor}. */
+    enum Shade { LOW, NORMAL, HIGH }
+
+    static Shade shadeOf(int height, int northHeight) {
+        if (northHeight > height) return Shade.LOW;
+        if (northHeight < height) return Shade.HIGH;
+        return Shade.NORMAL;
+    }
+
+    private static MapColor.Brightness toMapColorBrightness(Shade shade) {
+        return switch (shade) {
+            case LOW -> MapColor.Brightness.LOW;
+            case NORMAL -> MapColor.Brightness.NORMAL;
+            case HIGH -> MapColor.Brightness.HIGH;
+        };
+    }
+
+    @FunctionalInterface
+    interface AirCheck {
+        boolean isAir(int x, int y, int z);
+    }
+
     /** First non-air block at or below {@code startY} in this column, in vanilla heightmap convention
-     * (one above the solid block), or {@code minY} if the column is air all the way down from there. */
-    private static int surfaceHeight(ChunkAccess chunk, BlockPos.MutableBlockPos scan, int x, int z, int startY, int minY) {
+     * (one above the solid block), or {@code minY} if the column is air all the way down from there.
+     * Takes a plain {@link AirCheck} instead of a {@link ChunkAccess} directly so this scan - the part of
+     * tile computation actually worth regression-testing - can be exercised without any Minecraft chunk
+     * machinery. */
+    static int surfaceHeight(AirCheck airCheck, int x, int z, int startY, int minY) {
         for (int y = startY; y > minY; y--) {
-            scan.set(x, y, z);
-            if (!chunk.getBlockState(scan).isAir()) {
+            if (!airCheck.isAir(x, y, z)) {
                 return y + 1;
             }
         }

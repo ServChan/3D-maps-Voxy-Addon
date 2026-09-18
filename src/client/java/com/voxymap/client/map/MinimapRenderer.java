@@ -37,16 +37,64 @@ public final class MinimapRenderer {
     private static final int COORD_BAR_HEIGHT = 14;
     private static final Identifier TEXTURE_ID = Identifier.fromNamespaceAndPath("voxymap", "minimap_dynamic");
 
+    // The largest blit radius that still samples entirely inside the cached texture. The player can sit
+    // anywhere within the center chunk (up to one full chunk width off from centerChunk's own origin -
+    // see originX/originZ below), so the safe margin is one grid-half short of the texture's own half,
+    // minus a small rounding cushion; not simply TEXTURE_SIZE/2, which left no room for that offset and
+    // let a sample rect run a few pixels past the texture edge whenever rotate and zoom were both on.
+    private static final double MAX_BLIT_RADIUS = (GRID_CHUNKS / 2) * 16.0 - 4.0;
+
+    // How far (in blocks) the player must move vertically since the last rebuild before the tile
+    // they're standing on is refreshed again outside of a chunk crossing - catches "walked into a cave
+    // mouth" / "dug straight down" without refreshing on every single Y jitter (steps, jumps).
+    private static final int Y_REFRESH_THRESHOLD_BLOCKS = 8;
+    // How often a rebuild retries chunks that were still unloaded last time, while any remain missing.
+    private static final long MISSING_TILE_RETRY_MILLIS = 500L;
+
+    // Vertical marker fade (mobs/other players): full strength within NEAR_Y_BLOCKS of the player's own
+    // altitude, fading down to FAR_Y_ALPHA by FAR_Y_BLOCKS away - a mob or player that's horizontally
+    // close but many blocks above/below (a different cave layer, a tower) reads as "not really nearby"
+    // instead of drawing identically to one standing right next to the player.
+    private static final double NEAR_Y_BLOCKS = 24.0;
+    private static final double FAR_Y_BLOCKS = 64.0;
+    private static final int FAR_Y_ALPHA = 0x50;
+
+    // A chunk that hasn't loaded yet is painted with this sparse hint instead of solid transparency, so
+    // "the client is still waiting on this chunk" reads differently from a loaded chunk's legitimately
+    // empty (void/air) columns, which stay fully transparent.
+    private static final int UNLOADED_CHUNK_HINT_COLOR = 0x40FFB000;
+
     private static final MinimapTileCache TILES = new MinimapTileCache();
     private static DynamicTexture texture;
     private static int centerChunkX = Integer.MIN_VALUE;
     private static int centerChunkZ = Integer.MIN_VALUE;
+    private static int lastRebuildPlayerY = Integer.MIN_VALUE;
     private static ResourceKey<Level> lastDimension = null;
+    // The Level instance the texture was last built against. Dimension keys repeat across worlds/servers
+    // (every overworld shares the same "minecraft:overworld" key), so comparing that alone can't tell a
+    // reconnect to a *different* world in the same dimension from staying in the same one - only the
+    // Level reference (a fresh instance every dimension change, world rejoin, or reconnect) can.
+    private static Level lastLevel = null;
+    // Whether the most recent rebuild left any tile unresolved (chunk not loaded yet). A rebuild only
+    // ever runs on a chunk crossing or a retry, so without this a chunk that was still loading at the
+    // moment of the last crossing would show its "not loaded" hint forever unless the player crossed
+    // another chunk boundary - this drives a periodic retry instead.
+    private static boolean hasMissingTiles = false;
+    private static long nextRetryAtMillis = 0L;
+    // One flag per grid cell (relative to center), true where that tile was unresolved last rebuild -
+    // lets a same-center retry repaint only the handful of still-missing tiles (plus the player's own,
+    // force-refreshed every rebuild) instead of repainting the whole 17x17 grid for no visual change.
+    private static final boolean[] missingMask = new boolean[GRID_CHUNKS * GRID_CHUNKS];
+    // Set the moment HudMixin's injection actually fires - lets a watchdog (see VoxyMapClient) tell a
+    // genuinely disabled minimap apart from HudMixin having silently failed to apply (it's a @Pseudo,
+    // require = 0 mixin, so a mapping mismatch wouldn't throw, it would just never call in here).
+    private static volatile boolean hudHookFired = false;
 
     private MinimapRenderer() {
     }
 
     public static void extract(GuiGraphicsExtractor g, Minecraft minecraft) {
+        hudHookFired = true;
         if (!VoxyMapSettings.minimapEnabled() || minecraft.level == null || minecraft.player == null
                 || VoxyMapCameraController.isActive()) {
             return; // Hidden while the fullscreen map itself is open, or disabled in Settings.
@@ -56,12 +104,25 @@ public final class MinimapRenderer {
         Level level = minecraft.level;
         int playerChunkX = Math.floorDiv((int) Math.floor(player.getX()), 16);
         int playerChunkZ = Math.floorDiv((int) Math.floor(player.getZ()), 16);
+        int playerY = (int) Math.floor(player.getY());
         ResourceKey<Level> dimension = level.dimension();
 
         ensureTexture(minecraft);
-        if (centerChunkX != playerChunkX || centerChunkZ != playerChunkZ || !dimension.equals(lastDimension)) {
+
+        boolean changedPosition = centerChunkX != playerChunkX || centerChunkZ != playerChunkZ;
+        boolean changedWorld = !dimension.equals(lastDimension) || level != lastLevel;
+        if (changedPosition || changedWorld) {
             lastDimension = dimension;
-            rebuild(level, playerChunkX, playerChunkZ, (int) Math.floor(player.getY()));
+            lastLevel = level;
+            lastRebuildPlayerY = playerY;
+            rebuild(level, playerChunkX, playerChunkZ, playerY, true);
+        } else {
+            boolean movedVertically = Math.abs(playerY - lastRebuildPlayerY) >= Y_REFRESH_THRESHOLD_BLOCKS;
+            boolean retryDue = hasMissingTiles && System.currentTimeMillis() >= nextRetryAtMillis;
+            if (movedVertically || retryDue) {
+                lastRebuildPlayerY = playerY;
+                rebuild(level, centerChunkX, centerChunkZ, playerY, false);
+            }
         }
 
         int displaySize = VoxyMapClient.isMinimapZoomHeld() ? Math.round(DISPLAY_SIZE * ZOOM_SCALE) : DISPLAY_SIZE;
@@ -91,10 +152,10 @@ public final class MinimapRenderer {
         g.enableScissor(screenX, screenY, screenX + displaySize, screenY + displaySize);
 
         // A rotated square must sample a wider source area to still cover every corner of the display
-        // square after rotation (classic "diagonal of a square" factor) - clamped so it never reads past
-        // the cached texture's own edge.
-        double blitRadius = rotation == 0.0 ? worldRadius
-                : Math.min(worldRadius * 1.4143, TEXTURE_SIZE / 2.0 - 4.0);
+        // square after rotation (classic "diagonal of a square" factor), clamped to MAX_BLIT_RADIUS so
+        // it never reads past the cached texture's own edge (see that constant's doc).
+        double diagonalFactor = rotation == 0.0 ? 1.0 : 1.4143;
+        double blitRadius = Math.min(worldRadius * diagonalFactor, MAX_BLIT_RADIUS);
         int blitSize = (int) Math.ceil(blitRadius * 2.0);
         float u = (float) (player.getX() - blitRadius - originX);
         float v = (float) (player.getZ() - blitRadius - originZ);
@@ -120,6 +181,11 @@ public final class MinimapRenderer {
         drawCoordinateBar(g, minecraft, screenX - 2, screenY + displaySize + 3, displaySize + 4);
     }
 
+    /** Whether {@link #extract} has ever actually run - see {@link #hudHookFired}. */
+    public static boolean hudHookFired() {
+        return hudHookFired;
+    }
+
     private static void drawCoordinateBar(GuiGraphicsExtractor g, Minecraft minecraft, int x, int y, int width) {
         Player player = minecraft.player;
         g.fill(x, y, x + width, y + COORD_BAR_HEIGHT, 0xCC030914);
@@ -140,26 +206,50 @@ public final class MinimapRenderer {
         minecraft.getTextureManager().register(TEXTURE_ID, texture);
     }
 
-    private static void rebuild(Level level, int chunkX, int chunkZ, int playerY) {
+    /** Repaints the 17x17 tile grid centered on ({@code chunkX}, {@code chunkZ}). When
+     * {@code fullWindow} is false (a same-center retry - see {@link #extract}), every tile already sits
+     * at the correct pixels from the previous full rebuild, so only the player's own tile (kept fresh
+     * for cave descents) and whatever was still unloaded last time get repainted. */
+    private static void rebuild(Level level, int chunkX, int chunkZ, int playerY, boolean fullWindow) {
         centerChunkX = chunkX;
         centerChunkZ = chunkZ;
         NativeImage pixels = texture.getPixels();
         int half = GRID_CHUNKS / 2;
         int tileSize = MinimapTileCache.TILE_SIZE;
+        boolean missing = false;
         for (int cz = -half; cz <= half; cz++) {
             for (int cx = -half; cx <= half; cx++) {
-                int[] tile = TILES.tileFor(level, chunkX + cx, chunkZ + cz, playerY);
+                int index = (cz + half) * GRID_CHUNKS + (cx + half);
+                boolean isPlayerChunk = cx == 0 && cz == 0;
+                if (!fullWindow && !isPlayerChunk && !missingMask[index]) {
+                    continue;
+                }
+
+                int[] tile = TILES.tileFor(level, chunkX + cx, chunkZ + cz, playerY, isPlayerChunk);
                 int baseX = (cx + half) * tileSize;
                 int baseY = (cz + half) * tileSize;
-                for (int ty = 0; ty < tileSize; ty++) {
-                    for (int tx = 0; tx < tileSize; tx++) {
-                        int argb = tile == null ? 0 : tile[ty * tileSize + tx];
-                        pixels.setPixelABGR(baseX + tx, baseY + ty, argbToAbgr(argb));
-                    }
-                }
+                paintTile(pixels, baseX, baseY, tileSize, tile);
+                missingMask[index] = tile == null;
+                missing |= tile == null;
             }
         }
+        hasMissingTiles = missing;
+        nextRetryAtMillis = System.currentTimeMillis() + MISSING_TILE_RETRY_MILLIS;
         texture.upload();
+    }
+
+    private static void paintTile(NativeImage pixels, int baseX, int baseY, int tileSize, int[] tile) {
+        for (int ty = 0; ty < tileSize; ty++) {
+            for (int tx = 0; tx < tileSize; tx++) {
+                int argb;
+                if (tile != null) {
+                    argb = tile[ty * tileSize + tx];
+                } else {
+                    argb = ((tx + ty) & 3) == 0 ? UNLOADED_CHUNK_HINT_COLOR : 0;
+                }
+                pixels.setPixelABGR(baseX + tx, baseY + ty, argbToAbgr(argb));
+            }
+        }
     }
 
     static int argbToAbgr(int argb) {
@@ -181,7 +271,7 @@ public final class MinimapRenderer {
             int px = centerX + (int) Math.round(rotatedX(dx, dz, cosA, sinA));
             int py = centerY + (int) Math.round(rotatedZ(dx, dz, cosA, sinA));
             if (px < screenX || px >= screenX + displaySize || py < screenY || py >= screenY + displaySize) continue;
-            drawPlayerMarker(g, minecraft, other, px, py);
+            drawPlayerMarker(g, minecraft, other, px, py, verticalAlpha(other.getY(), player.getY()));
         }
 
         if (VoxyMapSettings.mobsEnabled()) {
@@ -191,7 +281,8 @@ public final class MinimapRenderer {
                 int px = centerX + (int) Math.round(rotatedX(dx, dz, cosA, sinA));
                 int py = centerY + (int) Math.round(rotatedZ(dx, dz, cosA, sinA));
                 if (px < screenX || px >= screenX + displaySize || py < screenY || py >= screenY + displaySize) continue;
-                drawDot(g, px, py, MOB_MARKER_RADIUS, mob.hostile() ? 0xFFFF5555 : 0xFF7CFC6E);
+                int baseColor = mob.hostile() ? 0xFFFF5555 : 0xFF7CFC6E;
+                drawDot(g, px, py, MOB_MARKER_RADIUS, scaleAlpha(baseColor, verticalAlpha(mob.y(), player.getY())));
             }
         }
 
@@ -220,6 +311,22 @@ public final class MinimapRenderer {
         }
         drawDot(g, centerX, centerY, MARKER_RADIUS + 1, 0xFF0A0A12);
         drawDot(g, centerX, centerY, MARKER_RADIUS, 0xFF55E7FF);
+    }
+
+    /** Fades a marker's opacity by vertical distance from the player - see {@link #NEAR_Y_BLOCKS}. */
+    static int verticalAlpha(double markerY, double playerY) {
+        double dy = Math.abs(markerY - playerY);
+        if (dy <= NEAR_Y_BLOCKS) return 0xFF;
+        if (dy >= FAR_Y_BLOCKS) return FAR_Y_ALPHA;
+        double t = (dy - NEAR_Y_BLOCKS) / (FAR_Y_BLOCKS - NEAR_Y_BLOCKS);
+        return (int) Math.round(0xFF - t * (0xFF - FAR_Y_ALPHA));
+    }
+
+    /** Scales an ARGB color's own alpha channel by {@code alpha}/0xFF, leaving its RGB untouched. */
+    static int scaleAlpha(int argb, int alpha) {
+        int baseAlpha = (argb >>> 24) & 0xFF;
+        int scaled = (baseAlpha * alpha) / 0xFF;
+        return (scaled << 24) | (argb & 0x00FFFFFF);
     }
 
     static double rotatedX(double dx, double dz, double cosA, double sinA) {
@@ -293,22 +400,24 @@ public final class MinimapRenderer {
 
     /** Draws another player as their skin's face (falling back to a plain dot if the client hasn't
      * cached that player's skin yet, e.g. the tick they join) plus a name label above it, clipped to the
-     * minimap by the scissor rect {@link #extract} already has active. */
-    private static void drawPlayerMarker(GuiGraphicsExtractor g, Minecraft minecraft, Player other, int px, int py) {
+     * minimap by the scissor rect {@link #extract} already has active. {@code alpha} (0-0xFF) fades the
+     * whole marker by vertical distance - see {@link #verticalAlpha}. */
+    private static void drawPlayerMarker(GuiGraphicsExtractor g, Minecraft minecraft, Player other, int px, int py, int alpha) {
         Identifier skin = PlayerHeadIcon.resolveSkinTexture(minecraft, other.getUUID());
         if (skin != null) {
-            drawDot(g, px, py, MARKER_RADIUS + 2, 0xEE0A0A12);
-            PlayerHeadIcon.draw(g, skin, px - PLAYER_HEAD_SIZE / 2, py - PLAYER_HEAD_SIZE / 2, PLAYER_HEAD_SIZE);
+            drawDot(g, px, py, MARKER_RADIUS + 2, scaleAlpha(0xEE0A0A12, alpha));
+            PlayerHeadIcon.draw(g, skin, px - PLAYER_HEAD_SIZE / 2, py - PLAYER_HEAD_SIZE / 2, PLAYER_HEAD_SIZE,
+                    scaleAlpha(0xFFFFFFFF, alpha));
         } else {
-            drawDot(g, px, py, MARKER_RADIUS, 0xFFFF62D4);
+            drawDot(g, px, py, MARKER_RADIUS, scaleAlpha(0xFFFF62D4, alpha));
         }
 
         String name = other.getName().getString();
         int nameWidth = minecraft.font.width(name);
         int nameX = px - nameWidth / 2;
         int nameY = py - MARKER_RADIUS - 11;
-        g.fill(nameX - 2, nameY - 1, nameX + nameWidth + 2, nameY + 8, 0x99030914);
-        g.text(minecraft.font, name, nameX, nameY, 0xFFFFFFFF);
+        g.fill(nameX - 2, nameY - 1, nameX + nameWidth + 2, nameY + 8, scaleAlpha(0x99030914, alpha));
+        g.text(minecraft.font, name, nameX, nameY, scaleAlpha(0xFFFFFFFF, alpha));
     }
 
     /** For a waypoint too far to fit inside the minimap's own display window - clamps its direction to
@@ -372,14 +481,25 @@ public final class MinimapRenderer {
         drawLine(g, lx, lz, rx, rz, 0x8855E7FF);
     }
 
+    /** Draws a 1px line as a single filled rect walked through a rotate+translate transform, instead of
+     * a per-pixel DDA loop each issuing its own {@code fill()} call - this runs every frame for the
+     * chunk grid (in rotate mode), off-screen waypoint tails and the facing-indicator wedge, so
+     * collapsing what could be a hundred-plus 1x1 fills into one draw call per line matters at that
+     * frequency. */
     private static void drawLine(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int color) {
-        int steps = Math.max(1, (int) Math.ceil(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1))));
-        for (int i = 0; i <= steps; i++) {
-            double t = i / (double) steps;
-            int px = (int) Math.round(x1 + (x2 - x1) * t);
-            int py = (int) Math.round(y1 + (y2 - y1) * t);
-            g.fill(px, py, px + 1, py + 1, color);
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double length = Math.hypot(dx, dy);
+        if (length < 1.0) {
+            g.fill(x1, y1, x1 + 1, y1 + 1, color);
+            return;
         }
+        float angle = (float) Math.atan2(dy, dx);
+        g.pose().pushMatrix();
+        g.pose().translate((float) x1, (float) y1);
+        g.pose().rotate(angle);
+        g.fill(0, 0, (int) Math.ceil(length) + 1, 1, color);
+        g.pose().popMatrix();
     }
 
     private static void drawDot(GuiGraphicsExtractor g, int centerX, int centerY, int radius, int color) {
