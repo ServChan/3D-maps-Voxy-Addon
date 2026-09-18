@@ -119,5 +119,10 @@
   "screen.voxymap.config.title": "Ustawienia VoxyMap",
   "screen.voxymap.diagnostics.ok": "Wszystkie integracje dzia\u0142aj\u0105",
   "screen.voxymap.diagnostics.shader_unsupported": "Shader Voxy nieobs\u0142ugiwany",
-  "screen.voxymap.diagnostics.ore_mask_unsupported": "Maska rud niedost\u0119pna"
+  "screen.voxymap.diagnostics.ore_mask_unsupported": "Maska rud niedost\u0119pna",
+  "screen.voxymap.settings.cutaway_status": "Status wyci\u0119cia",
+  "screen.voxymap.diagnostics.cutaway.disabled": "Wy\u0142\u0105czone",
+  "screen.voxymap.diagnostics.cutaway.searching": "Skanowanie...",
+  "screen.voxymap.diagnostics.cutaway.none": "Brak pomieszczenia w pobli\u017cu",
+  "screen.voxymap.diagnostics.cutaway.active": "Aktywne (%s kolumn)"
 }

@@ -119,5 +119,10 @@
   "screen.voxymap.config.title": "VoxyMap settings",
   "screen.voxymap.diagnostics.ok": "All integrations ready",
   "screen.voxymap.diagnostics.shader_unsupported": "Voxy shader unsupported",
-  "screen.voxymap.diagnostics.ore_mask_unsupported": "Ore mask unavailable"
+  "screen.voxymap.diagnostics.ore_mask_unsupported": "Ore mask unavailable",
+  "screen.voxymap.settings.cutaway_status": "Cutaway status",
+  "screen.voxymap.diagnostics.cutaway.disabled": "Disabled",
+  "screen.voxymap.diagnostics.cutaway.searching": "Scanning...",
+  "screen.voxymap.diagnostics.cutaway.none": "No room nearby",
+  "screen.voxymap.diagnostics.cutaway.active": "Active (%s columns)"
 }

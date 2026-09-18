@@ -149,6 +149,7 @@ public class MapScreen extends Screen {
     private int deathPointsRowY = -1;
     private int fogSuppressionRowY = -1;
     private int diagnosticsRowY = -1;
+    private int cutawayStatusRowY = -1;
     private final MapObjectPanel objectPanel = new MapObjectPanel();
     private long lastObjectPanelRefreshNanos;
     private String selectedObjectId;
@@ -1811,7 +1812,7 @@ public class MapScreen extends Screen {
         String syncErrorDetail = panelSyncStatus == WaypointManager.SyncStatus.ERROR
                 ? WaypointManager.syncErrorDetail(panelWorldId) : null;
         settingsPanelW = Math.min(360, width - HUD_MARGIN * 2);
-        int naturalPanelH = (showGhastScannerRow ? 214 : 190) + 24 + 72 + 168 + 48 + 24
+        int naturalPanelH = (showGhastScannerRow ? 214 : 190) + 24 + 72 + 168 + 72 + 24
                 + (syncErrorDetail != null ? 12 : 0);
         SettingsPanelLayout.Result panelLayout = SettingsPanelLayout.calculate(
                 naturalPanelH, footerTop, HUD_MARGIN, HUD_GAP, settingsScroll);
@@ -1964,6 +1965,16 @@ public class MapScreen extends Screen {
             diagnosticsValue = Component.translatable("screen.voxymap.diagnostics.ok").getString();
         }
         drawSettingValue(g, x, diagnosticsRowY, "screen.voxymap.settings.diagnostics", diagnosticsValue, 20);
+
+        cutawayStatusRowY = diagnosticsRowY + 24;
+        String cutawayStatusValue = switch (RoomCutawayController.diagnosticsState()) {
+            case DISABLED -> Component.translatable("screen.voxymap.diagnostics.cutaway.disabled").getString();
+            case SEARCHING -> Component.translatable("screen.voxymap.diagnostics.cutaway.searching").getString();
+            case NO_ROOM -> Component.translatable("screen.voxymap.diagnostics.cutaway.none").getString();
+            case ACTIVE -> Component.translatable("screen.voxymap.diagnostics.cutaway.active",
+                    RoomCutawayController.diagnosticsCutColumns()).getString();
+        };
+        drawSettingValue(g, x, cutawayStatusRowY, "screen.voxymap.settings.cutaway_status", cutawayStatusValue, 21);
         if (settingsMaxScroll > 0) {
             int trackTop = settingsPanelY + 30;
             int trackH = settingsPanelH - 40;
@@ -2047,6 +2058,12 @@ public class MapScreen extends Screen {
             valueColor = VoxyMapSettings.deathPointsEnabled() ? 0xFF55FF55 : 0xFFFF5555;
         } else if (row == 19) {
             valueColor = VoxyMapSettings.fogSuppressionEnabled() ? 0xFF55FF55 : 0xFFFF5555;
+        } else if (row == 21) {
+            valueColor = switch (RoomCutawayController.diagnosticsState()) {
+                case ACTIVE -> 0xFF55FF55;
+                case SEARCHING -> 0xFFFFC94D;
+                case DISABLED, NO_ROOM -> 0xFFAAAAAA;
+            };
         } else {
             valueColor = 0xFFFFFFFF;
         }

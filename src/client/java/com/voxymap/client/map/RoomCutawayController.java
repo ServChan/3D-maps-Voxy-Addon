@@ -184,6 +184,31 @@ public final class RoomCutawayController {
         return clamped * clamped * (3.0 - 2.0 * clamped);
     }
 
+    /** Coarse, human-facing summary of why the cutaway is or isn't doing anything right now - surfaced
+     * in the map's settings panel so a report of "it's not working" can be diagnosed from what the
+     * player already has open, instead of needing a log file. */
+    public enum DiagnosticsState { DISABLED, SEARCHING, NO_ROOM, ACTIVE }
+
+    public static DiagnosticsState diagnosticsState() {
+        if (!VoxyMapSettings.roomCutawayEnabled()) return DiagnosticsState.DISABLED;
+        if (pendingSearch != null) return DiagnosticsState.SEARCHING;
+        return diagnosticsCutColumns() > 0 ? DiagnosticsState.ACTIVE : DiagnosticsState.NO_ROOM;
+    }
+
+    /** How many columns of the last computed result actually have a confirmed ceiling - distinguishes
+     * a real, useful cutaway from the degenerate case where {@link RoomCutawayComputer.Result#hasCutaway()}
+     * is true (the grid was allocated) but nothing in it was ever confirmed capped. */
+    public static int diagnosticsCutColumns() {
+        if (!result.hasCutaway()) return 0;
+        int count = 0;
+        for (int[] row : result.topY) {
+            for (int value : row) {
+                if (value != RoomCutawayComputer.NO_CEILING) count++;
+            }
+        }
+        return count;
+    }
+
     public static void deactivate() {
         result = RoomCutawayComputer.Result.OPEN;
         hasComputed = false;

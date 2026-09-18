@@ -119,5 +119,10 @@
   "screen.voxymap.config.title": "Ajustes de VoxyMap",
   "screen.voxymap.diagnostics.ok": "Todas las integraciones listas",
   "screen.voxymap.diagnostics.shader_unsupported": "Shader de Voxy incompatible",
-  "screen.voxymap.diagnostics.ore_mask_unsupported": "Máscara de minerales no disponible"
+  "screen.voxymap.diagnostics.ore_mask_unsupported": "Máscara de minerales no disponible",
+  "screen.voxymap.settings.cutaway_status": "Estado del vaciado",
+  "screen.voxymap.diagnostics.cutaway.disabled": "Desactivado",
+  "screen.voxymap.diagnostics.cutaway.searching": "Buscando...",
+  "screen.voxymap.diagnostics.cutaway.none": "Sin sala cerca",
+  "screen.voxymap.diagnostics.cutaway.active": "Activo (%s columnas)"
 }
