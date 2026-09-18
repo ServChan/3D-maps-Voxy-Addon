@@ -41,6 +41,7 @@ public abstract class MDICSectionRendererMixin {
     // per compiled program with glGetUniformLocation instead of trusting the hardcoded constants removes
     // that whole class of doubt.
     private static final Map<Integer, VoxymapUniformLocations> voxymap$uniformCache = new HashMap<>();
+    private static boolean voxymap$loggedEnabledOnce = false;
 
     private record VoxymapUniformLocations(int enabled, int originX, int originZ, int globalCutoff,
                                             int apertureCenterX, int apertureCenterZ, int apertureInnerCutoff,
@@ -115,6 +116,19 @@ public abstract class MDICSectionRendererMixin {
                 && (RoomCutawayTexture.isEnabled() || RoomCutawayTexture.sphereRadius() > 0.0f);
         if (locations.enabled() >= 0) {
             GL41C.glProgramUniform1i(shader.id(), locations.enabled(), enabled ? 1 : 0);
+        }
+        // TEMPORARY: one-time confirmation that the Java side genuinely reached "enabled" at least
+        // once, with the exact values sent to the GPU - removes any doubt about whether a missing
+        // visual effect is a Java-side wiring problem versus something below this write (the compiled
+        // shader binary actually in use, a shader cache, an interceding renderer, ...). Remove once
+        // cutaway is confirmed visible in-game.
+        if (enabled && !voxymap$loggedEnabledOnce) {
+            voxymap$loggedEnabledOnce = true;
+            VoxyMapClient.LOGGER.info("[VoxyMap] Room-cutaway uniforms written: program={} enabledLoc={} "
+                            + "sphereRadius={} sphereCenter=({}, {}, {}) textureEnabled={}",
+                    shader.id(), locations.enabled(), RoomCutawayTexture.sphereRadius(),
+                    RoomCutawayTexture.sphereCenterX(), RoomCutawayTexture.sphereCenterY(),
+                    RoomCutawayTexture.sphereCenterZ(), RoomCutawayTexture.isEnabled());
         }
         if (enabled) {
             if (locations.originX() >= 0) {

@@ -78,9 +78,18 @@ public final class RoomCutawayShaderPatcher {
                     // the camera, not a guess about unverified geometry.
                     if (voxymapSphereRadius > 0.0) {
                         vec3 voxymapSphereCenter = vec3(voxymapSphereCenterX, voxymapSphereCenterY, voxymapSphereCenterZ);
-                        if (distance(voxymapWorldPos, voxymapSphereCenter) < voxymapSphereRadius) {
+                        float voxymapSphereDist = distance(voxymapWorldPos, voxymapSphereCenter);
+                        if (voxymapSphereDist < voxymapSphereRadius) {
                             discard;
                             return;
+                        }
+                        // TEMPORARY diagnostic halo: paints a bright magenta band just outside the cut
+                        // sphere instead of discarding, so "does our patched shader code run and affect
+                        // the frame at all" is answerable from a single screenshot, independent of
+                        // whether discard itself behaves as expected. Remove once cutaway is confirmed
+                        // visible in-game.
+                        if (voxymapSphereDist < voxymapSphereRadius * 1.15) {
+                            colour = vec4(1.0, 0.0, 1.0, 1.0);
                         }
                     }
 
