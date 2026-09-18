@@ -1,5 +1,6 @@
 package com.voxymap.client.mixin;
 
+import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.map.OreMaskTexture;
 import com.voxymap.client.map.RoomCutawayController;
 import com.voxymap.client.map.RoomCutawayShaderPatcher;
@@ -7,6 +8,7 @@ import com.voxymap.client.map.RoomCutawayTexture;
 import me.cortex.voxy.client.core.gl.shader.Shader;
 import me.cortex.voxy.client.core.rendering.section.backend.mdic.MDICSectionRenderer;
 import me.cortex.voxy.client.core.rendering.section.backend.mdic.MDICViewport;
+import org.lwjgl.opengl.GL20C;
 import org.lwjgl.opengl.GL41C;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL30C;
@@ -18,6 +20,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Mixin(value = MDICSectionRenderer.class, remap = false)
 public abstract class MDICSectionRendererMixin {
     @Shadow @Final private Shader terrainShader;
@@ -26,6 +31,44 @@ public abstract class MDICSectionRendererMixin {
     private int voxymap$translucentPreviousTexture = -1;
     private int voxymap$opaquePreviousOreTexture = -1;
     private int voxymap$translucentPreviousOreTexture = -1;
+
+    // The layout(location = N) qualifiers in RoomCutawayShaderPatcher's injected declarations are only
+    // a request - nothing here previously verified the driver's linker actually honored them, so a
+    // location that silently ended up different (an uncommon but real possibility across GL
+    // implementations, and impossible to tell apart from "the feature is just broken" without this)
+    // would make every uniform write below land on the wrong slot, or none at all, with no error and
+    // no visible symptom besides the cutaway/ore-mask never doing anything. Resolving the real location
+    // per compiled program with glGetUniformLocation instead of trusting the hardcoded constants removes
+    // that whole class of doubt.
+    private static final Map<Integer, VoxymapUniformLocations> voxymap$uniformCache = new HashMap<>();
+
+    private record VoxymapUniformLocations(int enabled, int originX, int originZ, int globalCutoff,
+                                            int apertureCenterX, int apertureCenterZ, int apertureInnerCutoff,
+                                            int apertureRadius, int oreMaskEnabled) {
+    }
+
+    private static VoxymapUniformLocations voxymap$locationsFor(int programId) {
+        return voxymap$uniformCache.computeIfAbsent(programId, id -> {
+            VoxymapUniformLocations locations = new VoxymapUniformLocations(
+                    GL20C.glGetUniformLocation(id, "voxymapCutawayEnabled"),
+                    GL20C.glGetUniformLocation(id, "voxymapCutawayOriginX"),
+                    GL20C.glGetUniformLocation(id, "voxymapCutawayOriginZ"),
+                    GL20C.glGetUniformLocation(id, "voxymapGlobalCutawayY"),
+                    GL20C.glGetUniformLocation(id, "voxymapApertureCenterX"),
+                    GL20C.glGetUniformLocation(id, "voxymapApertureCenterZ"),
+                    GL20C.glGetUniformLocation(id, "voxymapApertureInnerY"),
+                    GL20C.glGetUniformLocation(id, "voxymapApertureRadius"),
+                    GL20C.glGetUniformLocation(id, "voxymapOreMaskEnabled"));
+            if (locations.enabled() < 0) {
+                VoxyMapClient.LOGGER.warn("[VoxyMap] Room-cutaway uniform 'voxymapCutawayEnabled' was not found "
+                        + "in the compiled Voxy shader (program {}, expected location {}) - the shader source "
+                        + "patch applied, but the driver's linker did not expose the uniform where expected, so "
+                        + "the cutaway will not affect rendering on this shader.",
+                        id, RoomCutawayShaderPatcher.ENABLED_UNIFORM_LOCATION);
+            }
+            return locations;
+        });
+    }
 
     @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"))
     private void voxymap$setOpaqueCutaway(MDICViewport viewport, CallbackInfo ci) {
@@ -59,16 +102,33 @@ public abstract class MDICSectionRendererMixin {
         if (!RoomCutawayShaderPatcher.isSupported()) {
             return -1;
         }
+        VoxymapUniformLocations locations = voxymap$locationsFor(shader.id());
         boolean enabled = RoomCutawayController.isActive() && RoomCutawayTexture.isEnabled();
-        GL41C.glProgramUniform1i(shader.id(), RoomCutawayShaderPatcher.ENABLED_UNIFORM_LOCATION, enabled ? 1 : 0);
+        if (locations.enabled() >= 0) {
+            GL41C.glProgramUniform1i(shader.id(), locations.enabled(), enabled ? 1 : 0);
+        }
         if (enabled) {
-            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.ORIGIN_X_UNIFORM_LOCATION, RoomCutawayTexture.originX());
-            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.ORIGIN_Z_UNIFORM_LOCATION, RoomCutawayTexture.originZ());
-            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.GLOBAL_CUTOFF_UNIFORM_LOCATION, RoomCutawayTexture.uniformCutoff());
-            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.APERTURE_CENTER_X_UNIFORM_LOCATION, RoomCutawayTexture.apertureCenterX());
-            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.APERTURE_CENTER_Z_UNIFORM_LOCATION, RoomCutawayTexture.apertureCenterZ());
-            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.APERTURE_INNER_CUTOFF_UNIFORM_LOCATION, RoomCutawayTexture.apertureInnerCutoff());
-            GL41C.glProgramUniform1f(shader.id(), RoomCutawayShaderPatcher.APERTURE_RADIUS_UNIFORM_LOCATION, RoomCutawayTexture.apertureRadius());
+            if (locations.originX() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.originX(), RoomCutawayTexture.originX());
+            }
+            if (locations.originZ() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.originZ(), RoomCutawayTexture.originZ());
+            }
+            if (locations.globalCutoff() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.globalCutoff(), RoomCutawayTexture.uniformCutoff());
+            }
+            if (locations.apertureCenterX() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.apertureCenterX(), RoomCutawayTexture.apertureCenterX());
+            }
+            if (locations.apertureCenterZ() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.apertureCenterZ(), RoomCutawayTexture.apertureCenterZ());
+            }
+            if (locations.apertureInnerCutoff() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.apertureInnerCutoff(), RoomCutawayTexture.apertureInnerCutoff());
+            }
+            if (locations.apertureRadius() >= 0) {
+                GL41C.glProgramUniform1f(shader.id(), locations.apertureRadius(), RoomCutawayTexture.apertureRadius());
+            }
             int previousTexture = GL30C.glGetIntegeri(GL11C.GL_TEXTURE_BINDING_2D, RoomCutawayTexture.TEXTURE_UNIT);
             GL45C.glBindTextureUnit(RoomCutawayTexture.TEXTURE_UNIT, RoomCutawayTexture.textureId());
             return previousTexture;
@@ -84,8 +144,11 @@ public abstract class MDICSectionRendererMixin {
         if (!RoomCutawayShaderPatcher.isSupported()) {
             return -1;
         }
+        VoxymapUniformLocations locations = voxymap$locationsFor(shader.id());
         boolean enabled = OreMaskTexture.hasAnyMarked();
-        GL41C.glProgramUniform1i(shader.id(), RoomCutawayShaderPatcher.ORE_MASK_ENABLED_UNIFORM_LOCATION, enabled ? 1 : 0);
+        if (locations.oreMaskEnabled() >= 0) {
+            GL41C.glProgramUniform1i(shader.id(), locations.oreMaskEnabled(), enabled ? 1 : 0);
+        }
         if (enabled) {
             int previousTexture = GL30C.glGetIntegeri(GL11C.GL_TEXTURE_BINDING_2D, OreMaskTexture.TEXTURE_UNIT);
             GL45C.glBindTextureUnit(OreMaskTexture.TEXTURE_UNIT, OreMaskTexture.textureId());
