@@ -53,6 +53,7 @@ Iris, Xaero's World Map, and HappyGhastScanner are optional integrations. The mo
 | `C` | Center on the player |
 | `O` | Open or close the Objects panel |
 | `F` | Follow or stop following the selected player; manual movement stops following |
+| `F2` (screenshot key) | Save a screenshot of the bare map: every panel, marker, the HUD and chat are hidden for one frame, then restored |
 | `Esc` | Close the map |
 
 Settings are stored in `config/voxymap.properties`, and waypoints in `config/voxymap-waypoints.properties`. Both write through a sibling temporary file and keep a `.bak` copy for recovery.
