@@ -66,7 +66,7 @@ public final class VanillaSquadPlayerMapBridge {
 
     public static void tick(Object worldIdentity, String dimensionId, UUID playerUuid, String playerName,
                             double playerX, double playerZ, List<Observer> observers, String voxyWorldId) {
-        if (!VoxyMapSettings.vanillaSquadPlayersEnabled() && !VoxyMapSettings.vanillaSquadFlagsEnabled()) {
+        if (!VoxyMapSettings.vanillaSquadPlayersActive() && !VoxyMapSettings.vanillaSquadFlagsActive()) {
             return;
         }
 
@@ -88,7 +88,7 @@ public final class VanillaSquadPlayerMapBridge {
         String configuredMapId = VoxyMapSettings.vanillaSquadMap(context == null ? null : context.voxyWorldId()).mapId();
         if (configuredMapId != null) {
             activeMapId = configuredMapId;
-            if (VoxyMapSettings.vanillaSquadPlayersEnabled()) {
+            if (VoxyMapSettings.vanillaSquadPlayersActive()) {
                 fetchIfNeeded(configuredMapId, context.generation());
             }
             return;

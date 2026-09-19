@@ -1,6 +1,7 @@
 package com.voxymap.client.map;
 
 import com.voxymap.client.VoxyMapClient;
+import com.voxymap.client.integration.VanillaSquadServer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 
@@ -38,6 +39,8 @@ public final class VoxyMapSettings {
     private static boolean minimapRotates = false;
     private static boolean chunkGridEnabled = false;
     private static boolean deathPointsEnabled = true;
+    private static boolean viewDirectionEnabled = true;
+    private static ScreenshotContent screenshotContent = ScreenshotContent.NO_INTERFACE;
     private static FogSuppression fogSuppression = FogSuppression.ALWAYS;
 
     private VoxyMapSettings() {
@@ -76,6 +79,8 @@ public final class VoxyMapSettings {
         minimapRotates = readBoolean(properties.getProperty("minimapRotates"), minimapRotates);
         chunkGridEnabled = readBoolean(properties.getProperty("chunkGridEnabled"), chunkGridEnabled);
         deathPointsEnabled = readBoolean(properties.getProperty("deathPointsEnabled"), deathPointsEnabled);
+        viewDirectionEnabled = readBoolean(properties.getProperty("viewDirectionEnabled"), viewDirectionEnabled);
+        screenshotContent = ScreenshotContent.parse(properties.getProperty("screenshotContent"));
         fogSuppression = FogSuppression.parse(properties.getProperty("fogSuppressionMode"),
                 properties.getProperty("fogSuppressionEnabled"));
     }
@@ -95,6 +100,8 @@ public final class VoxyMapSettings {
         properties.setProperty("minimapRotates", Boolean.toString(minimapRotates));
         properties.setProperty("chunkGridEnabled", Boolean.toString(chunkGridEnabled));
         properties.setProperty("deathPointsEnabled", Boolean.toString(deathPointsEnabled));
+        properties.setProperty("viewDirectionEnabled", Boolean.toString(viewDirectionEnabled));
+        properties.setProperty("screenshotContent", screenshotContent.name().toLowerCase(Locale.ROOT));
         properties.setProperty("fogSuppressionMode", fogSuppression.name().toLowerCase(Locale.ROOT));
 
         AtomicPropertiesWriter.save(CONFIG_PATH, BACKUP_PATH, TEMP_PATH, properties, "VoxyMap client settings");
@@ -143,6 +150,11 @@ public final class VoxyMapSettings {
         return vanillaSquadPlayersEnabled;
     }
 
+    /** Enabled in the settings AND connected to VanillaSquad; the overlay and its fetching key off this. */
+    public static boolean vanillaSquadPlayersActive() {
+        return vanillaSquadPlayersEnabled() && VanillaSquadServer.isConnected();
+    }
+
     public static void toggleVanillaSquadPlayers() {
         load();
         vanillaSquadPlayersEnabled = !vanillaSquadPlayersEnabled;
@@ -152,6 +164,11 @@ public final class VoxyMapSettings {
     public static boolean vanillaSquadFlagsEnabled() {
         load();
         return vanillaSquadFlagsEnabled;
+    }
+
+    /** Enabled in the settings AND connected to VanillaSquad; the overlay and its fetching key off this. */
+    public static boolean vanillaSquadFlagsActive() {
+        return vanillaSquadFlagsEnabled() && VanillaSquadServer.isConnected();
     }
 
     public static void toggleVanillaSquadFlags() {
@@ -241,6 +258,30 @@ public final class VoxyMapSettings {
     /** Whether VoxyMap should suppress environmental/shader-pack fog while the map is open. Defaults
      * to on since the fullscreen map view reads poorly through normal ground-level fog; players who
      * prefer the atmospheric look (or hit a shader incompatibility) can turn it back off. */
+    /** Whether the map draws the local player's field of view and look direction. */
+    public static boolean viewDirectionEnabled() {
+        load();
+        return viewDirectionEnabled;
+    }
+
+    public static void toggleViewDirection() {
+        load();
+        viewDirectionEnabled = !viewDirectionEnabled;
+        save();
+    }
+
+    public static ScreenshotContent screenshotContent() {
+        load();
+        return screenshotContent;
+    }
+
+    public static void cycleScreenshotContent() {
+        load();
+        ScreenshotContent[] values = ScreenshotContent.values();
+        screenshotContent = values[(screenshotContent.ordinal() + 1) % values.length];
+        save();
+    }
+
     public static FogSuppression fogSuppressionMode() {
         load();
         return fogSuppression;
@@ -357,6 +398,33 @@ public final class VoxyMapSettings {
      * {@code LevelMixin}) - by default the map always keeps itself readable by forcing midday, no
      * rain/thunder. AUTO instead lets the real world clock and weather show through; DAY/NIGHT pin the
      * map to one lighting look regardless of the actual time, e.g. for a consistent screenshot. */
+    /** What the screenshot key keeps on the map. Declaration order is the order the setting cycles through. */
+    public enum ScreenshotContent {
+        NO_INTERFACE("screen.voxymap.settings.screenshot.clean"),
+        WITH_MARKERS("screen.voxymap.settings.screenshot.markers");
+
+        private final String translationKey;
+
+        ScreenshotContent(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        static ScreenshotContent parse(String value) {
+            if (value != null) {
+                try {
+                    return valueOf(value.trim().toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException ignored) {
+                    // Keep the clean default for hand-edited configs.
+                }
+            }
+            return NO_INTERFACE;
+        }
+    }
+
     /** Where the map removes shader-pack fog. Declaration order is the order the setting cycles through. */
     public enum FogSuppression {
         ALWAYS("screen.voxymap.settings.on"),

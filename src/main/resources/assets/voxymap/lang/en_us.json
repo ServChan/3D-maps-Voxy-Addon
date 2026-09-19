@@ -122,8 +122,13 @@
   "screen.voxymap.settings.group.minimap": "Minimap",
   "screen.voxymap.settings.group.sync": "Sync and sharing",
   "screen.voxymap.settings.group.diagnostics": "Diagnostics",
-  "screen.voxymap.config.world_note": "Sync, map sharing and the VanillaSquad map are set per world. Open the map (M) in a world and use Settings to change them.",
+  "screen.voxymap.config.world_note": "Sync settings and the VanillaSquad map belong to a world, so they appear here only when this screen is opened from inside a world (Esc -> Mods). Map sharing is on the map (M) -> Settings.",
   "screen.voxymap.settings.timeofday.morning": "Always morning",
   "screen.voxymap.settings.timeofday.evening": "Always evening",
-  "screen.voxymap.settings.fogsuppression.nether": "Nether only"
+  "screen.voxymap.settings.fogsuppression.nether": "Nether only",
+  "screen.voxymap.settings.viewdirection": "My view direction",
+  "screen.voxymap.settings.screenshot": "Map screenshot",
+  "screen.voxymap.settings.screenshot.clean": "No interface",
+  "screen.voxymap.settings.screenshot.markers": "With markers",
+  "screen.voxymap.config.map_note": "Map sharing is only available on the map (M) -> Settings."
 }

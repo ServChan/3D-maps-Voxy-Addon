@@ -122,8 +122,13 @@
   "screen.voxymap.settings.group.minimap": "Minimapa",
   "screen.voxymap.settings.group.sync": "Sincronizaci\u00f3n e intercambio",
   "screen.voxymap.settings.group.diagnostics": "Diagn\u00f3stico",
-  "screen.voxymap.config.world_note": "La sincronizaci\u00f3n, el intercambio de mapas y el mapa de VanillaSquad se configuran en cada mundo. Abre el mapa (M) en un mundo y usa Ajustes para cambiarlos.",
+  "screen.voxymap.config.world_note": "La sincronizaci\u00f3n y el mapa de VanillaSquad pertenecen a un mundo, as\u00ed que solo aparecen si abres esta pantalla desde dentro de un mundo (Esc \u2192 Mods). El intercambio de mapas est\u00e1 en el mapa (M) \u2192 Ajustes.",
   "screen.voxymap.settings.timeofday.morning": "Siempre por la ma\u00f1ana",
   "screen.voxymap.settings.timeofday.evening": "Siempre al atardecer",
-  "screen.voxymap.settings.fogsuppression.nether": "Solo en el Nether"
+  "screen.voxymap.settings.fogsuppression.nether": "Solo en el Nether",
+  "screen.voxymap.settings.viewdirection": "Direcci\u00f3n de mi mirada",
+  "screen.voxymap.settings.screenshot": "Captura del mapa",
+  "screen.voxymap.settings.screenshot.clean": "Sin interfaz",
+  "screen.voxymap.settings.screenshot.markers": "Con marcadores",
+  "screen.voxymap.config.map_note": "El intercambio de mapas solo est\u00e1 disponible en el mapa (M) \u2192 Ajustes."
 }

@@ -155,8 +155,10 @@ class ProjectContractTest {
                 "src/client/java/com/voxymap/client/integration/VanillaSquadPlayerMapBridge.java"), StandardCharsets.UTF_8);
         assertTrue(settings.contains("vanillaSquadPlayersEnabled = false"),
                 "Fetching from a third-party site must require an explicit opt-in, not be on by default");
-        assertTrue(bridge.contains("if (!VoxyMapSettings.vanillaSquadPlayersEnabled() && !VoxyMapSettings.vanillaSquadFlagsEnabled())"),
-                "Realm detection may fetch only when at least one VanillaSquad overlay was explicitly enabled");
+        assertTrue(bridge.contains("if (!VoxyMapSettings.vanillaSquadPlayersActive() && !VoxyMapSettings.vanillaSquadFlagsActive())"),
+                "Realm detection may fetch only when a VanillaSquad overlay is enabled AND the client is on that server");
+        assertTrue(settings.contains("vanillaSquadPlayersEnabled() && VanillaSquadServer.isConnected()"),
+                "The overlay must not fetch from another server just because the setting is on");
     }
 
     @Test

@@ -122,8 +122,13 @@
   "screen.voxymap.settings.group.minimap": "Minimapa",
   "screen.voxymap.settings.group.sync": "Synchronizacja i udost\u0119pnianie",
   "screen.voxymap.settings.group.diagnostics": "Diagnostyka",
-  "screen.voxymap.config.world_note": "Synchronizacja, udost\u0119pnianie mapy i mapa VanillaSquad s\u0105 ustawiane osobno dla ka\u017cdego \u015bwiata. Otw\u00f3rz map\u0119 (M) w \u015bwiecie i u\u017cyj Ustawie\u0144, aby je zmieni\u0107.",
+  "screen.voxymap.config.world_note": "Synchronizacja i mapa VanillaSquad nale\u017c\u0105 do \u015bwiata, wi\u0119c pojawiaj\u0105 si\u0119 tylko po otwarciu tego ekranu z poziomu \u015bwiata (Esc \u2192 Mods). Udost\u0119pnianie mapy jest na mapie (M) \u2192 Ustawienia.",
   "screen.voxymap.settings.timeofday.morning": "Zawsze rano",
   "screen.voxymap.settings.timeofday.evening": "Zawsze wieczorem",
-  "screen.voxymap.settings.fogsuppression.nether": "Tylko w Netherze"
+  "screen.voxymap.settings.fogsuppression.nether": "Tylko w Netherze",
+  "screen.voxymap.settings.viewdirection": "Kierunek patrzenia",
+  "screen.voxymap.settings.screenshot": "Zrzut ekranu mapy",
+  "screen.voxymap.settings.screenshot.clean": "Bez interfejsu",
+  "screen.voxymap.settings.screenshot.markers": "Z znacznikami",
+  "screen.voxymap.config.map_note": "Udost\u0119pnianie mapy jest dost\u0119pne tylko na mapie (M) \u2192 Ustawienia."
 }

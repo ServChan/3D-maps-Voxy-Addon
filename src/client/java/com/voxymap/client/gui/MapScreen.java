@@ -3,8 +3,10 @@ package com.voxymap.client.gui;
 import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.integration.VanillaSquadFlagMapBridge;
 import com.voxymap.client.integration.VanillaSquadPlayerMapBridge;
+import com.voxymap.client.integration.VanillaSquadServer;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
+import com.voxymap.client.map.MapScreenshot;
 import com.voxymap.client.map.MapShareBounds;
 import com.voxymap.client.map.PlayerViewConeGeometry;
 import com.voxymap.client.map.NetherRoofController;
@@ -48,6 +50,7 @@ public class MapScreen extends Screen {
     private static final double MAX_KEYBOARD_CAMERA_SPEED = 640.0;
     private static final double MAX_DRAG_STEP_BLOCKS = 1536.0;
     private static final double PLAYER_VIEW_CONE_HALF_ANGLE = 32.0;
+    private static final double LOCAL_VIEW_SCREEN_LENGTH = 90.0;
     private static final double PLAYER_VIEW_CONE_SCREEN_LENGTH = 34.0;
     // 4 segments per lap: 24 back / 16 ahead covers ~6 already-flown and ~4 upcoming laps around the
     // scanner's current position, which is the stretch relevant to picking a lap to resume from.
@@ -207,6 +210,14 @@ public class MapScreen extends Screen {
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
+        if (MapScreenshot.markersOnlyFrame()) {
+            // Screenshot with the "with markers" setting: no panels, hints or text overlays, and no hover
+            // state (the mouse would otherwise expand a label or cluster under it), just the markers.
+            drawFlagMarkers(g);
+            drawWaypoints(g, -1, -1);
+            drawPlayerMarkers(g, -1, -1);
+            return;
+        }
         drawWorldViewerOverlay(g, mouseX, mouseY);
         drawOpeningAnimation(g);
         drawTextInputOverlay(g);
@@ -569,6 +580,8 @@ public class MapScreen extends Screen {
             case SPEED -> VoxyMapSettings.changeCameraSpeed(mouseX < settingsPanelX + settingsPanelW / 2.0 ? -0.25 : 0.25);
             case TIME_OF_DAY -> VoxyMapSettings.cycleTimeOfDayMode();
             case FOG_SUPPRESSION -> VoxyMapSettings.cycleFogSuppression();
+            case SCREENSHOT -> VoxyMapSettings.cycleScreenshotContent();
+            case VIEW_DIRECTION -> VoxyMapSettings.toggleViewDirection();
             case WAYPOINTS -> VoxyMapSettings.toggleWaypointsVisible();
             case DEATH_POINTS -> VoxyMapSettings.toggleDeathPoints();
             case VANILLASQUAD_PLAYERS -> VoxyMapSettings.toggleVanillaSquadPlayers();
@@ -756,7 +769,7 @@ public class MapScreen extends Screen {
                         !blockedFromEditingSilently(worldId, waypoint)));
             }
         }
-        if (minecraft != null && minecraft.level != null && VoxyMapSettings.vanillaSquadFlagsEnabled()) {
+        if (minecraft != null && minecraft.level != null && VoxyMapSettings.vanillaSquadFlagsActive()) {
             String dimensionId = minecraft.level.dimension().identifier().toString();
             for (VanillaSquadFlagMapBridge.Territory territory : VanillaSquadFlagMapBridge.territoriesInDimension(
                     VanillaSquadPlayerMapBridge.activeMapId(), dimensionId)) {
@@ -856,7 +869,7 @@ public class MapScreen extends Screen {
                     player.getYHeadRot()));
         }
 
-        if (VoxyMapSettings.vanillaSquadPlayersEnabled()) {
+        if (VoxyMapSettings.vanillaSquadPlayersActive()) {
             String dimensionId = minecraft.level.dimension().identifier().toString();
             for (VanillaSquadPlayerMapBridge.RemotePlayer remote : VanillaSquadPlayerMapBridge.playersInDimension(dimensionId)) {
                 if ((remote.uuid() != null && knownUuids.contains(remote.uuid()))
@@ -878,7 +891,7 @@ public class MapScreen extends Screen {
      * members, and drawing those individually every frame is what caused the severe frame drop.
      */
     private void drawFlagMarkers(GuiGraphicsExtractor g) {
-        if (!VoxyMapCameraController.isActive() || !VoxyMapSettings.vanillaSquadFlagsEnabled()
+        if (!VoxyMapCameraController.isActive() || !VoxyMapSettings.vanillaSquadFlagsActive()
                 || minecraft == null || minecraft.level == null) {
             return;
         }
@@ -1529,6 +1542,9 @@ public class MapScreen extends Screen {
         int radius = markerRadius(marker);
         int outline = marker.local ? 0xEE071923 : (marker.remote ? 0xEE241A05 : 0xEE210A25);
         int color = marker.local ? 0xFF55E7FF : (marker.remote ? 0xFFF2B33D : 0xFFFF62D4);
+        if (marker.local && VoxyMapSettings.viewDirectionEnabled()) {
+            drawLocalViewDirection(g, marker, point);
+        }
         if (marker.isActivePlayer()) {
             double nearest = nearestActiveMarkerDistance(entry, projected);
             if (hovered || nearest >= PLAYER_VIEW_CONE_CROWD_DISTANCE) {
@@ -1619,6 +1635,79 @@ public class MapScreen extends Screen {
         }
         if (lookPoint != null) {
             drawSolidLine(g, origin.x, origin.y, lookPoint.x, lookPoint.y, 0xAAFFB3EC);
+        }
+    }
+
+    /**
+     * The local player's field of view as a translucent wedge, with a bright centre ray and arrowhead for
+     * the exact look direction. The wedge uses the game's real horizontal FOV for this window, so what
+     * lies inside it is what is on the player's screen. Unlike other players' cones it is always drawn.
+     */
+    private void drawLocalViewDirection(GuiGraphicsExtractor g, PlayerMarker marker, ScreenPoint origin) {
+        if (!Float.isFinite(marker.yawDegrees)) {
+            return;
+        }
+        double halfAngle = localViewHalfAngleDegrees();
+        double worldLength = Mth.clamp(blocksPerPixel * LOCAL_VIEW_SCREEN_LENGTH, 16.0, 192.0);
+        ScreenPoint left = projectViewConePoint(marker, marker.yawDegrees - halfAngle, worldLength);
+        ScreenPoint right = projectViewConePoint(marker, marker.yawDegrees + halfAngle, worldLength);
+        ScreenPoint ahead = projectViewConePoint(marker, marker.yawDegrees, worldLength);
+        if (left != null && right != null) {
+            fillTriangle(g, origin, left, right, 0x2E55E7FF);
+            drawSolidLine(g, origin.x, origin.y, left.x, left.y, 0x9955E7FF);
+            drawSolidLine(g, origin.x, origin.y, right.x, right.y, 0x9955E7FF);
+            drawSolidLine(g, left.x, left.y, right.x, right.y, 0x6655E7FF);
+        }
+        if (ahead != null) {
+            drawSolidLine(g, origin.x, origin.y, ahead.x, ahead.y, 0xFF8CF0FF);
+            drawArrowHead(g, origin, ahead, 8, 0xFF8CF0FF);
+        }
+    }
+
+    /** Half of the game's horizontal field of view, from the vertical FOV option and this screen's aspect. */
+    private double localViewHalfAngleDegrees() {
+        double verticalFov = minecraft != null ? minecraft.options.fov().get() : 70.0;
+        double aspect = height > 0 ? width / (double) height : 16.0 / 9.0;
+        double half = Math.toDegrees(Math.atan(Math.tan(Math.toRadians(verticalFov) * 0.5) * aspect));
+        return Mth.clamp(half, 20.0, 75.0);
+    }
+
+    /** A small open arrowhead at {@code tip}, pointing away from {@code from} on the screen. */
+    private void drawArrowHead(GuiGraphicsExtractor g, ScreenPoint from, ScreenPoint tip, int size, int color) {
+        double dx = tip.x - from.x;
+        double dy = tip.y - from.y;
+        double length = Math.hypot(dx, dy);
+        if (length < 4.0) {
+            return;
+        }
+        dx /= length;
+        dy /= length;
+        for (int side = -1; side <= 1; side += 2) {
+            double cos = Math.cos(Math.toRadians(150.0));
+            double sin = Math.sin(Math.toRadians(150.0)) * side;
+            double wx = dx * cos - dy * sin;
+            double wy = dx * sin + dy * cos;
+            drawSolidLine(g, tip.x, tip.y,
+                    (int) Math.round(tip.x + wx * size), (int) Math.round(tip.y + wy * size), color);
+        }
+    }
+
+    /** Fills a screen triangle row by row. Rows and columns are clamped to the screen, so a far-off vertex cannot stall a frame. */
+    private void fillTriangle(GuiGraphicsExtractor g, ScreenPoint a, ScreenPoint b, ScreenPoint c, int color) {
+        int[] xs = {a.x, b.x, c.x};
+        int[] ys = {a.y, b.y, c.y};
+        int minY = Math.max(0, Math.min(a.y, Math.min(b.y, c.y)));
+        int maxY = Math.min(height - 1, Math.max(a.y, Math.max(b.y, c.y)));
+        for (int y = minY; y <= maxY; y++) {
+            double[] span = ScreenTriangle.span(y + 0.5, xs, ys);
+            if (span == null) {
+                continue;
+            }
+            int from = Mth.clamp((int) Math.floor(span[0]), 0, width);
+            int to = Mth.clamp((int) Math.ceil(span[1]), 0, width);
+            if (to > from) {
+                g.fill(from, y, to, y + 1, color);
+            }
         }
     }
 
@@ -1718,7 +1807,7 @@ public class MapScreen extends Screen {
                 ? WaypointManager.syncStatus(worldId) : WaypointManager.SyncStatus.DISABLED;
         String syncErrorDetail = syncStatus == WaypointManager.SyncStatus.ERROR
                 ? WaypointManager.syncErrorDetail(worldId) : null;
-        List<SettingsCatalog.Section> sections = SettingsCatalog.sections(true);
+        List<SettingsCatalog.Section> sections = SettingsCatalog.sections(true, true, VanillaSquadServer.isConnected());
 
         int naturalPanelH = SETTINGS_TITLE_HEIGHT + SETTINGS_BOTTOM_PADDING
                 + (syncErrorDetail != null ? SETTINGS_ERROR_DETAIL_HEIGHT : 0);
@@ -1800,6 +1889,9 @@ public class MapScreen extends Screen {
                             case OFF -> 0xFFFF5555;
                         });
             }
+            case SCREENSHOT -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.screenshotContent().translationKey()).getString(), 0xFFFFFFFF);
+            case VIEW_DIRECTION -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.viewDirectionEnabled());
             case WAYPOINTS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.waypointsEnabled());
             case DEATH_POINTS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.deathPointsEnabled());
             case VANILLASQUAD_PLAYERS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.vanillaSquadPlayersEnabled());

@@ -1,16 +1,22 @@
 package com.voxymap.client.gui;
 
+import com.voxymap.client.integration.VanillaSquadServer;
 import com.voxymap.client.map.VoxyMapSettings;
+import com.voxymap.client.map.WaypointManager;
+import com.voxymap.client.map.WaypointSyncSettings;
+import me.cortex.voxy.commonImpl.WorldIdentifier;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 import org.lwjgl.glfw.GLFW;
 
@@ -22,8 +28,8 @@ import java.util.function.BooleanSupplier;
 /**
  * Global settings screen opened from Mod Menu. It lists the same groups, in the same order, as the
  * in-map panel (both come from {@link SettingsCatalog}) in a scrollable column, so it stays usable at
- * any window size or GUI scale. Settings that only exist per world (sync, map sharing, the
- * VanillaSquad map) are configured in the map itself.
+ * any window size or GUI scale. Settings stored per world (sync address and password, the VanillaSquad
+ * map) appear when the screen is opened from inside a world; map sharing needs the map itself.
  */
 public final class VoxyMapConfigScreen extends Screen {
     private static final int TITLE_BAR_HEIGHT = 28;
@@ -66,6 +72,10 @@ public final class VoxyMapConfigScreen extends Screen {
     private final Screen parent;
     private final List<Item> items = new ArrayList<>();
     private Button doneButton;
+    private EditBox syncAddressBox;
+    private EditBox syncPasswordBox;
+    private Button syncStatusButton;
+    private String worldId;
     private int contentLeft;
     private int contentWidth;
     private int controlX;
@@ -89,8 +99,14 @@ public final class VoxyMapConfigScreen extends Screen {
         viewportTop = TITLE_BAR_HEIGHT + VIEWPORT_PADDING;
         viewportBottom = height - FOOTER_HEIGHT;
 
+        worldId = currentWorldId();
+        syncAddressBox = null;
+        syncPasswordBox = null;
+        syncStatusButton = null;
+
         int y = 0;
-        for (SettingsCatalog.Section section : SettingsCatalog.sections(false)) {
+        for (SettingsCatalog.Section section : SettingsCatalog.sections(
+                worldId != null, false, VanillaSquadServer.isConnected())) {
             items.add(new Item(Kind.HEADER, y, HEADER_HEIGHT, Component.translatable(section.group().titleKey()), null, null));
             y += HEADER_HEIGHT;
             for (SettingsCatalog.Entry entry : section.entries()) {
@@ -100,7 +116,8 @@ public final class VoxyMapConfigScreen extends Screen {
             }
             y += SECTION_GAP;
         }
-        List<FormattedCharSequence> note = font.split(Component.translatable("screen.voxymap.config.world_note"), contentWidth);
+        String noteKey = worldId != null ? "screen.voxymap.config.map_note" : "screen.voxymap.config.world_note";
+        List<FormattedCharSequence> note = font.split(Component.translatable(noteKey), contentWidth);
         items.add(new Item(Kind.NOTE, y, note.size() * font.lineHeight, null, null, note));
         y += note.size() * font.lineHeight + SECTION_GAP;
         contentHeight = y;
@@ -127,6 +144,11 @@ public final class VoxyMapConfigScreen extends Screen {
                 VoxyMapSettings.cycleFogSuppression();
                 pressed.setMessage(fogSuppressionLabel());
             }).bounds(controlX, 0, controlWidth, CONTROL_HEIGHT).build();
+            case SCREENSHOT -> Button.builder(screenshotLabel(), pressed -> {
+                VoxyMapSettings.cycleScreenshotContent();
+                pressed.setMessage(screenshotLabel());
+            }).bounds(controlX, 0, controlWidth, CONTROL_HEIGHT).build();
+            case VIEW_DIRECTION -> toggle(controlWidth, VoxyMapSettings::viewDirectionEnabled, VoxyMapSettings::toggleViewDirection);
             case WAYPOINTS -> toggle(controlWidth, VoxyMapSettings::waypointsEnabled, VoxyMapSettings::toggleWaypointsVisible);
             case DEATH_POINTS -> toggle(controlWidth, VoxyMapSettings::deathPointsEnabled, VoxyMapSettings::toggleDeathPoints);
             case VANILLASQUAD_PLAYERS -> toggle(controlWidth, VoxyMapSettings::vanillaSquadPlayersEnabled, VoxyMapSettings::toggleVanillaSquadPlayers);
@@ -141,9 +163,111 @@ public final class VoxyMapConfigScreen extends Screen {
                 button.active = false;
                 yield button;
             }
-            case VANILLASQUAD_MAP, SYNC_ADDRESS, SYNC_PASSWORD, SYNC_STATUS, MAP_SHARE, MAP_RECEIVE ->
-                    throw new IllegalStateException("Per-world setting listed outside a world: " + entry);
+            case VANILLASQUAD_MAP -> Button.builder(vanillaSquadMapLabel(), pressed -> {
+                VoxyMapSettings.cycleVanillaSquadMap(worldId);
+                pressed.setMessage(vanillaSquadMapLabel());
+            }).bounds(controlX, 0, controlWidth, CONTROL_HEIGHT).build();
+            case SYNC_ADDRESS -> {
+                syncAddressBox = new EditBox(font, controlX, 0, controlWidth, CONTROL_HEIGHT,
+                        Component.translatable(entry.labelKey()));
+                syncAddressBox.setMaxLength(128);
+                String address = WaypointSyncSettings.address(worldId);
+                syncAddressBox.setValue(address == null ? "" : address);
+                syncAddressBox.setHint(Component.translatable("screen.voxymap.settings.sync.not_set"));
+                yield syncAddressBox;
+            }
+            case SYNC_PASSWORD -> {
+                syncPasswordBox = new EditBox(font, controlX, 0, controlWidth, CONTROL_HEIGHT,
+                        Component.translatable(entry.labelKey()));
+                syncPasswordBox.setMaxLength(128);
+                // Show the password as dots; the stored value is unchanged.
+                syncPasswordBox.addFormatter((text, offset) ->
+                        FormattedCharSequence.forward("*".repeat(text.length()), Style.EMPTY));
+                String password = WaypointSyncSettings.password(worldId);
+                syncPasswordBox.setValue(password == null ? "" : password);
+                syncPasswordBox.setHint(Component.translatable("screen.voxymap.settings.sync.not_set"));
+                yield syncPasswordBox;
+            }
+            case SYNC_STATUS -> {
+                syncStatusButton = Button.builder(syncStatusLabel(), pressed -> {
+                }).bounds(controlX, 0, controlWidth, CONTROL_HEIGHT).build();
+                syncStatusButton.active = false;
+                yield syncStatusButton;
+            }
+            case MAP_SHARE, MAP_RECEIVE ->
+                    throw new IllegalStateException("Map-only setting listed in the Mod Menu screen: " + entry);
         };
+    }
+
+    private static String currentWorldId() {
+        net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
+        if (minecraft == null || minecraft.level == null) {
+            return null;
+        }
+        WorldIdentifier identifier = WorldIdentifier.of(minecraft.level);
+        return identifier == null ? null : identifier.getWorldId();
+    }
+
+    private static Component screenshotLabel() {
+        return Component.translatable(VoxyMapSettings.screenshotContent().translationKey());
+    }
+
+    private Component vanillaSquadMapLabel() {
+        return Component.translatable(VoxyMapSettings.vanillaSquadMap(worldId).translationKey());
+    }
+
+    private Component syncStatusLabel() {
+        WaypointManager.SyncStatus status = WaypointManager.syncStatus(worldId);
+        String key = switch (status) {
+            case DISABLED -> "screen.voxymap.settings.sync.status.disabled";
+            case READ_ONLY -> "screen.voxymap.settings.sync.status.read_only";
+            case SYNCING -> "screen.voxymap.settings.sync.status.syncing";
+            case OK -> "screen.voxymap.settings.sync.status.ok";
+            case ERROR -> "screen.voxymap.settings.sync.status.error";
+        };
+        ChatFormatting color = switch (status) {
+            case OK -> ChatFormatting.GREEN;
+            case READ_ONLY -> ChatFormatting.YELLOW;
+            case SYNCING -> ChatFormatting.AQUA;
+            case ERROR -> ChatFormatting.RED;
+            case DISABLED -> ChatFormatting.GRAY;
+        };
+        return Component.translatable(key).withStyle(color);
+    }
+
+    /** Writes the sync fields to the per-world settings if they changed. Address first: a password needs one. */
+    private void commitSyncFields() {
+        if (worldId == null) {
+            return;
+        }
+        if (syncAddressBox != null) {
+            String address = syncAddressBox.getValue().trim();
+            String stored = WaypointSyncSettings.address(worldId);
+            if (!address.equals(stored == null ? "" : stored)) {
+                WaypointSyncSettings.setAddress(worldId, address);
+            }
+        }
+        if (syncPasswordBox != null) {
+            String password = syncPasswordBox.getValue().trim();
+            String stored = WaypointSyncSettings.password(worldId);
+            if (!password.equals(stored == null ? "" : stored)) {
+                WaypointSyncSettings.setPassword(worldId, password);
+            }
+        }
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (syncStatusButton != null) {
+            syncStatusButton.setMessage(syncStatusLabel());
+        }
+    }
+
+    @Override
+    public void removed() {
+        commitSyncFields();
+        super.removed();
     }
 
     private Button toggle(int controlWidth, BooleanSupplier getter, Runnable flip) {
@@ -331,6 +455,12 @@ public final class VoxyMapConfigScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
+        if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER)
+                && (getFocused() == syncAddressBox || getFocused() == syncPasswordBox) && getFocused() != null) {
+            commitSyncFields();
+            setFocused(null);
+            return true;
+        }
         if (key == GLFW.GLFW_KEY_ESCAPE) {
             closeScreen();
             return true;

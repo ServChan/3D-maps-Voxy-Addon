@@ -5,9 +5,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 
 /**
- * Turns the screenshot key into a clean map capture: while the map is open, the key hides every 2D
- * layer (map panels, hints, markers, HUD, chat, toasts), lets exactly one frame render with only the
- * world view, saves that frame, and brings the interface back on the next one.
+ * Turns the screenshot key into a clean map capture: while the map is open, the key hides the interface
+ * for exactly one frame, saves that frame, and brings the interface back on the next one. By default every
+ * 2D layer goes (map panels, hints, markers, HUD, chat, toasts) and only the world view remains; with the
+ * "with markers" setting the map's own player, waypoint and territory markers stay while the panels, HUD
+ * and chat are hidden.
  *
  * <p>The frame has to be captured between two frames rather than during one. Minecraft extracts the
  * whole GUI before it renders the level, so the main render target still holds the previous frame
@@ -28,6 +30,7 @@ public final class MapScreenshot {
     }
 
     private static Phase phase = Phase.IDLE;
+    private static boolean keepMarkers;
     private static boolean capturing;
 
     private MapScreenshot() {
@@ -36,14 +39,16 @@ public final class MapScreenshot {
     /**
      * Called when vanilla is about to take a screenshot.
      *
+     * @param keepMarkers whether the map's own markers stay on the capture (only read when a capture starts)
      * @return true if vanilla's screenshot must be skipped because the map is taking over
      */
-    public static synchronized boolean begin(boolean mapOpen) {
+    public static synchronized boolean begin(boolean mapOpen, boolean keepMarkers) {
         if (capturing || !mapOpen) {
             return false;
         }
         if (phase == Phase.IDLE) {
             phase = Phase.HIDING;
+            MapScreenshot.keepMarkers = keepMarkers;
         }
         // Swallow presses made while a capture is already in flight instead of stacking a second one.
         return true;
@@ -52,7 +57,8 @@ public final class MapScreenshot {
     /**
      * Called once Minecraft has finished extracting a frame's GUI.
      *
-     * @return true if that GUI must be thrown away so the frame renders without any interface
+     * @return true if that GUI must be thrown away so the frame renders without any interface; false when
+     *         markers are kept, because the HUD and panels were already left out while it was being built
      */
     public static synchronized boolean afterGuiExtracted(boolean mapOpen) {
         if (phase == Phase.IDLE) {
@@ -64,7 +70,15 @@ public final class MapScreenshot {
             return false;
         }
         phase = Phase.CAPTURE_DUE;
-        return true;
+        return !keepMarkers;
+    }
+
+    /**
+     * True while the frame that will be captured is being built and it should keep the map's markers:
+     * the map then draws only its markers, and the HUD and chat are skipped.
+     */
+    public static synchronized boolean markersOnlyFrame() {
+        return phase == Phase.HIDING && keepMarkers;
     }
 
     /** Called at the start of every tick; true when the clean frame must be saved right now. */

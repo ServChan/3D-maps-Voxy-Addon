@@ -14,14 +14,15 @@ class MapScreenshotTest {
 
     @Test
     void screenshotOutsideTheMapIsLeftToVanilla() {
-        assertFalse(MapScreenshot.begin(false));
+        assertFalse(MapScreenshot.begin(false, false));
         assertFalse(MapScreenshot.afterGuiExtracted(false));
         assertFalse(MapScreenshot.takeDueCapture(false));
+        assertFalse(MapScreenshot.markersOnlyFrame());
     }
 
     @Test
     void hidesTheInterfaceForExactlyOneFrameThenCapturesIt() {
-        assertTrue(MapScreenshot.begin(true), "vanilla's screenshot must be replaced on the map");
+        assertTrue(MapScreenshot.begin(true, false), "vanilla's screenshot must be replaced on the map");
 
         assertFalse(MapScreenshot.takeDueCapture(true), "nothing is rendered yet, so nothing to save");
         assertTrue(MapScreenshot.afterGuiExtracted(true), "the next frame's interface is dropped");
@@ -32,18 +33,36 @@ class MapScreenshotTest {
     }
 
     @Test
+    void keepingMarkersBuildsTheFrameWithoutDroppingItAfterwards() {
+        assertTrue(MapScreenshot.begin(true, true));
+        assertTrue(MapScreenshot.markersOnlyFrame(), "the map draws markers only and the HUD is skipped");
+
+        assertFalse(MapScreenshot.afterGuiExtracted(true),
+                "the GUI is already what should be captured; nothing is thrown away");
+        assertFalse(MapScreenshot.markersOnlyFrame(), "the very next frame is a normal one again");
+        assertTrue(MapScreenshot.takeDueCapture(true));
+    }
+
+    @Test
+    void aCleanCaptureNeverAsksForMarkers() {
+        assertTrue(MapScreenshot.begin(true, false));
+        assertFalse(MapScreenshot.markersOnlyFrame());
+    }
+
+    @Test
     void repeatedKeyPressesDoNotStackCaptures() {
-        assertTrue(MapScreenshot.begin(true));
-        assertTrue(MapScreenshot.begin(true), "a second press is swallowed, not passed to vanilla");
+        assertTrue(MapScreenshot.begin(true, false));
+        assertTrue(MapScreenshot.begin(true, true), "a second press is swallowed, not passed to vanilla");
+        assertFalse(MapScreenshot.markersOnlyFrame(), "and it does not change the capture already started");
         assertTrue(MapScreenshot.afterGuiExtracted(true));
-        assertTrue(MapScreenshot.begin(true));
+        assertTrue(MapScreenshot.begin(true, false));
         assertTrue(MapScreenshot.takeDueCapture(true));
         assertFalse(MapScreenshot.takeDueCapture(true));
     }
 
     @Test
     void closingTheMapMidSequenceNeverBlanksTheNormalInterface() {
-        assertTrue(MapScreenshot.begin(true));
+        assertTrue(MapScreenshot.begin(true, false));
 
         assertFalse(MapScreenshot.afterGuiExtracted(false));
         assertFalse(MapScreenshot.afterGuiExtracted(true), "the sequence was cancelled, not merely paused");
@@ -52,7 +71,7 @@ class MapScreenshotTest {
 
     @Test
     void closingTheMapAfterTheCleanFrameSkipsTheSave() {
-        assertTrue(MapScreenshot.begin(true));
+        assertTrue(MapScreenshot.begin(true, false));
         assertTrue(MapScreenshot.afterGuiExtracted(true));
 
         assertFalse(MapScreenshot.takeDueCapture(false), "the frame no longer shows the map");

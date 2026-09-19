@@ -49,7 +49,7 @@ public final class VanillaSquadFlagMapBridge {
 
     /** @param dimensionId e.g. {@code "minecraft:overworld"} */
     public static void tick(String mapId, String dimensionId) {
-        if (!VoxyMapSettings.vanillaSquadFlagsEnabled() || mapId == null || dimensionId == null) {
+        if (!VoxyMapSettings.vanillaSquadFlagsActive() || mapId == null || dimensionId == null) {
             return;
         }
 

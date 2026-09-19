@@ -13,23 +13,21 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SettingsCatalogTest {
-    private static List<SettingsCatalog.Entry> flatten(List<SettingsCatalog.Section> sections) {
-        List<SettingsCatalog.Entry> entries = new ArrayList<>();
-        sections.forEach(section -> entries.addAll(section.entries()));
-        return entries;
+    private static Set<SettingsCatalog.Entry> entries(boolean inWorld, boolean inMap, boolean onVanillaSquad) {
+        List<SettingsCatalog.Entry> flat = new ArrayList<>();
+        SettingsCatalog.sections(inWorld, inMap, onVanillaSquad).forEach(section -> flat.addAll(section.entries()));
+        assertEquals(Set.copyOf(flat).size(), flat.size(), "a setting appears in two places");
+        return flat.isEmpty() ? EnumSet.noneOf(SettingsCatalog.Entry.class) : EnumSet.copyOf(flat);
     }
 
     @Test
-    void mapPanelShowsEverySettingExactlyOnce() {
-        List<SettingsCatalog.Entry> entries = flatten(SettingsCatalog.sections(true));
-
-        assertEquals(SettingsCatalog.Entry.values().length, entries.size());
-        assertEquals(Set.copyOf(entries).size(), entries.size(), "a setting appears in two places");
+    void mapPanelShowsEverySettingExactlyOnceOnVanillaSquad() {
+        assertEquals(EnumSet.allOf(SettingsCatalog.Entry.class), entries(true, true, true));
     }
 
     @Test
     void groupsAreInDeclarationOrderAndEntriesStayInsideTheirGroup() {
-        List<SettingsCatalog.Section> sections = SettingsCatalog.sections(true);
+        List<SettingsCatalog.Section> sections = SettingsCatalog.sections(true, true, true);
 
         List<SettingsCatalog.Group> groups = sections.stream().map(SettingsCatalog.Section::group).toList();
         assertEquals(List.of(SettingsCatalog.Group.values()), groups);
@@ -40,15 +38,49 @@ class SettingsCatalogTest {
     }
 
     @Test
-    void outsideAWorldOnlyGlobalSettingsRemain() {
-        List<SettingsCatalog.Section> sections = SettingsCatalog.sections(false);
-        Set<SettingsCatalog.Entry> entries = EnumSet.copyOf(flatten(sections));
+    void modMenuOutsideAWorldListsOnlyGlobalSettings() {
+        Set<SettingsCatalog.Entry> shown = entries(false, false, false);
 
         for (SettingsCatalog.Entry entry : SettingsCatalog.Entry.values()) {
-            assertEquals(!entry.needsWorld(), entries.contains(entry), entry.name());
+            assertEquals(entry.availability() == SettingsCatalog.Availability.EVERYWHERE && !entry.vanillaSquadOnly(),
+                    shown.contains(entry), entry.name());
         }
-        assertFalse(sections.stream().anyMatch(section -> section.group() == SettingsCatalog.Group.SYNC),
+        assertFalse(SettingsCatalog.sections(false, false, false).stream()
+                        .anyMatch(section -> section.group() == SettingsCatalog.Group.SYNC),
                 "an empty group must not be shown");
+    }
+
+    @Test
+    void modMenuOpenedFromAWorldAddsTheSyncSettingsButNotTheMapOnlyActions() {
+        Set<SettingsCatalog.Entry> shown = entries(true, false, false);
+
+        assertTrue(shown.containsAll(EnumSet.of(SettingsCatalog.Entry.SYNC_ADDRESS,
+                SettingsCatalog.Entry.SYNC_PASSWORD, SettingsCatalog.Entry.SYNC_STATUS)));
+        assertFalse(shown.contains(SettingsCatalog.Entry.MAP_SHARE), "sharing needs the map's area selection");
+        assertFalse(shown.contains(SettingsCatalog.Entry.MAP_RECEIVE), "receiving needs the map's code prompt");
+    }
+
+    @Test
+    void vanillaSquadSettingsAreOnlyListedOnThatServer() {
+        Set<SettingsCatalog.Entry> squad = EnumSet.of(SettingsCatalog.Entry.VANILLASQUAD_PLAYERS,
+                SettingsCatalog.Entry.VANILLASQUAD_FLAGS, SettingsCatalog.Entry.VANILLASQUAD_MAP);
+        for (SettingsCatalog.Entry entry : SettingsCatalog.Entry.values()) {
+            assertEquals(squad.contains(entry), entry.vanillaSquadOnly(), entry.name());
+        }
+
+        for (boolean inMap : new boolean[] {true, false}) {
+            Set<SettingsCatalog.Entry> elsewhere = entries(true, inMap, false);
+            for (SettingsCatalog.Entry entry : squad) {
+                assertFalse(elsewhere.contains(entry), entry + " must be hidden off VanillaSquad");
+            }
+            assertTrue(elsewhere.contains(SettingsCatalog.Entry.WAYPOINTS), "other layers stay");
+        }
+
+        assertTrue(entries(true, true, true).containsAll(squad));
+        Set<SettingsCatalog.Entry> menuOutsideWorld = entries(false, false, true);
+        assertTrue(menuOutsideWorld.contains(SettingsCatalog.Entry.VANILLASQUAD_PLAYERS));
+        assertFalse(menuOutsideWorld.contains(SettingsCatalog.Entry.VANILLASQUAD_MAP),
+                "the per-world map choice still needs a world");
     }
 
     @Test
