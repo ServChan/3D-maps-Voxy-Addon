@@ -42,7 +42,7 @@ public final class VoxyMapPicker {
             VoxelRayPicker.Hit hit = VoxelRayPicker.pick(
                     ray.originX(), ray.originY(), ray.originZ(),
                     ray.directionX(), ray.directionY(), ray.directionZ(), maxDistance,
-                    (x, y, z) -> !RoomCutawayController.isHiddenForMapPick(x, y, z) && reader.occupied(x, y, z));
+                    (x, y, z) -> !NetherRoofController.isHiddenForMapPick(x, y, z) && reader.occupied(x, y, z));
             return hit == null ? null : new Hit(hit.x(), hit.y(), hit.z(), hit.blockX(), hit.blockY(),
                     hit.blockZ(), hit.face());
         } catch (RuntimeException | LinkageError exception) {

@@ -163,7 +163,7 @@ public final class OreMaskController {
             return false;
         }
         // toString(), not a namespace()/path() accessor pair, to match this codebase's own established
-        // Identifier-handling convention (see RoomCutawayController/VoxyMapCameraController) rather than
+        // Identifier-handling convention (see NetherRoofController/VoxyMapCameraController) rather than
         // guess at accessor names in a mapping that has already renamed ResourceLocation once.
         String id = key.toString();
         if (!id.startsWith("minecraft:")) {

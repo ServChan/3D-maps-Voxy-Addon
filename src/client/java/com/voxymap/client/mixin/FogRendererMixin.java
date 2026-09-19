@@ -18,7 +18,7 @@ public abstract class FogRendererMixin {
 
     @Inject(method = "getBuffer", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void voxymap$disableFogInMap(FogRenderer.FogMode fogMode, CallbackInfoReturnable<GpuBufferSlice> cir) {
-        if (VoxyMapCameraController.isActive() && VoxyMapSettings.fogSuppressionEnabled()) {
+        if (VoxyMapCameraController.isActive() && VoxyMapSettings.fogSuppressionActive()) {
             cir.setReturnValue(emptyBuffer.slice(0L, FogRenderer.FOG_UBO_SIZE));
         }
     }

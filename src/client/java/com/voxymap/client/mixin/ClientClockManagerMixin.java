@@ -19,7 +19,7 @@ public abstract class ClientClockManagerMixin {
     private void voxymap$overrideMapClockTicks(Holder<?> clock, CallbackInfoReturnable<Long> cir) {
         VoxyMapSettings.TimeOfDay mode = VoxyMapSettings.activeMapLightingOverride();
         if (mode != null) {
-            cir.setReturnValue(mode == VoxyMapSettings.TimeOfDay.NIGHT ? 18000L : 6000L);
+            cir.setReturnValue(mode.clockTicks());
         }
     }
 }

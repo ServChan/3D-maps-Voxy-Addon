@@ -6,7 +6,6 @@ import org.lwjgl.opengl.GL21C;
 import org.lwjgl.opengl.GL45C;
 
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 
 /** Uploads client-memory pixels without inheriting Voxy's transient pixel-unpack-buffer binding. */
 final class GlClientTextureUpload {
@@ -18,16 +17,6 @@ final class GlClientTextureUpload {
         try {
             GL45C.glTextureSubImage2D(texture, 0, x, y, width, height,
                     GL11C.GL_RED, GL11C.GL_UNSIGNED_BYTE, pixels);
-        } finally {
-            restorePixelUnpackBuffer(previous);
-        }
-    }
-
-    static void redFloats(int texture, int x, int y, int width, int height, FloatBuffer pixels) {
-        int previous = beginClientMemoryUpload();
-        try {
-            GL45C.glTextureSubImage2D(texture, 0, x, y, width, height,
-                    GL11C.GL_RED, GL11C.GL_FLOAT, pixels);
         } finally {
             restorePixelUnpackBuffer(previous);
         }

@@ -71,27 +71,6 @@ class ProjectContractTest {
     }
 
     @Test
-    void roomCutawayIsConnectivityAwareNotARadiusOrHeightThreshold() throws IOException {
-        String source = Files.readString(Path.of(
-                "src/client/java/com/voxymap/client/gui/MapScreen.java"), StandardCharsets.UTF_8);
-        String computer = Files.readString(Path.of(
-                "src/client/java/com/voxymap/client/map/RoomCutawayComputer.java"), StandardCharsets.UTF_8);
-        assertFalse(source.contains("isUnsupportedDimension"));
-        // Must not be dimension-gated: whether a cut happens is decided purely by whether the player
-        // is actually enclosed, not by which dimension they're in.
-        assertFalse(computer.contains("minecraft:the_nether"));
-        // The reachable room comes from a flood fill through passable blocks, not a naive distance
-        // or fixed-height test - a wall or a neighbouring cave must stop it.
-        assertTrue(computer.contains("classifier.classify("));
-        // Cells the client has no reliable data for (unloaded chunk, anti-xray obfuscation on a
-        // server, ...) must never be silently treated as passable air.
-        assertTrue(computer.contains("UNKNOWN"));
-        // A flood fill that isn't fully contained in the search window must not be treated as a room.
-        assertTrue(computer.contains("nodeBudget"),
-                "Room scanning must be budgetable instead of blocking a render or client tick");
-    }
-
-    @Test
     void mapUsesVoxysCachedLodsInsteadOfTheRealCameraSodiumVisibilitySet() throws IOException {
         String mixin = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/mixin/VoxyClientMixin.java"), StandardCharsets.UTF_8);
@@ -128,17 +107,13 @@ class ProjectContractTest {
     @Test
     void netherRoofRemovalUsesWholeQuadsInsteadOfAntiXrayCrossSections() throws IOException {
         String controller = Files.readString(Path.of(
-                "src/client/java/com/voxymap/client/map/RoomCutawayController.java"), StandardCharsets.UTF_8);
+                "src/client/java/com/voxymap/client/map/NetherRoofController.java"), StandardCharsets.UTF_8);
         String shader = Files.readString(Path.of(
-                "src/client/java/com/voxymap/client/map/RoomCutawayShaderPatcher.java"), StandardCharsets.UTF_8);
+                "src/client/java/com/voxymap/client/map/VoxyShaderPatcher.java"), StandardCharsets.UTF_8);
         assertTrue(controller.contains("minecraft:the_nether"));
         assertTrue(controller.contains("NetherRoofPolicy.cutoff("));
         assertTrue(controller.contains("float netherRoofCutoff = isNether"),
                 "Remote Nether maps also need their bedrock shell removed");
-        assertTrue(controller.contains("startVerifiedPartial"),
-                "Remote Nether cutaway must use only connected air confirmed by client data");
-        assertTrue(controller.contains("RoomCutawayTexture.setUniformCutoff(netherRoofCutoff)"),
-                "Changing the global plane must not re-upload the unchanged local room texture");
         assertTrue(shader.contains("voxymapGlobalCutawayY"));
         assertTrue(shader.contains("voxymapQuadMinY >= voxymapRoofCutY"));
         assertTrue(shader.contains("voxymapQuadCenterXZ"));
@@ -149,12 +124,16 @@ class ProjectContractTest {
     }
 
     @Test
-    void anInProgressRoomScanIsNotRestartedWhileThePlayerMoves() throws IOException {
-        String controller = Files.readString(Path.of(
-                "src/client/java/com/voxymap/client/map/RoomCutawayController.java"), StandardCharsets.UTF_8);
-
-        assertTrue(controller.contains("if (pendingSearch == null && (moved || stale))"),
-                "Movement must queue the next scan instead of repeatedly allocating and discarding the current one");
+    void theRemovedRoomCutawayAndGhastRouteStayRemoved() {
+        for (String removed : new String[] {
+                "src/client/java/com/voxymap/client/map/RoomCutawayComputer.java",
+                "src/client/java/com/voxymap/client/map/RoomCutawayController.java",
+                "src/client/java/com/voxymap/client/map/RoomCutawayTexture.java",
+                "src/client/java/com/voxymap/client/map/RoomCutawayShaderPatcher.java",
+                "src/client/java/com/voxymap/client/map/SpiralRouteGeometry.java",
+                "src/client/java/com/voxymap/client/integration/HappyGhastScannerBridge.java"}) {
+            assertFalse(Files.exists(Path.of(removed)), removed + " was removed on purpose");
+        }
     }
 
     @Test

@@ -18,7 +18,7 @@ import java.nio.ByteBuffer;
  * different blocks, so {@link #reset()} clears the texture whenever that owner changes.
  */
 public final class OreMaskTexture {
-    // RoomCutawayTexture already claims unit 31. Historically this used unit 14 on the assumption that
+    // Historically this used unit 14 on the assumption that
     // "nothing in Voxy's own shaders declares a binding above 6" - true for the unpatched shader, but
     // wrong under Iris: Voxy's Iris integration (IrisVoxyRenderPipeline) assigns the active shaderpack's
     // gbuffers_terrain samplers to units BASE_SAMPLER_BINDING_INDEX(6)..6+N-1, where N is however many
@@ -27,8 +27,8 @@ public final class OreMaskTexture {
     // N >= 9, reaching unit 14 and colliding with this texture: our glBindTextureUnit(14, ...) call in
     // MDICSectionRendererMixin then stomps the texture Iris's compiled shader is actively sampling for
     // one of its own inputs on that same draw call, which reads back as garbage (typically blown-out
-    // white terrain, since our GL_R8 0/1 mask or the room-cutaway GL_R32F world-Y texture gets sampled as
-    // if it were a [0,1] lighting/shadow/albedo term). Unit 30/31 sit far above any known shaderpack's
+    // white terrain, since our GL_R8 0/1 mask gets sampled as
+    // if it were a [0,1] lighting/shadow/albedo term). Unit 30 sits far above any known shaderpack's
     // sampler count while staying under the widely-supported 32 per-stage texture image unit floor.
     public static final int TEXTURE_UNIT = 30;
     private static final int GRID = 256;

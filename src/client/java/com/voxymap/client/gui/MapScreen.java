@@ -1,17 +1,13 @@
 package com.voxymap.client.gui;
 
 import com.voxymap.client.VoxyMapClient;
-import com.voxymap.client.integration.HappyGhastScannerBridge;
 import com.voxymap.client.integration.VanillaSquadFlagMapBridge;
 import com.voxymap.client.integration.VanillaSquadPlayerMapBridge;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
 import com.voxymap.client.map.MapShareBounds;
-import com.voxymap.client.map.OreMaskController;
 import com.voxymap.client.map.PlayerViewConeGeometry;
-import com.voxymap.client.map.RoomCutawayController;
-import com.voxymap.client.map.RoomCutawayShaderPatcher;
-import com.voxymap.client.map.SpiralRouteGeometry;
+import com.voxymap.client.map.NetherRoofController;
 import com.voxymap.client.map.VoxyBridge;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapGuiRenderer;
@@ -34,6 +30,7 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -54,8 +51,6 @@ public class MapScreen extends Screen {
     private static final double PLAYER_VIEW_CONE_SCREEN_LENGTH = 34.0;
     // 4 segments per lap: 24 back / 16 ahead covers ~6 already-flown and ~4 upcoming laps around the
     // scanner's current position, which is the stretch relevant to picking a lap to resume from.
-    private static final int GHAST_ROUTE_LOOKBACK_SEGMENTS = 24;
-    private static final int GHAST_ROUTE_LOOKAHEAD_SEGMENTS = 16;
     private static final double PLAYER_VIEW_CONE_CROWD_DISTANCE = 52.0;
     private static final double PLAYER_MARKER_HOVER_DISTANCE = 12.0;
     private static final int PLAYER_CLUSTER_Y_DISTANCE = 24;
@@ -98,9 +93,6 @@ public class MapScreen extends Screen {
     private String hoveredPlayerClusterKey = null;
     private final Map<UUID, Identifier> skinTextureCache = new HashMap<>();
     private final Map<UUID, Long> missingSkinRetryNanos = new HashMap<>();
-    private HappyGhastScannerBridge.Route cachedGhastRoute;
-    private List<SpiralRouteGeometry.Waypoint> cachedGhastRoutePoints = List.of();
-    private int cachedGhastFirstSegment;
     private String[][] cachedKeyHints = new String[0][0];
     private long lastFrameNanos = 0L;
     private long openedAtNanos = 0L;
@@ -128,28 +120,7 @@ public class MapScreen extends Screen {
     private int speedMinusY = -1;
     private int speedPlusX = -1;
     private int speedPlusY = -1;
-    private int pauseRowY = -1;
-    private int speedRowY = -1;
-    private int cutawayRowY = -1;
-    private int vanillaSquadRowY = -1;
-    private int vanillaSquadFlagsRowY = -1;
-    private int vanillaSquadMapRowY = -1;
-    private int ghastScannerRowY = -1;
-    private int waypointsRowY = -1;
-    private int syncAddressRowY = -1;
-    private int syncPasswordRowY = -1;
-    private int syncStatusRowY = -1;
-    private int mapShareRowY = -1;
-    private int mapReceiveRowY = -1;
-    private int minimapRowY = -1;
-    private int timeOfDayRowY = -1;
-    private int mobsRowY = -1;
-    private int minimapRotateRowY = -1;
-    private int chunkGridRowY = -1;
-    private int deathPointsRowY = -1;
-    private int fogSuppressionRowY = -1;
-    private int diagnosticsRowY = -1;
-    private int cutawayStatusRowY = -1;
+    private final Map<SettingsCatalog.Entry, Integer> settingRowY = new EnumMap<>(SettingsCatalog.Entry.class);
     private final MapObjectPanel objectPanel = new MapObjectPanel();
     private long lastObjectPanelRefreshNanos;
     private String selectedObjectId;
@@ -185,6 +156,10 @@ public class MapScreen extends Screen {
     private double pendingWaypointZ;
     private final StringBuilder nameInputBuffer = new StringBuilder();
     private static final int SETTINGS_ROW_HEIGHT = 24;
+    private static final int SETTINGS_HEADER_HEIGHT = 18;
+    private static final int SETTINGS_TITLE_HEIGHT = 30;
+    private static final int SETTINGS_BOTTOM_PADDING = 8;
+    private static final int SETTINGS_ERROR_DETAIL_HEIGHT = 12;
     private static final int SPEED_BUTTON_SIZE = 18;
     private static final int HUD_MARGIN = 12;
     private static final int HUD_GAP = 6;
@@ -216,9 +191,8 @@ public class MapScreen extends Screen {
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
-        // RoomCutawayController may upload a GL texture. Do not do that from init(): dimension and
-        // shader-pipeline rebuilds can construct this screen while Voxy still owns transient pixel
-        // transfer state. The regular screen tick runs once the new renderer lifecycle is settled.
+        // Renderer state is only touched from the regular screen tick, not from init(): dimension and
+        // shader-pipeline rebuilds can construct this screen while Voxy is still settling.
         if (!openLogged) {
             VoxyMapClient.LOGGER.info("[VoxyMap] Map opened.");
             openLogged = true;
@@ -441,9 +415,9 @@ public class MapScreen extends Screen {
 
     @Override
     public void tick() {
-        // Feed the newest pan/zoom context before the cutaway tick updates shader state.
+        // Feed the newest pan/zoom context before the tick updates shader state.
         syncWorldCamera();
-        RoomCutawayController.tick(minecraft);
+        NetherRoofController.tick(minecraft);
         if (minecraft != null && minecraft.level != null) {
             String dimensionId = minecraft.level.dimension().identifier().toString();
             if (minecraft.player != null) {
@@ -466,7 +440,7 @@ public class MapScreen extends Screen {
     }
 
     private void syncWorldCamera() {
-        RoomCutawayController.updateViewContext(
+        NetherRoofController.updateViewContext(
                 minecraft, viewCenterX, viewCenterY, viewCenterZ, blocksPerPixel, Math.min(width, height));
         if (minecraft != null && minecraft.level != null && minecraft.player != null) {
             VoxyMapCameraController.update(minecraft, viewCenterX, viewCenterY, viewCenterZ, viewYaw, viewPitch, blocksPerPixel);
@@ -572,70 +546,73 @@ public class MapScreen extends Screen {
             return true;
         }
 
-        if (isInsideSettingsRow(mouseX, mouseY, pauseRowY)) {
-            VoxyMapSettings.togglePauseSingleplayer();
-        } else if (isInsideSettingsRow(mouseX, mouseY, speedRowY)) {
-            double rowMid = settingsPanelX + settingsPanelW / 2.0;
-            VoxyMapSettings.changeCameraSpeed(mouseX < rowMid ? -0.25 : 0.25);
-        } else if (isInsideSettingsRow(mouseX, mouseY, cutawayRowY)) {
-            VoxyMapSettings.toggleRoomCutaway();
-        } else if (isInsideSettingsRow(mouseX, mouseY, vanillaSquadRowY)) {
-            VoxyMapSettings.toggleVanillaSquadPlayers();
-        } else if (isInsideSettingsRow(mouseX, mouseY, vanillaSquadFlagsRowY)) {
-            VoxyMapSettings.toggleVanillaSquadFlags();
-        } else if (isInsideSettingsRow(mouseX, mouseY, vanillaSquadMapRowY)) {
-            VoxyMapSettings.cycleVanillaSquadMap(currentVoxyWorldId());
-        } else if (isInsideSettingsRow(mouseX, mouseY, ghastScannerRowY)) {
-            VoxyMapSettings.toggleGhastScannerRoute();
-        } else if (isInsideSettingsRow(mouseX, mouseY, waypointsRowY)) {
-            VoxyMapSettings.toggleWaypointsVisible();
-        } else if (isInsideSettingsRow(mouseX, mouseY, syncAddressRowY)) {
-            String worldId = currentVoxyWorldId();
-            if (worldId != null) beginEditSyncAddress(worldId);
-        } else if (isInsideSettingsRow(mouseX, mouseY, syncPasswordRowY)) {
-            String worldId = currentVoxyWorldId();
-            if (worldId != null) beginEditSyncPassword(worldId);
-        } else if (isInsideSettingsRow(mouseX, mouseY, mapShareRowY)) {
-            String worldId = currentVoxyWorldId();
-            String address = worldId != null ? WaypointSyncSettings.address(worldId) : null;
-            if (address != null) {
-                if (MapShareClient.isSharing()) {
-                    MapShareClient.stopSharing();
-                    mapShareBounds = null;
-                } else {
-                    beginMapShareSelection(address);
-                }
-            }
-        } else if (isInsideSettingsRow(mouseX, mouseY, mapReceiveRowY)) {
-            if (MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.AWAITING_CONFIRMATION) {
-                MapShareClient.confirmReceive(minecraft);
-            } else if (MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.RECEIVING
-                    || MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.CONNECTING) {
-                MapShareClient.stopReceiving();
-            } else {
-                String worldId = currentVoxyWorldId();
-                String address = worldId != null ? WaypointSyncSettings.address(worldId) : null;
-                if (address != null) {
-                    textInputKind = TextInputKind.RECEIVE_CODE;
-                    nameInputBuffer.setLength(0);
-                }
-            }
-        } else if (isInsideSettingsRow(mouseX, mouseY, minimapRowY)) {
-            VoxyMapSettings.toggleMinimap();
-        } else if (isInsideSettingsRow(mouseX, mouseY, timeOfDayRowY)) {
-            VoxyMapSettings.cycleTimeOfDayMode();
-        } else if (isInsideSettingsRow(mouseX, mouseY, mobsRowY)) {
-            VoxyMapSettings.toggleMobs();
-        } else if (isInsideSettingsRow(mouseX, mouseY, minimapRotateRowY)) {
-            VoxyMapSettings.toggleMinimapRotates();
-        } else if (isInsideSettingsRow(mouseX, mouseY, chunkGridRowY)) {
-            VoxyMapSettings.toggleChunkGrid();
-        } else if (isInsideSettingsRow(mouseX, mouseY, deathPointsRowY)) {
-            VoxyMapSettings.toggleDeathPoints();
-        } else if (isInsideSettingsRow(mouseX, mouseY, fogSuppressionRowY)) {
-            VoxyMapSettings.toggleFogSuppression();
+        SettingsCatalog.Entry entry = settingsEntryAt(mouseX, mouseY);
+        if (entry != null) {
+            activateSetting(entry, mouseX);
         }
         return true;
+    }
+
+    private SettingsCatalog.Entry settingsEntryAt(double mouseX, double mouseY) {
+        for (Map.Entry<SettingsCatalog.Entry, Integer> row : settingRowY.entrySet()) {
+            if (isInsideSettingsRow(mouseX, mouseY, row.getValue())) {
+                return row.getKey();
+            }
+        }
+        return null;
+    }
+
+    private void activateSetting(SettingsCatalog.Entry entry, double mouseX) {
+        String worldId = currentVoxyWorldId();
+        switch (entry) {
+            case PAUSE -> VoxyMapSettings.togglePauseSingleplayer();
+            case SPEED -> VoxyMapSettings.changeCameraSpeed(mouseX < settingsPanelX + settingsPanelW / 2.0 ? -0.25 : 0.25);
+            case TIME_OF_DAY -> VoxyMapSettings.cycleTimeOfDayMode();
+            case FOG_SUPPRESSION -> VoxyMapSettings.cycleFogSuppression();
+            case WAYPOINTS -> VoxyMapSettings.toggleWaypointsVisible();
+            case DEATH_POINTS -> VoxyMapSettings.toggleDeathPoints();
+            case VANILLASQUAD_PLAYERS -> VoxyMapSettings.toggleVanillaSquadPlayers();
+            case VANILLASQUAD_FLAGS -> VoxyMapSettings.toggleVanillaSquadFlags();
+            case VANILLASQUAD_MAP -> VoxyMapSettings.cycleVanillaSquadMap(worldId);
+            case MINIMAP -> VoxyMapSettings.toggleMinimap();
+            case MINIMAP_ROTATE -> VoxyMapSettings.toggleMinimapRotates();
+            case MOBS -> VoxyMapSettings.toggleMobs();
+            case CHUNK_GRID -> VoxyMapSettings.toggleChunkGrid();
+            case SYNC_ADDRESS -> {
+                if (worldId != null) beginEditSyncAddress(worldId);
+            }
+            case SYNC_PASSWORD -> {
+                if (worldId != null) beginEditSyncPassword(worldId);
+            }
+            case MAP_SHARE -> {
+                String address = worldId != null ? WaypointSyncSettings.address(worldId) : null;
+                if (address != null) {
+                    if (MapShareClient.isSharing()) {
+                        MapShareClient.stopSharing();
+                        mapShareBounds = null;
+                    } else {
+                        beginMapShareSelection(address);
+                    }
+                }
+            }
+            case MAP_RECEIVE -> {
+                if (MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.AWAITING_CONFIRMATION) {
+                    MapShareClient.confirmReceive(minecraft);
+                } else if (MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.RECEIVING
+                        || MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.CONNECTING) {
+                    MapShareClient.stopReceiving();
+                } else {
+                    String address = worldId != null ? WaypointSyncSettings.address(worldId) : null;
+                    if (address != null) {
+                        textInputKind = TextInputKind.RECEIVE_CODE;
+                        nameInputBuffer.setLength(0);
+                    }
+                }
+            }
+            case SYNC_STATUS, DIAGNOSTICS -> {
+                // Read-only status rows.
+            }
+        }
     }
 
     private boolean isInsideSettingsRow(double mouseX, double mouseY, int rowY) {
@@ -707,7 +684,6 @@ public class MapScreen extends Screen {
 
     private void drawWorldViewerOverlay(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         drawFlagMarkers(g);
-        drawGhastScannerRoute(g);
         drawWaypoints(g, mouseX, mouseY);
         drawPlayerMarkers(g, mouseX, mouseY);
         drawMapShareSelection(g);
@@ -725,7 +701,7 @@ public class MapScreen extends Screen {
         }
         String cameraText = Component.translatable("overlay.voxymap.camera").getString() + "  " + (int) viewCenterX + " / " + (int) viewCenterY + " / " + (int) viewCenterZ
                 + "   " + Component.translatable("overlay.voxymap.zoom").getString() + " " + String.format("%.2f", blocksPerPixel);
-        if (RoomCutawayController.isActive()) {
+        if (NetherRoofController.isActive()) {
             cameraText += "   " + Component.translatable("overlay.voxymap.slice").getString();
         }
         updateHoverCursorHit(mouseX, mouseY);
@@ -957,74 +933,6 @@ public class MapScreen extends Screen {
             g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, territory.color());
             g.text(minecraft.font, territory.name(), labelX + 4, labelY + 2, 0xFFE9F2FF);
         }
-    }
-
-    /**
-     * Draws HappyGhastScanner's expanding square-spiral scan route as a two-tone polyline - already-
-     * flown segments dim, upcoming segments bright - plus a lap number at the start of each lap visible
-     * in the window and a highlighted marker at the scanner's current waypoint, so the exact point to
-     * resume from is readable against terrain already rendered on the map.
-     */
-    private void drawGhastScannerRoute(GuiGraphicsExtractor g) {
-        if (!VoxyMapCameraController.isActive() || !VoxyMapSettings.ghastScannerRouteEnabled()) {
-            return;
-        }
-        HappyGhastScannerBridge.Route route = HappyGhastScannerBridge.currentRoute();
-        if (route == null) {
-            cachedGhastRoute = null;
-            cachedGhastRoutePoints = List.of();
-            return;
-        }
-
-        if (!route.equals(cachedGhastRoute)) {
-            cachedGhastFirstSegment = Math.max(0, route.currentSegment() - GHAST_ROUTE_LOOKBACK_SEGMENTS);
-            int lastSegment = route.currentSegment() + GHAST_ROUTE_LOOKAHEAD_SEGMENTS;
-            cachedGhastRoutePoints = SpiralRouteGeometry.pathSegment(
-                    route.centerX(), route.centerZ(), route.step(), cachedGhastFirstSegment, lastSegment);
-            cachedGhastRoute = route;
-        }
-        int firstSegment = cachedGhastFirstSegment;
-        List<SpiralRouteGeometry.Waypoint> points = cachedGhastRoutePoints;
-
-        ScreenPoint previous = projectToScreen(points.get(0).x(), viewCenterY, points.get(0).z());
-        for (int i = 1; i < points.size(); i++) {
-            int segment = firstSegment + i - 1;
-            SpiralRouteGeometry.Waypoint waypoint = points.get(i);
-            ScreenPoint current = projectToScreen(waypoint.x(), viewCenterY, waypoint.z());
-            if (previous != null && current != null) {
-                int color = segment < route.currentSegment() ? 0x996E88A8 : 0xFFFFC94D;
-                drawSolidLine(g, previous.x, previous.y, current.x, current.y, color);
-            }
-            if (current != null && segment % 4 == 0 && segment != route.currentSegment()) {
-                drawGhastLapLabel(g, current, waypoint.lap(), false);
-            }
-            previous = current;
-        }
-
-        SpiralRouteGeometry.Waypoint currentWaypoint =
-                SpiralRouteGeometry.waypointAt(route.centerX(), route.centerZ(), route.step(), route.currentSegment());
-        ScreenPoint here = projectToScreen(currentWaypoint.x(), viewCenterY, currentWaypoint.z());
-        if (here != null) {
-            drawDiamond(g, here.x, here.y, 6, 0xEE0A0A12);
-            drawDiamond(g, here.x, here.y, 4, 0xFFFFC94D);
-            drawGhastLapLabel(g, here, route.currentLap(), true);
-        }
-    }
-
-    private void drawGhastLapLabel(GuiGraphicsExtractor g, ScreenPoint at, int lap, boolean current) {
-        if (at.x < 6 || at.x >= width - 6 || at.y < 12 || at.y >= height - 6) {
-            return;
-        }
-        String text = current
-                ? Component.translatable("overlay.voxymap.ghastscanner.lap", lap).getString()
-                : Integer.toString(lap);
-        int labelWidth = minecraft.font.width(text) + (current ? 8 : 6);
-        int labelX = at.x - labelWidth / 2;
-        int labelY = at.y - (current ? 20 : 16);
-        int accent = current ? 0xFFFFC94D : 0xFF6E88A8;
-        g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, 0xCC030914);
-        g.fill(labelX, labelY, labelX + 2, labelY + 11, accent);
-        g.text(minecraft.font, text, labelX + 4, labelY + 2, current ? 0xFFFFE9B8 : 0xFFC7D8EA);
     }
 
     /**
@@ -1805,15 +1713,19 @@ public class MapScreen extends Screen {
     }
 
     private void drawSettingsPanel(GuiGraphicsExtractor g, int footerTop) {
-        boolean showGhastScannerRow = HappyGhastScannerBridge.isAvailable();
-        String panelWorldId = currentVoxyWorldId();
-        WaypointManager.SyncStatus panelSyncStatus = panelWorldId != null
-                ? WaypointManager.syncStatus(panelWorldId) : WaypointManager.SyncStatus.DISABLED;
-        String syncErrorDetail = panelSyncStatus == WaypointManager.SyncStatus.ERROR
-                ? WaypointManager.syncErrorDetail(panelWorldId) : null;
+        String worldId = currentVoxyWorldId();
+        WaypointManager.SyncStatus syncStatus = worldId != null
+                ? WaypointManager.syncStatus(worldId) : WaypointManager.SyncStatus.DISABLED;
+        String syncErrorDetail = syncStatus == WaypointManager.SyncStatus.ERROR
+                ? WaypointManager.syncErrorDetail(worldId) : null;
+        List<SettingsCatalog.Section> sections = SettingsCatalog.sections(true);
+
+        int naturalPanelH = SETTINGS_TITLE_HEIGHT + SETTINGS_BOTTOM_PADDING
+                + (syncErrorDetail != null ? SETTINGS_ERROR_DETAIL_HEIGHT : 0);
+        for (SettingsCatalog.Section section : sections) {
+            naturalPanelH += SETTINGS_HEADER_HEIGHT + section.entries().size() * SETTINGS_ROW_HEIGHT;
+        }
         settingsPanelW = Math.min(360, width - HUD_MARGIN * 2);
-        int naturalPanelH = (showGhastScannerRow ? 214 : 190) + 24 + 72 + 168 + 72 + 24
-                + (syncErrorDetail != null ? 12 : 0);
         SettingsPanelLayout.Result panelLayout = SettingsPanelLayout.calculate(
                 naturalPanelH, footerTop, HUD_MARGIN, HUD_GAP, settingsScroll);
         settingsPanelH = panelLayout.panelHeight();
@@ -1824,157 +1736,28 @@ public class MapScreen extends Screen {
         drawGlassPanel(g, settingsPanelX, settingsPanelY, settingsPanelW, settingsPanelH, 0xDD030914, 0xFF3BA4FF);
 
         int x = settingsPanelX + 12;
-        int y = settingsPanelY + 10 - settingsScroll;
-        speedMinusX = speedMinusY = speedPlusX = speedPlusY = -1;
-        pauseRowY = y + 20;
-        speedRowY = y + 44;
-        cutawayRowY = y + 68;
-        vanillaSquadRowY = y + 92;
-        vanillaSquadFlagsRowY = y + 116;
-        vanillaSquadMapRowY = y + 140;
         g.text(minecraft.font, Component.translatable("screen.voxymap.settings.title"), x, settingsPanelY + 10, 0xFFFFFFFF);
-        drawSettingValue(g, x, pauseRowY, "screen.voxymap.settings.pause", onOff(VoxyMapSettings.pauseSingleplayer()), 0);
-        drawSettingValue(g, x, speedRowY, "screen.voxymap.settings.speed", String.format("%.2fx", VoxyMapSettings.cameraSpeedMultiplier()), 1);
-        drawSettingValue(g, x, cutawayRowY, "screen.voxymap.settings.cutaway", onOff(VoxyMapSettings.roomCutawayEnabled()), 2);
-        drawSettingValue(g, x, vanillaSquadRowY, "screen.voxymap.settings.vanillasquad", onOff(VoxyMapSettings.vanillaSquadPlayersEnabled()), 3);
-        drawSettingValue(g, x, vanillaSquadFlagsRowY, "screen.voxymap.settings.vanillasquadflags", onOff(VoxyMapSettings.vanillaSquadFlagsEnabled()), 4);
-        VoxyMapSettings.VanillaSquadMap map = VoxyMapSettings.vanillaSquadMap(currentVoxyWorldId());
-        String mapValue = Component.translatable(map.translationKey()).getString();
-        if (map == VoxyMapSettings.VanillaSquadMap.AUTO) {
-            mapValue += " → " + VanillaSquadPlayerMapBridge.activeMapId();
-        }
-        drawSettingValue(g, x, vanillaSquadMapRowY, "screen.voxymap.settings.vanillasquadmap", mapValue, 6);
-        if (showGhastScannerRow) {
-            ghastScannerRowY = y + 164;
-            drawSettingValue(g, x, ghastScannerRowY, "screen.voxymap.settings.ghastscanner", onOff(VoxyMapSettings.ghastScannerRouteEnabled()), 5);
-        } else {
-            ghastScannerRowY = -1;
-        }
-        waypointsRowY = y + (showGhastScannerRow ? 188 : 164);
-        drawSettingValue(g, x, waypointsRowY, "screen.voxymap.settings.waypoints", onOff(VoxyMapSettings.waypointsEnabled()), 7);
 
-        String worldId = panelWorldId;
-        String notSet = Component.translatable("screen.voxymap.settings.sync.not_set").getString();
-
-        syncAddressRowY = waypointsRowY + 24;
-        String address = worldId != null ? WaypointSyncSettings.address(worldId) : null;
-        drawSettingValue(g, x, syncAddressRowY, "screen.voxymap.settings.sync_address", address != null ? address : notSet, 8);
-
-        syncPasswordRowY = syncAddressRowY + 24;
-        String password = worldId != null ? WaypointSyncSettings.password(worldId) : null;
-        String passwordDisplay = password != null ? "*".repeat(Math.min(password.length(), 12)) : notSet;
-        drawSettingValue(g, x, syncPasswordRowY, "screen.voxymap.settings.sync_password", passwordDisplay, 9);
-
-        syncStatusRowY = syncPasswordRowY + 24;
-        drawSyncStatusRow(g, x, syncStatusRowY, panelSyncStatus);
-        int afterSyncStatus = syncStatusRowY + SETTINGS_ROW_HEIGHT;
-        if (syncErrorDetail != null) {
-            String detailText = syncErrorDetail.length() > 60 ? syncErrorDetail.substring(0, 57) + "..." : syncErrorDetail;
-            if (afterSyncStatus >= settingsPanelY + 28
-                    && afterSyncStatus + 10 <= settingsPanelY + settingsPanelH - 6) {
-                g.text(minecraft.font, detailText, x, afterSyncStatus, 0xFFFF8080);
+        speedMinusX = speedMinusY = speedPlusX = speedPlusY = -1;
+        settingRowY.clear();
+        int y = settingsPanelY + SETTINGS_TITLE_HEIGHT - settingsScroll;
+        for (SettingsCatalog.Section section : sections) {
+            drawSettingsGroupHeader(g, x, y, section.group());
+            y += SETTINGS_HEADER_HEIGHT;
+            for (SettingsCatalog.Entry entry : section.entries()) {
+                settingRowY.put(entry, y);
+                drawSettingEntry(g, x, y, entry, worldId, syncStatus);
+                y += SETTINGS_ROW_HEIGHT;
+                if (entry == SettingsCatalog.Entry.SYNC_STATUS && syncErrorDetail != null) {
+                    String detailText = syncErrorDetail.length() > 60 ? syncErrorDetail.substring(0, 57) + "..." : syncErrorDetail;
+                    if (y >= settingsPanelY + 28 && y + 10 <= settingsPanelY + settingsPanelH - 6) {
+                        g.text(minecraft.font, detailText, x, y, 0xFFFF8080);
+                    }
+                    y += SETTINGS_ERROR_DETAIL_HEIGHT;
+                }
             }
-            afterSyncStatus += 12;
         }
 
-        boolean canShareMap = address != null;
-        String notConfigured = Component.translatable("screen.voxymap.settings.sync.not_set").getString();
-
-        mapShareRowY = afterSyncStatus;
-        String shareValue;
-        if (!canShareMap) {
-            shareValue = notConfigured;
-        } else if (MapShareClient.isSharing()) {
-            shareValue = MapShareClient.shareCode() + ": " + switch (MapShareClient.shareStatus()) {
-                case WAITING -> Component.translatable("screen.voxymap.mapshare.waiting", MapShareClient.shareCompletedCount()).getString();
-                case AWAITING_CONFIRMATION -> Component.translatable("screen.voxymap.mapshare.awaiting_confirmation",
-                        formatEstimatedSize(MapShareClient.shareEstimatedBytes())).getString();
-                case SENDING -> {
-                    int sent = MapShareClient.shareSectionsSentThisAttempt();
-                    int total = MapShareClient.shareSectionsTotalThisAttempt();
-                    // total briefly reads 0 before the export thread finishes listing sections to send -
-                    // same fallback as the receiving side, avoids a flash of a bogus 0%.
-                    yield total > 0
-                            ? Component.translatable("screen.voxymap.mapshare.sending", sent, total, (int) Math.min(100L, 100L * sent / total)).getString()
-                            : Component.translatable("screen.voxymap.mapshare.sending_unknown", sent).getString();
-                }
-                case ERROR -> Component.translatable("screen.voxymap.mapshare.error").getString();
-                case IDLE -> "";
-            };
-        } else {
-            shareValue = Component.translatable("screen.voxymap.mapshare.start").getString();
-        }
-        drawSettingValue(g, x, mapShareRowY, "screen.voxymap.settings.map_share", shareValue, 10);
-
-        mapReceiveRowY = mapShareRowY + 24;
-        String receiveValue;
-        if (!canShareMap) {
-            receiveValue = notConfigured;
-        } else {
-            receiveValue = switch (MapShareClient.receiveStatus()) {
-                case IDLE -> Component.translatable("screen.voxymap.mapshare.get").getString();
-                case CONNECTING -> Component.translatable("screen.voxymap.mapshare.connecting").getString();
-                case AWAITING_CONFIRMATION -> Component.translatable("screen.voxymap.mapshare.confirm_receive",
-                        formatEstimatedSize(MapShareClient.receiveEstimatedBytes())).getString();
-                case RECEIVING -> {
-                    int imported = MapShareClient.receiveImportedCount();
-                    int skipped = MapShareClient.receiveSkippedCount();
-                    int done = imported + skipped;
-                    int total = MapShareClient.receiveTotalCount();
-                    // total is 0 when the sender is on the older protocol version that didn't send a
-                    // count (see MapShareClient's class doc) - fall back to a plain running count rather
-                    // than showing a stuck-at-0% that never reflects real progress.
-                    yield total > 0
-                            ? Component.translatable("screen.voxymap.mapshare.receiving", done, total, (int) Math.min(100L, 100L * done / total)).getString()
-                            : Component.translatable("screen.voxymap.mapshare.receiving_unknown", done).getString();
-                }
-                case DONE -> Component.translatable("screen.voxymap.mapshare.done", MapShareClient.receiveImportedCount(), MapShareClient.receiveSkippedCount()).getString();
-                case ERROR -> Component.translatable("screen.voxymap.mapshare.error").getString();
-            };
-        }
-        drawSettingValue(g, x, mapReceiveRowY, "screen.voxymap.settings.map_receive", receiveValue, 11);
-
-        minimapRowY = mapReceiveRowY + 24;
-        drawSettingValue(g, x, minimapRowY, "screen.voxymap.settings.minimap", onOff(VoxyMapSettings.minimapEnabled()), 12);
-
-        timeOfDayRowY = minimapRowY + 24;
-        String timeOfDayValue = Component.translatable(VoxyMapSettings.timeOfDayMode().translationKey()).getString();
-        drawSettingValue(g, x, timeOfDayRowY, "screen.voxymap.settings.timeofday", timeOfDayValue, 13);
-
-        mobsRowY = timeOfDayRowY + 24;
-        drawSettingValue(g, x, mobsRowY, "screen.voxymap.settings.mobs", onOff(VoxyMapSettings.mobsEnabled()), 15);
-
-        minimapRotateRowY = mobsRowY + 24;
-        drawSettingValue(g, x, minimapRotateRowY, "screen.voxymap.settings.minimaprotate", onOff(VoxyMapSettings.minimapRotates()), 16);
-
-        chunkGridRowY = minimapRotateRowY + 24;
-        drawSettingValue(g, x, chunkGridRowY, "screen.voxymap.settings.chunkgrid", onOff(VoxyMapSettings.chunkGridEnabled()), 17);
-
-        deathPointsRowY = chunkGridRowY + 24;
-        drawSettingValue(g, x, deathPointsRowY, "screen.voxymap.settings.deathpoints", onOff(VoxyMapSettings.deathPointsEnabled()), 18);
-
-        fogSuppressionRowY = deathPointsRowY + 24;
-        drawSettingValue(g, x, fogSuppressionRowY, "screen.voxymap.settings.fogsuppression", onOff(VoxyMapSettings.fogSuppressionEnabled()), 19);
-        diagnosticsRowY = fogSuppressionRowY + 24;
-        String diagnosticsValue;
-        if (!RoomCutawayShaderPatcher.isSupported()) {
-            diagnosticsValue = Component.translatable("screen.voxymap.diagnostics.shader_unsupported").getString();
-        } else if (!OreMaskController.isSupported()) {
-            diagnosticsValue = Component.translatable("screen.voxymap.diagnostics.ore_mask_unsupported").getString();
-        } else {
-            diagnosticsValue = Component.translatable("screen.voxymap.diagnostics.ok").getString();
-        }
-        drawSettingValue(g, x, diagnosticsRowY, "screen.voxymap.settings.diagnostics", diagnosticsValue, 20);
-
-        cutawayStatusRowY = diagnosticsRowY + 24;
-        String cutawayStatusValue = switch (RoomCutawayController.diagnosticsState()) {
-            case DISABLED -> Component.translatable("screen.voxymap.diagnostics.cutaway.disabled").getString();
-            case SEARCHING -> Component.translatable("screen.voxymap.diagnostics.cutaway.searching").getString();
-            case NO_ROOM -> Component.translatable("screen.voxymap.diagnostics.cutaway.none").getString();
-            case ACTIVE -> Component.translatable("screen.voxymap.diagnostics.cutaway.active",
-                    RoomCutawayController.diagnosticsCutColumns()).getString();
-        };
-        drawSettingValue(g, x, cutawayStatusRowY, "screen.voxymap.settings.cutaway_status", cutawayStatusValue, 21);
         if (settingsMaxScroll > 0) {
             int trackTop = settingsPanelY + 30;
             int trackH = settingsPanelH - 40;
@@ -1985,6 +1768,121 @@ public class MapScreen extends Screen {
             g.fill(settingsPanelX + settingsPanelW - 4, thumbY,
                     settingsPanelX + settingsPanelW - 2, thumbY + thumbH, 0xFF7DEBFF);
         }
+    }
+
+    private void drawSettingsGroupHeader(GuiGraphicsExtractor g, int x, int y, SettingsCatalog.Group group) {
+        if (!SettingsPanelLayout.rowVisible(y, settingsPanelY, settingsPanelH, SETTINGS_HEADER_HEIGHT)) return;
+        String title = Component.translatable(group.titleKey()).getString();
+        g.text(minecraft.font, title, x, y + 5, 0xFF7DEBFF);
+        int lineX = x + minecraft.font.width(title) + 6;
+        int lineRight = settingsPanelX + settingsPanelW - 14;
+        if (lineRight > lineX) {
+            g.fill(lineX, y + 9, lineRight, y + 10, 0x553BA4FF);
+        }
+    }
+
+    private void drawSettingEntry(GuiGraphicsExtractor g, int x, int y, SettingsCatalog.Entry entry,
+                                  String worldId, WaypointManager.SyncStatus syncStatus) {
+        String notSet = Component.translatable("screen.voxymap.settings.sync.not_set").getString();
+        String address = worldId != null ? WaypointSyncSettings.address(worldId) : null;
+        switch (entry) {
+            case PAUSE -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.pauseSingleplayer());
+            case SPEED -> drawSettingValue(g, x, y, entry,
+                    String.format("%.2fx", VoxyMapSettings.cameraSpeedMultiplier()), 0xFFFFFFFF);
+            case TIME_OF_DAY -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.timeOfDayMode().translationKey()).getString(), 0xFFFFFFFF);
+            case FOG_SUPPRESSION -> {
+                VoxyMapSettings.FogSuppression mode = VoxyMapSettings.fogSuppressionMode();
+                drawSettingValue(g, x, y, entry, Component.translatable(mode.translationKey()).getString(),
+                        switch (mode) {
+                            case ALWAYS -> 0xFF55FF55;
+                            case NETHER_ONLY -> 0xFFFFC94D;
+                            case OFF -> 0xFFFF5555;
+                        });
+            }
+            case WAYPOINTS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.waypointsEnabled());
+            case DEATH_POINTS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.deathPointsEnabled());
+            case VANILLASQUAD_PLAYERS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.vanillaSquadPlayersEnabled());
+            case VANILLASQUAD_FLAGS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.vanillaSquadFlagsEnabled());
+            case VANILLASQUAD_MAP -> {
+                VoxyMapSettings.VanillaSquadMap map = VoxyMapSettings.vanillaSquadMap(worldId);
+                String value = Component.translatable(map.translationKey()).getString();
+                if (map == VoxyMapSettings.VanillaSquadMap.AUTO) {
+                    value += " → " + VanillaSquadPlayerMapBridge.activeMapId();
+                }
+                drawSettingValue(g, x, y, entry, value, 0xFFFFFFFF);
+            }
+            case MINIMAP -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.minimapEnabled());
+            case MINIMAP_ROTATE -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.minimapRotates());
+            case MOBS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.mobsEnabled());
+            case CHUNK_GRID -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.chunkGridEnabled());
+            case SYNC_ADDRESS -> drawSettingValue(g, x, y, entry, address != null ? address : notSet, 0xFFFFFFFF);
+            case SYNC_PASSWORD -> {
+                String password = worldId != null ? WaypointSyncSettings.password(worldId) : null;
+                String display = password != null ? "*".repeat(Math.min(password.length(), 12)) : notSet;
+                drawSettingValue(g, x, y, entry, display, 0xFFFFFFFF);
+            }
+            case SYNC_STATUS -> drawSyncStatusRow(g, x, y, syncStatus);
+            case MAP_SHARE -> drawSettingValue(g, x, y, entry, mapShareValue(address, notSet), 0xFFFFFFFF);
+            case MAP_RECEIVE -> drawSettingValue(g, x, y, entry, mapReceiveValue(address, notSet), 0xFFFFFFFF);
+            case DIAGNOSTICS -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(SettingsValues.diagnosticsKey()).getString(), 0xFFFFFFFF);
+        }
+    }
+
+    private void drawToggleSetting(GuiGraphicsExtractor g, int x, int y, SettingsCatalog.Entry entry, boolean enabled) {
+        drawSettingValue(g, x, y, entry, onOff(enabled), enabled ? 0xFF55FF55 : 0xFFFF5555);
+    }
+
+    private String mapShareValue(String address, String notSet) {
+        if (address == null) {
+            return notSet;
+        }
+        if (!MapShareClient.isSharing()) {
+            return Component.translatable("screen.voxymap.mapshare.start").getString();
+        }
+        return MapShareClient.shareCode() + ": " + switch (MapShareClient.shareStatus()) {
+            case WAITING -> Component.translatable("screen.voxymap.mapshare.waiting", MapShareClient.shareCompletedCount()).getString();
+            case AWAITING_CONFIRMATION -> Component.translatable("screen.voxymap.mapshare.awaiting_confirmation",
+                    formatEstimatedSize(MapShareClient.shareEstimatedBytes())).getString();
+            case SENDING -> {
+                int sent = MapShareClient.shareSectionsSentThisAttempt();
+                int total = MapShareClient.shareSectionsTotalThisAttempt();
+                // total briefly reads 0 before the export thread finishes listing sections to send -
+                // same fallback as the receiving side, avoids a flash of a bogus 0%.
+                yield total > 0
+                        ? Component.translatable("screen.voxymap.mapshare.sending", sent, total, (int) Math.min(100L, 100L * sent / total)).getString()
+                        : Component.translatable("screen.voxymap.mapshare.sending_unknown", sent).getString();
+            }
+            case ERROR -> Component.translatable("screen.voxymap.mapshare.error").getString();
+            case IDLE -> "";
+        };
+    }
+
+    private String mapReceiveValue(String address, String notSet) {
+        if (address == null) {
+            return notSet;
+        }
+        return switch (MapShareClient.receiveStatus()) {
+            case IDLE -> Component.translatable("screen.voxymap.mapshare.get").getString();
+            case CONNECTING -> Component.translatable("screen.voxymap.mapshare.connecting").getString();
+            case AWAITING_CONFIRMATION -> Component.translatable("screen.voxymap.mapshare.confirm_receive",
+                    formatEstimatedSize(MapShareClient.receiveEstimatedBytes())).getString();
+            case RECEIVING -> {
+                int imported = MapShareClient.receiveImportedCount();
+                int skipped = MapShareClient.receiveSkippedCount();
+                int done = imported + skipped;
+                int total = MapShareClient.receiveTotalCount();
+                // total is 0 when the sender is on the older protocol version that did not send a
+                // count (see MapShareClient's class doc) - fall back to a plain running count rather
+                // than showing a stuck-at-0% that never reflects real progress.
+                yield total > 0
+                        ? Component.translatable("screen.voxymap.mapshare.receiving", done, total, (int) Math.min(100L, 100L * done / total)).getString()
+                        : Component.translatable("screen.voxymap.mapshare.receiving_unknown", done).getString();
+            }
+            case DONE -> Component.translatable("screen.voxymap.mapshare.done", MapShareClient.receiveImportedCount(), MapShareClient.receiveSkippedCount()).getString();
+            case ERROR -> Component.translatable("screen.voxymap.mapshare.error").getString();
+        };
     }
 
     private void drawSyncStatusRow(GuiGraphicsExtractor g, int x, int y, WaypointManager.SyncStatus status) {
@@ -2021,54 +1919,21 @@ public class MapScreen extends Screen {
         return identifier == null ? null : identifier.getWorldId();
     }
 
-    private void drawSettingValue(GuiGraphicsExtractor g, int x, int y, String labelKey, String value, int row) {
+    private void drawSettingValue(GuiGraphicsExtractor g, int x, int y, SettingsCatalog.Entry entry,
+                                  String value, int valueColor) {
         if (!isSettingsRowVisible(y)) return;
         int rowX = settingsPanelX + 8;
         int rowW = settingsPanelW - 16;
         g.fill(rowX, y, rowX + rowW, y + SETTINGS_ROW_HEIGHT - 2, 0x66102034);
         g.fill(rowX, y, rowX + 2, y + SETTINGS_ROW_HEIGHT - 2, 0xFF3BA4FF);
-        g.text(minecraft.font, Component.translatable(labelKey), x, y + 7, 0xFFDFF8FF);
+        g.text(minecraft.font, Component.translatable(entry.labelKey()), x, y + 7, 0xFFDFF8FF);
         int valueW = Math.max(62, minecraft.font.width(value) + 14);
         int valueX = settingsPanelX + settingsPanelW - valueW - 14;
-        if (row == 1) {
+        if (entry == SettingsCatalog.Entry.SPEED) {
             valueX -= (SPEED_BUTTON_SIZE + 6);
         }
-        int valueColor;
-        if (row == 0) {
-            valueColor = VoxyMapSettings.pauseSingleplayer() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 2) {
-            valueColor = VoxyMapSettings.roomCutawayEnabled() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 3) {
-            valueColor = VoxyMapSettings.vanillaSquadPlayersEnabled() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 4) {
-            valueColor = VoxyMapSettings.vanillaSquadFlagsEnabled() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 5) {
-            valueColor = VoxyMapSettings.ghastScannerRouteEnabled() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 7) {
-            valueColor = VoxyMapSettings.waypointsEnabled() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 12) {
-            valueColor = VoxyMapSettings.minimapEnabled() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 15) {
-            valueColor = VoxyMapSettings.mobsEnabled() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 16) {
-            valueColor = VoxyMapSettings.minimapRotates() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 17) {
-            valueColor = VoxyMapSettings.chunkGridEnabled() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 18) {
-            valueColor = VoxyMapSettings.deathPointsEnabled() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 19) {
-            valueColor = VoxyMapSettings.fogSuppressionEnabled() ? 0xFF55FF55 : 0xFFFF5555;
-        } else if (row == 21) {
-            valueColor = switch (RoomCutawayController.diagnosticsState()) {
-                case ACTIVE -> 0xFF55FF55;
-                case SEARCHING -> 0xFFFFC94D;
-                case DISABLED, NO_ROOM -> 0xFFAAAAAA;
-            };
-        } else {
-            valueColor = 0xFFFFFFFF;
-        }
         drawValueBox(g, valueX, y + 3, valueW, 16, value, valueColor);
-        if (row == 1) {
+        if (entry == SettingsCatalog.Entry.SPEED) {
             speedMinusX = valueX - SPEED_BUTTON_SIZE - 6;
             speedMinusY = y + 2;
             speedPlusX = valueX + valueW + 6;
@@ -2350,7 +2215,7 @@ public class MapScreen extends Screen {
             return true;
         }
         if (event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT && isInsideSettingsPanel(event.x(), event.y())) {
-            if (isInsideSettingsRow(event.x(), event.y(), mapReceiveRowY)) {
+            if (settingsEntryAt(event.x(), event.y()) == SettingsCatalog.Entry.MAP_RECEIVE) {
                 if (MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.AWAITING_CONFIRMATION) {
                     MapShareClient.declineReceive();
                 } else if (MapShareClient.receiveStatus() == MapShareClient.ReceiveStatus.RECEIVING

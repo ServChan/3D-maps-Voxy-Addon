@@ -18,7 +18,7 @@ public final class VoxyMapCameraController {
     public static void update(Minecraft minecraft, double centerX, double centerY, double centerZ, double yawRadians, double pitchControl, double blocksPerPixel) {
         if (minecraft == null || minecraft.level == null || minecraft.player == null) {
             active = false;
-            RoomCutawayController.deactivate();
+            NetherRoofController.deactivate();
             return;
         }
 
@@ -80,6 +80,6 @@ public final class VoxyMapCameraController {
 
     public static void deactivate() {
         active = false;
-        RoomCutawayController.deactivate();
+        NetherRoofController.deactivate();
     }
 }

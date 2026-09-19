@@ -26,7 +26,7 @@ public abstract class LevelMixin {
     private void voxymap$overrideMapDarkness(CallbackInfoReturnable<Boolean> cir) {
         VoxyMapSettings.TimeOfDay mode = voxymap$activeTimeOfDayOverride();
         if (mode != null) {
-            cir.setReturnValue(mode == VoxyMapSettings.TimeOfDay.NIGHT);
+            cir.setReturnValue(mode.isDark());
         }
     }
 
@@ -34,7 +34,7 @@ public abstract class LevelMixin {
     private void voxymap$overrideMapSkyDarken(CallbackInfoReturnable<Integer> cir) {
         VoxyMapSettings.TimeOfDay mode = voxymap$activeTimeOfDayOverride();
         if (mode != null) {
-            cir.setReturnValue(mode == VoxyMapSettings.TimeOfDay.NIGHT ? 11 : 0);
+            cir.setReturnValue(mode.skyDarken());
         }
     }
 
@@ -42,7 +42,7 @@ public abstract class LevelMixin {
     private void voxymap$overrideMapClockTime(CallbackInfoReturnable<Long> cir) {
         VoxyMapSettings.TimeOfDay mode = voxymap$activeTimeOfDayOverride();
         if (mode != null) {
-            cir.setReturnValue(mode == VoxyMapSettings.TimeOfDay.NIGHT ? 18000L : 6000L);
+            cir.setReturnValue(mode.clockTicks());
         }
     }
 

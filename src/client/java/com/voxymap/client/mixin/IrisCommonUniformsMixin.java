@@ -22,6 +22,6 @@ public abstract class IrisCommonUniformsMixin {
             PackDirectives directives,
             CallbackInfo ci) {
         uniforms.uniform1f(UniformUpdateFrequency.PER_FRAME, "voxymapMapView",
-                () -> VoxyMapCameraController.isActive() && VoxyMapSettings.fogSuppressionEnabled() ? 1.0f : 0.0f);
+                () -> VoxyMapCameraController.isActive() && VoxyMapSettings.fogSuppressionActive() ? 1.0f : 0.0f);
     }
 }

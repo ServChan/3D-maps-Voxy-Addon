@@ -3,58 +3,38 @@ package com.voxymap.client.map;
 import com.voxymap.client.VoxyMapClient;
 
 /**
- * Patches Voxy's native LOD shaders with a whole-quad Nether roof remover and an optional, more
- * precise local room mask. Removing complete roof quads avoids manufacturing cross-sections through
- * server anti-xray decoy LODs. The per-column texture is built by
- * {@link RoomCutawayComputer} from the connected air space around the player and may lower that plane
- * locally to reveal a room ceiling.
+ * Patches Voxy's native LOD shaders with the map's two shader-side features: a whole-quad Nether roof
+ * remover (see {@link NetherRoofController}) and the ore mask (see {@link OreMaskController}).
+ * Removing complete roof quads avoids manufacturing cross-sections through server anti-xray decoy LODs.
  */
-public final class RoomCutawayShaderPatcher {
+public final class VoxyShaderPatcher {
     public static final int ENABLED_UNIFORM_LOCATION = 30;
-    public static final int ORIGIN_X_UNIFORM_LOCATION = 31;
-    public static final int ORIGIN_Z_UNIFORM_LOCATION = 32;
     public static final int GLOBAL_CUTOFF_UNIFORM_LOCATION = 33;
     public static final int APERTURE_CENTER_X_UNIFORM_LOCATION = 34;
     public static final int APERTURE_CENTER_Z_UNIFORM_LOCATION = 35;
     public static final int APERTURE_INNER_CUTOFF_UNIFORM_LOCATION = 36;
     public static final int APERTURE_RADIUS_UNIFORM_LOCATION = 37;
     public static final int ORE_MASK_ENABLED_UNIFORM_LOCATION = 38;
-    public static final int SPHERE_CENTER_X_UNIFORM_LOCATION = 39;
-    public static final int SPHERE_CENTER_Y_UNIFORM_LOCATION = 40;
-    public static final int SPHERE_CENTER_Z_UNIFORM_LOCATION = 41;
-    public static final int SPHERE_RADIUS_UNIFORM_LOCATION = 42;
 
     private static final String VERTEX_DECLARATIONS = """
-            layout(location = 12) out vec3 voxymapWorldPos;
             layout(location = 13) out flat float voxymapQuadMinY;
             layout(location = 14) out flat vec2 voxymapQuadCenterXZ;
 
             """;
     private static final String FRAGMENT_DECLARATIONS = """
-            layout(location = 12) in vec3 voxymapWorldPos;
             layout(location = 13) in flat float voxymapQuadMinY;
             layout(location = 14) in flat vec2 voxymapQuadCenterXZ;
             layout(location = 30) uniform int voxymapCutawayEnabled;
-            layout(location = 31) uniform float voxymapCutawayOriginX;
-            layout(location = 32) uniform float voxymapCutawayOriginZ;
             layout(location = 33) uniform float voxymapGlobalCutawayY;
             layout(location = 34) uniform float voxymapApertureCenterX;
             layout(location = 35) uniform float voxymapApertureCenterZ;
             layout(location = 36) uniform float voxymapApertureInnerY;
             layout(location = 37) uniform float voxymapApertureRadius;
             layout(location = 38) uniform int voxymapOreMaskEnabled;
-            layout(location = 39) uniform float voxymapSphereCenterX;
-            layout(location = 40) uniform float voxymapSphereCenterY;
-            layout(location = 41) uniform float voxymapSphereCenterZ;
-            layout(location = 42) uniform float voxymapSphereRadius;
-            layout(binding = %d) uniform sampler2D voxymapRoomHeightMap;
             layout(binding = %d) uniform sampler2D voxymapOreMask;
 
-            """.formatted(RoomCutawayTexture.TEXTURE_UNIT, OreMaskTexture.TEXTURE_UNIT);
+            """.formatted(OreMaskTexture.TEXTURE_UNIT);
     private static final String VERTEX_ASSIGNMENT = """
-                vec2 voxymapCornerMask = vec2((cornerId >> 1) & 1u, cornerId & 1u) * quad.lodScale;
-                vec3 voxymapPoint = quad.basePoint + swizzelDataAxis(quad.axis, vec3(quad.quadSizeAddin * voxymapCornerMask, 0));
-                voxymapWorldPos = voxymapPoint + vec3(baseSectionPos << 5);
                 voxymapQuadMinY = quad.basePoint.y + float(baseSectionPos.y << 5);
                 vec3 voxymapQuadFarCorner = quad.basePoint
                     + swizzelDataAxis(quad.axis, vec3(quad.quadSizeAddin * quad.lodScale, 0));
@@ -70,23 +50,9 @@ public final class RoomCutawayShaderPatcher {
 
 
                 if (voxymapCutawayEnabled != 0) {
-                    // A simple camera-centered "reveal bubble", independent of the room-enclosure
-                    // search above: always on while the map is open (voxymapSphereRadius is 0 - and
-                    // this a no-op - whenever it isn't), so the player's own position stays visible
-                    // from the detached map camera regardless of whether it sits in a fully enclosed
-                    // pocket. Never touches anti-xray-sensitive data - it is a pure distance cut from
-                    // the camera, not a guess about unverified geometry.
-                    if (voxymapSphereRadius > 0.0) {
-                        vec3 voxymapSphereCenter = vec3(voxymapSphereCenterX, voxymapSphereCenterY, voxymapSphereCenterZ);
-                        if (distance(voxymapWorldPos, voxymapSphereCenter) < voxymapSphereRadius) {
-                            discard;
-                            return;
-                        }
-                    }
-
                     // The global Nether threshold removes only complete quads belonging to the roof
                     // band. Per-fragment clipping here would expose fake anti-xray volume as a tiled
-                    // cross-section. Local verified-air columns may still use a precise clip plane.
+                    // cross-section.
                     float voxymapRoofCutY = voxymapGlobalCutawayY;
                     if (voxymapApertureRadius > 0.0) {
                         float voxymapDistance = distance(voxymapQuadCenterXZ,
@@ -96,38 +62,27 @@ public final class RoomCutawayShaderPatcher {
                         voxymapRoofCutY = mix(voxymapApertureInnerY,
                             voxymapGlobalCutawayY, voxymapApertureBlend);
                     }
-                    if (voxymapGlobalCutawayY < %2$s && voxymapQuadMinY >= voxymapRoofCutY) {
-                        discard;
-                        return;
-                    }
-                    float voxymapCutY = %2$s;
-                    ivec2 voxymapTexel = ivec2(int(floor(voxymapWorldPos.x)) - int(voxymapCutawayOriginX),
-                                                int(floor(voxymapWorldPos.z)) - int(voxymapCutawayOriginZ));
-                    if (voxymapTexel.x >= 0 && voxymapTexel.x < %1$d && voxymapTexel.y >= 0 && voxymapTexel.y < %1$d) {
-                        voxymapCutY = texelFetch(voxymapRoomHeightMap, voxymapTexel, 0).r;
-                    }
-                    if (voxymapWorldPos.y > voxymapCutY) {
+                    if (voxymapGlobalCutawayY < %s && voxymapQuadMinY >= voxymapRoofCutY) {
                         discard;
                         return;
                     }
                 }
 
                 if (voxymapOreMaskEnabled != 0) {
-                    // Independent of voxymapCutawayEnabled above: an ore can be exposed by the room
-                    // cutaway, by the Nether roof trim, or simply by Voxy meshing the boundary of its
-                    // cached data as an ordinary opaque wall (see OreMaskController) - there is no
-                    // signal here to tell those apart, so this masks every rendered ore uniformly.
+                    // Independent of voxymapCutawayEnabled above: an ore can be exposed by the Nether
+                    // roof trim, or simply by Voxy meshing the boundary of its cached data as an
+                    // ordinary opaque wall (see OreMaskController) - there is no signal here to tell
+                    // those apart, so this masks every rendered ore uniformly.
                     uint voxymapModelId = getModelId();
                     ivec2 voxymapOreTexel = ivec2(voxymapModelId & 0xFFu, (voxymapModelId >> 8) & 0xFFu);
                     if (texelFetch(voxymapOreMask, voxymapOreTexel, 0).r > 0.5) {
                         colour = vec4(0.55, 0.55, 0.55, colour.a);
                     }
-                }""".formatted(RoomCutawayComputer.GRID_SIZE,
-                    Float.toString(RoomCutawayTexture.NO_CUT_VALUE));
+                }""".formatted(Float.toString(NetherRoofState.NO_CUT_VALUE));
 
     private static volatile boolean unsupported = false;
 
-    private RoomCutawayShaderPatcher() {
+    private VoxyShaderPatcher() {
     }
 
     /** Whether the shaders were successfully patched; false if a Voxy update changed their layout. */
@@ -137,7 +92,7 @@ public final class RoomCutawayShaderPatcher {
 
     /**
      * Same as {@link #patch}, but never throws: a Voxy update that changes the shader layout must
-     * disable the room-cutaway feature and let the rest of Voxy keep loading, not crash shader
+     * disable the roof removal and ore mask and let the rest of Voxy keep loading, not crash shader
      * compilation for the whole client.
      */
     public static String patchSafely(String resource, String source) {
@@ -146,7 +101,7 @@ public final class RoomCutawayShaderPatcher {
         } catch (IllegalStateException exception) {
             unsupported = true;
             VoxyMapClient.LOGGER.warn(
-                    "[VoxyMap] Voxy shader layout changed; disabling the room-cutaway feature.", exception);
+                    "[VoxyMap] Voxy shader layout changed; disabling Nether roof removal and ore masking.", exception);
             return source;
         }
     }
@@ -156,7 +111,7 @@ public final class RoomCutawayShaderPatcher {
             return source;
         }
         if ("voxy:lod/gl46/quads3.vert".equals(resource)) {
-            return source.contains("voxymapWorldPos") ? source : patchVertex(source);
+            return source.contains("voxymapQuadMinY") ? source : patchVertex(source);
         }
         if ("voxy:lod/gl46/quads.frag".equals(resource)) {
             return source.contains("voxymapCutawayEnabled") ? source : patchFragment(source);

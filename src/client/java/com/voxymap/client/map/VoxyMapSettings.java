@@ -2,6 +2,7 @@ package com.voxymap.client.map;
 
 import com.voxymap.client.VoxyMapClient;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,14 +21,16 @@ public final class VoxyMapSettings {
     private static final Path BACKUP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".bak");
     private static final Path TEMP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
 
+    public static final double CAMERA_SPEED_MIN = 0.25;
+    public static final double CAMERA_SPEED_MAX = 4.0;
+    public static final double CAMERA_SPEED_STEP = 0.25;
+
     private static boolean loaded = false;
     private static boolean pauseSingleplayer = true;
     private static double cameraSpeedMultiplier = 1.0;
-    private static boolean roomCutawayEnabled = true;
     private static boolean vanillaSquadPlayersEnabled = false;
     private static boolean vanillaSquadFlagsEnabled = false;
     private static final Map<String, VanillaSquadMap> vanillaSquadWorldMaps = new ConcurrentHashMap<>();
-    private static boolean ghastScannerRouteEnabled = true;
     private static boolean waypointsEnabled = true;
     private static boolean minimapEnabled = true;
     private static TimeOfDay timeOfDayMode = TimeOfDay.AUTO;
@@ -35,7 +38,7 @@ public final class VoxyMapSettings {
     private static boolean minimapRotates = false;
     private static boolean chunkGridEnabled = false;
     private static boolean deathPointsEnabled = true;
-    private static boolean fogSuppressionEnabled = true;
+    private static FogSuppression fogSuppression = FogSuppression.ALWAYS;
 
     private VoxyMapSettings() {
     }
@@ -55,7 +58,6 @@ public final class VoxyMapSettings {
 
         pauseSingleplayer = readBoolean(properties.getProperty("pauseSingleplayer"), pauseSingleplayer);
         cameraSpeedMultiplier = clamp(readDouble(properties.getProperty("cameraSpeedMultiplier"), cameraSpeedMultiplier), 0.25, 4.0);
-        roomCutawayEnabled = readBoolean(properties.getProperty("roomCutawayEnabled"), roomCutawayEnabled);
         vanillaSquadPlayersEnabled = readBoolean(properties.getProperty("vanillaSquadPlayersEnabled"), vanillaSquadPlayersEnabled);
         vanillaSquadFlagsEnabled = readBoolean(properties.getProperty("vanillaSquadFlagsEnabled"), vanillaSquadFlagsEnabled);
         vanillaSquadWorldMaps.clear();
@@ -67,7 +69,6 @@ public final class VoxyMapSettings {
                 vanillaSquadWorldMaps.put(worldId, map);
             }
         }
-        ghastScannerRouteEnabled = readBoolean(properties.getProperty("ghastScannerRouteEnabled"), ghastScannerRouteEnabled);
         waypointsEnabled = readBoolean(properties.getProperty("waypointsEnabled"), waypointsEnabled);
         minimapEnabled = readBoolean(properties.getProperty("minimapEnabled"), minimapEnabled);
         timeOfDayMode = TimeOfDay.parse(properties.getProperty("timeOfDayMode"));
@@ -75,19 +76,18 @@ public final class VoxyMapSettings {
         minimapRotates = readBoolean(properties.getProperty("minimapRotates"), minimapRotates);
         chunkGridEnabled = readBoolean(properties.getProperty("chunkGridEnabled"), chunkGridEnabled);
         deathPointsEnabled = readBoolean(properties.getProperty("deathPointsEnabled"), deathPointsEnabled);
-        fogSuppressionEnabled = readBoolean(properties.getProperty("fogSuppressionEnabled"), fogSuppressionEnabled);
+        fogSuppression = FogSuppression.parse(properties.getProperty("fogSuppressionMode"),
+                properties.getProperty("fogSuppressionEnabled"));
     }
 
     public static void save() {
         Properties properties = new Properties();
         properties.setProperty("pauseSingleplayer", Boolean.toString(pauseSingleplayer));
         properties.setProperty("cameraSpeedMultiplier", String.format(Locale.ROOT, "%.2f", cameraSpeedMultiplier));
-        properties.setProperty("roomCutawayEnabled", Boolean.toString(roomCutawayEnabled));
         properties.setProperty("vanillaSquadPlayersEnabled", Boolean.toString(vanillaSquadPlayersEnabled));
         properties.setProperty("vanillaSquadFlagsEnabled", Boolean.toString(vanillaSquadFlagsEnabled));
         vanillaSquadWorldMaps.forEach((worldId, map) -> properties.setProperty(
                 VANILLA_SQUAD_WORLD_PREFIX + worldId, map.name().toLowerCase(Locale.ROOT)));
-        properties.setProperty("ghastScannerRouteEnabled", Boolean.toString(ghastScannerRouteEnabled));
         properties.setProperty("waypointsEnabled", Boolean.toString(waypointsEnabled));
         properties.setProperty("minimapEnabled", Boolean.toString(minimapEnabled));
         properties.setProperty("timeOfDayMode", timeOfDayMode.name().toLowerCase(Locale.ROOT));
@@ -95,7 +95,7 @@ public final class VoxyMapSettings {
         properties.setProperty("minimapRotates", Boolean.toString(minimapRotates));
         properties.setProperty("chunkGridEnabled", Boolean.toString(chunkGridEnabled));
         properties.setProperty("deathPointsEnabled", Boolean.toString(deathPointsEnabled));
-        properties.setProperty("fogSuppressionEnabled", Boolean.toString(fogSuppressionEnabled));
+        properties.setProperty("fogSuppressionMode", fogSuppression.name().toLowerCase(Locale.ROOT));
 
         AtomicPropertiesWriter.save(CONFIG_PATH, BACKUP_PATH, TEMP_PATH, properties, "VoxyMap client settings");
     }
@@ -122,23 +122,19 @@ public final class VoxyMapSettings {
         save();
     }
 
-    /** Single-button variant of {@link #changeCameraSpeed} for the Mod Menu config screen, which (unlike
-     * the in-map settings panel) has no separate -/+ buttons - wraps back to the minimum past the
-     * maximum instead of clamping, like {@link #cycleTimeOfDayMode()}. */
-    public static void cycleCameraSpeed() {
+    /**
+     * Sets the camera speed directly (the Mod Menu slider), snapped to the same {@value #CAMERA_SPEED_STEP}
+     * steps the in-map -/+ buttons move in. Does nothing, and does not rewrite the config file, when the
+     * snapped value is unchanged - a slider drag reports every pixel of movement.
+     */
+    public static void setCameraSpeed(double multiplier) {
         load();
-        cameraSpeedMultiplier = cameraSpeedMultiplier >= 4.0 - 1e-9 ? 0.25 : clamp(cameraSpeedMultiplier + 0.25, 0.25, 4.0);
-        save();
-    }
-
-    public static boolean roomCutawayEnabled() {
-        load();
-        return roomCutawayEnabled;
-    }
-
-    public static void toggleRoomCutaway() {
-        load();
-        roomCutawayEnabled = !roomCutawayEnabled;
+        double snapped = clamp(Math.round(multiplier / CAMERA_SPEED_STEP) * CAMERA_SPEED_STEP,
+                CAMERA_SPEED_MIN, CAMERA_SPEED_MAX);
+        if (Math.abs(snapped - cameraSpeedMultiplier) < 1e-9) {
+            return;
+        }
+        cameraSpeedMultiplier = snapped;
         save();
     }
 
@@ -161,17 +157,6 @@ public final class VoxyMapSettings {
     public static void toggleVanillaSquadFlags() {
         load();
         vanillaSquadFlagsEnabled = !vanillaSquadFlagsEnabled;
-        save();
-    }
-
-    public static boolean ghastScannerRouteEnabled() {
-        load();
-        return ghastScannerRouteEnabled;
-    }
-
-    public static void toggleGhastScannerRoute() {
-        load();
-        ghastScannerRouteEnabled = !ghastScannerRouteEnabled;
         save();
     }
 
@@ -256,15 +241,24 @@ public final class VoxyMapSettings {
     /** Whether VoxyMap should suppress environmental/shader-pack fog while the map is open. Defaults
      * to on since the fullscreen map view reads poorly through normal ground-level fog; players who
      * prefer the atmospheric look (or hit a shader incompatibility) can turn it back off. */
-    public static boolean fogSuppressionEnabled() {
+    public static FogSuppression fogSuppressionMode() {
         load();
-        return fogSuppressionEnabled;
+        return fogSuppression;
     }
 
-    public static void toggleFogSuppression() {
+    public static void cycleFogSuppression() {
         load();
-        fogSuppressionEnabled = !fogSuppressionEnabled;
+        FogSuppression[] values = FogSuppression.values();
+        fogSuppression = values[(fogSuppression.ordinal() + 1) % values.length];
         save();
+    }
+
+    /** Whether shader-pack fog should be removed from the map right now, given the current dimension. */
+    public static boolean fogSuppressionActive() {
+        Minecraft minecraft = Minecraft.getInstance();
+        boolean nether = minecraft != null && minecraft.level != null
+                && "minecraft:the_nether".equals(minecraft.level.dimension().identifier().toString());
+        return fogSuppressionMode().appliesIn(nether);
     }
 
     /** Null while the map is closed or the user picked AUTO - in both cases every lighting-forcing
@@ -363,19 +357,90 @@ public final class VoxyMapSettings {
      * {@code LevelMixin}) - by default the map always keeps itself readable by forcing midday, no
      * rain/thunder. AUTO instead lets the real world clock and weather show through; DAY/NIGHT pin the
      * map to one lighting look regardless of the actual time, e.g. for a consistent screenshot. */
-    public enum TimeOfDay {
-        AUTO("screen.voxymap.settings.timeofday.auto"),
-        DAY("screen.voxymap.settings.timeofday.day"),
-        NIGHT("screen.voxymap.settings.timeofday.night");
+    /** Where the map removes shader-pack fog. Declaration order is the order the setting cycles through. */
+    public enum FogSuppression {
+        ALWAYS("screen.voxymap.settings.on"),
+        NETHER_ONLY("screen.voxymap.settings.fogsuppression.nether"),
+        OFF("screen.voxymap.settings.off");
 
         private final String translationKey;
 
-        TimeOfDay(String translationKey) {
+        FogSuppression(String translationKey) {
             this.translationKey = translationKey;
         }
 
         public String translationKey() {
             return translationKey;
+        }
+
+        /** Whether fog is removed in the Nether ({@code nether}) or in every other dimension. */
+        public boolean appliesIn(boolean nether) {
+            return switch (this) {
+                case ALWAYS -> true;
+                case NETHER_ONLY -> nether;
+                case OFF -> false;
+            };
+        }
+
+        /**
+         * @param mode   the stored {@code fogSuppressionMode}, or null when absent
+         * @param legacy the old on/off {@code fogSuppressionEnabled} value, used only when there is no mode yet
+         */
+        static FogSuppression parse(String mode, String legacy) {
+            if (mode != null) {
+                try {
+                    return valueOf(mode.trim().toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException ignored) {
+                    // Fall through to the legacy value / default for hand-edited configs.
+                }
+            }
+            if (legacy != null) {
+                return "false".equalsIgnoreCase(legacy.trim()) ? OFF : ALWAYS;
+            }
+            return ALWAYS;
+        }
+    }
+
+    /**
+     * Fixed lighting for the map. The world clock is pinned to {@link #clockTicks()}: 0 is sunrise,
+     * 6000 noon, 12000 sunset and 18000 midnight. Morning and evening sit 1000 ticks (about 15 degrees of
+     * sun height) after sunrise and before sunset, so the sun is low and warm but the terrain is still lit.
+     * Declaration order is the order the settings button cycles through.
+     */
+    public enum TimeOfDay {
+        AUTO("screen.voxymap.settings.timeofday.auto", -1L, false),
+        MORNING("screen.voxymap.settings.timeofday.morning", 1000L, false),
+        DAY("screen.voxymap.settings.timeofday.day", 6000L, false),
+        EVENING("screen.voxymap.settings.timeofday.evening", 11000L, false),
+        NIGHT("screen.voxymap.settings.timeofday.night", 18000L, true);
+
+        private final String translationKey;
+        private final long clockTicks;
+        private final boolean dark;
+
+        TimeOfDay(String translationKey, long clockTicks, boolean dark) {
+            this.translationKey = translationKey;
+            this.clockTicks = clockTicks;
+            this.dark = dark;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        /** World clock value to pin, or -1 for {@link #AUTO}, which leaves the real clock alone. */
+        public long clockTicks() {
+            return clockTicks;
+        }
+
+        /** Whether Minecraft should treat the sky as dark (mob spawning light, sky darkening). */
+        public boolean isDark() {
+            return dark;
+        }
+
+        /** The value of {@code Level#getSkyDarken()} for this lighting: 11 at night, 0 otherwise. */
+        public int skyDarken() {
+            return dark ? 11 : 0;
         }
 
         private static TimeOfDay parse(String value) {
