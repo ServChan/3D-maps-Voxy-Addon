@@ -15,18 +15,22 @@ profile. A successful Gradle build is required first, but does not replace these
 
 - Open and close the map repeatedly; pan, rotate, zoom at the cursor and center on the player.
 - Test a small window or large GUI scale: scroll the settings panel and confirm rows neither draw nor
-  receive clicks outside the panel.
+  receive clicks outside the panel. Confirm each setting sits under its group header and that clicking a
+  row changes that row's setting (rows are hit-tested by catalog entry, not by position).
+- Open the Mod Menu screen from the title screen and from a world: it must scroll (wheel, PageUp/PageDown,
+  Tab to a control below the fold), keep the Done button reachable at a small window / large GUI scale,
+  and show the same groups as the map panel minus the per-world rows. The speed slider must change the
+  in-map camera speed.
 - Place a waypoint on terrain, a cave surface and a multi-level build. Rename, delete and undo it.
 - Search and operate every object type in the Objects panel; test player follow and manual cancellation.
 
 ## Rendering risk cases
 
-- Nether: verify whole-quad roof removal, the close-range inspection aperture and room cutaway around
-  the player without exposing unloaded/unknown columns.
+- Nether: verify whole-quad roof removal and the close-range inspection aperture, with the map showing
+  terrain instead of a flat fog colour (Complementary: Fog suppression on).
 - Solas rain: verify distant terrain remains visible and `latest.log` has no program-texture errors.
 - Dense player group: pan and zoom through the group; labels must remain stable, collapse to `name +N`
   and expand on hover without flicker.
-- HappyGhastScanner: display a long, wide spiral and confirm no line streaks or severe frame-time drop.
 - VanillaSquad: test hidden local player resolution plus Build, Farm and Art manual world selections.
 
 ## Minimap and lifecycle
