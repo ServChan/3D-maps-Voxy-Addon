@@ -14,6 +14,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 - Whole-quad Nether roof removal clears the upper bedrock/anti-xray shell without slicing decoy LODs into a checkerboard, with a zoom-aware inspection aperture that opens deeper around the current map center at close range.
 - Mouse dragging, right-button rotation, cursor-centered zoom, and smooth keyboard movement.
 - Exact player centering plus projected markers and adaptive facing indicators for nearby active players.
+- Your own view direction: a translucent wedge for your real horizontal field of view with a bright centre ray and arrowhead, so you can see where you are looking from the map.
 - Optional VanillaSquad global player markers with compact skin heads and clustered territory outlines, isolated between the public build, farm, and art maps.
 - Stable near terrain: while the map is open, Voxy's cached LODs fill its normal player-centered hand-off zone instead of using Sodium's angle-dependent real-camera visibility set.
 - Optional singleplayer pause and adjustable camera speed.
@@ -51,7 +52,7 @@ Iris and Xaero's World Map are optional integrations. The mod is client-only and
 | `C` | Center on the player |
 | `O` | Open or close the Objects panel |
 | `F` | Follow or stop following the selected player; manual movement stops following |
-| `F2` (screenshot key) | Save a screenshot of the bare map: every panel, marker, the HUD and chat are hidden for one frame, then restored |
+| `F2` (screenshot key) | Save a screenshot of the map without the interface: for one frame every panel, the HUD and chat are hidden (and the markers too, unless the Map screenshot setting is "With markers"), then restored |
 | `Esc` | Close the map |
 
 ## Settings
@@ -60,13 +61,15 @@ Settings are grouped the same way in the map's **Settings** panel and in the Mod
 
 | Group | Contents |
 | --- | --- |
-| General | Pause in singleplayer, camera speed, map lighting (auto, morning, day, evening, night), fog suppression (on, Nether only, off) |
-| Map layers | Waypoints, death points, VanillaSquad players / flags / map |
+| General | Pause in singleplayer, camera speed, map lighting (auto, morning, day, evening, night), fog suppression (on, Nether only, off), map screenshot (no interface / with markers) |
+| Map layers | Waypoints, death points, your view direction; VanillaSquad players / flags / map, shown only while connected to the VanillaSquad server |
 | Minimap | Minimap, rotation, mobs, chunk grid |
 | Sync and sharing | Sync address, password and status, share map, receive map |
 | Diagnostics | Whether the Voxy shader patches loaded |
 
-The Mod Menu screen scrolls and lists the global settings. Sync, map sharing and the VanillaSquad map are stored per world, so they are only in the map's Settings panel.
+The Mod Menu screen scrolls and lists the global settings. Sync address and password and the VanillaSquad map are stored per world, so they appear there when the screen is opened from inside a world (Esc, Mods); map sharing needs the map's own area selection and is only in the map's Settings panel.
+
+Fog suppression removes the shader pack's own fog while the map is open. It supports Complementary (Reimagined and Unbound), Rethinking Voxels, Solas, BSL, Mellow and Photon; with any other pack it does nothing. The pack must load one of the fog files listed in `ShaderPackFogPatcher`; a pack version with a changed layout is left untouched and logged once.
 
 Settings are stored in `config/voxymap.properties`, and waypoints in `config/voxymap-waypoints.properties`. Both write through a sibling temporary file and keep a `.bak` copy for recovery.
 

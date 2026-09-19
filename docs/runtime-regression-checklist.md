@@ -28,7 +28,15 @@ profile. A successful Gradle build is required first, but does not replace these
 
 - Nether: verify whole-quad roof removal and the close-range inspection aperture, with the map showing
   terrain instead of a flat fog colour (Complementary: Fog suppression on).
-- Solas rain: verify distant terrain remains visible and `latest.log` has no program-texture errors.
+- Fog suppression, once per shader pack (Complementary, Rethinking Voxels, Solas, BSL, Mellow, Photon):
+  distant terrain stays clear in the Overworld and Nether, `latest.log` has no shader compile or
+  program-texture errors, and the mode "Nether only" leaves the Overworld fog alone.
+- View direction: the wedge and arrow follow the player's yaw, match the game's real horizontal FOV, and
+  stay inside the screen when the player is at the edge of the view or far off screen.
+- F2 on the map in both screenshot modes: the saved file has no panels/HUD/chat, keeps the markers only
+  in "With markers", and the interface comes back on the next frame.
+- VanillaSquad: the VanillaSquad settings and markers appear only while connected to VanillaSquad
+  (not on other servers or in singleplayer), including in the Mod Menu screen.
 - Dense player group: pan and zoom through the group; labels must remain stable, collapse to `name +N`
   and expand on hover without flicker.
 - VanillaSquad: test hidden local player resolution plus Build, Farm and Art manual world selections.

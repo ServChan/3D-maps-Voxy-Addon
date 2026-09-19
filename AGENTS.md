@@ -38,6 +38,16 @@ server's anti-xray decoy LODs and shows them as a tiled cross-section that looks
 treats client data the server may have withheld (unloaded or obfuscated chunks) as verified terrain or
 open air - the removed room cutaway was exactly that kind of guess.
 
+## Shader-pack fog patches (`ShaderPackFogPatcher`)
+
+Fog suppression works by rewriting each supported pack's small fog include as Iris loads it
+(`IrisIncludeProcessorMixin`), gated by the `voxymapMapView` uniform. Each pack is a `Flavor` of anchors
+keyed by include path; a flavour applies only if every anchor is present. Two edit kinds: `Replace`
+(scale a fog amount in front of where it is blended) and `EntryReturn` (return "no fog" as the first
+statement of a fog function). When a pack updates, re-check its anchors against the new source; the
+unit tests use excerpts, so they cannot notice a real layout change. A new pack means a new flavour,
+its include path in the map, and a test excerpt.
+
 ## Optional-mod integration pattern
 
 Xaero's World Map is not a compile-time dependency (it is not published anywhere this project's
