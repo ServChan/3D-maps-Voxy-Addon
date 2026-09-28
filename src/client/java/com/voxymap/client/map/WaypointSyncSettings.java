@@ -13,12 +13,6 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-/**
- * Per-world remote sync configuration: a server address (read access) and an optional password
- * (read/write access) - see {@link WaypointSyncClient} and {@code WaypointSyncServer} for the protocol.
- * Persisted separately from {@link VoxyMapSettings} so the password never ends up in the same file as
- * unrelated client preferences.
- */
 public final class WaypointSyncSettings {
     private static final Pattern VOXY_WORLD_ID = Pattern.compile("[0-9a-f]{32}");
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("voxymap-sync.properties");
@@ -34,7 +28,6 @@ public final class WaypointSyncSettings {
     private WaypointSyncSettings() {
     }
 
-    /** The configured server address for this world, or null when sync is disabled. */
     public static String address(String worldId) {
         load();
         if (!validWorldId(worldId)) return null;
@@ -42,7 +35,6 @@ public final class WaypointSyncSettings {
         return config == null || config.address().isBlank() ? null : config.address();
     }
 
-    /** The configured write password for this world, or null when sync is disabled or read-only. */
     public static String password(String worldId) {
         load();
         if (!validWorldId(worldId)) return null;
@@ -67,7 +59,7 @@ public final class WaypointSyncSettings {
         load();
         if (!validWorldId(worldId)) return;
         Config current = byWorld.get(worldId);
-        if (current == null || current.address().isBlank()) return; // Password without an address is meaningless.
+        if (current == null || current.address().isBlank()) return;
         byWorld.put(worldId, new Config(current.address(), password == null ? "" : password.trim()));
         save();
     }

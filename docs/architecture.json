@@ -2,313 +2,332 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "3D-maps-Voxy-Addon (VoxyMap) Deep Architecture",
+    "title": "VoxyMap LTS architecture",
     "output": "architecture.html",
     "quality_profile": "showcase",
     "views": [
       {
         "id": "v1",
-        "label": "LOD extraction & meshing",
-        "focus": [
-          "input_event",
-          "mixin_hook",
-          "core_engine",
-          "hud_renderer"
-        ],
-        "note": "Intercepts world section meshing and renders 3D LOD terrain with custom shaders."
+        "label": "Map render path",
+        "focus": ["client", "map_screen", "camera_ctl", "camera_hooks", "mc_client", "voxy", "shader_hooks", "roof_ore", "fog_hooks", "fog_patch", "iris"],
+        "note": "The map is a screen over Minecraft's normal world pass: the real camera is moved to the map pose, Voxy draws its cached LODs, and patched Voxy shaders apply the Nether roof cut and the ore mask."
       },
       {
         "id": "v2",
-        "label": "Navigation & UI layers",
-        "focus": [
-          "core_engine",
-          "ui_screen",
-          "hud_renderer",
-          "data_cache"
-        ],
-        "note": "Full-screen 3D interactive map with dynamic waypoint markers and skin heads."
+        "label": "Waypoints, sync and map sharing",
+        "focus": ["map_screen", "picker", "waypoints", "sync_client", "sync_server", "section_bridge", "voxy", "config_files"],
+        "note": "Pins are placed by a voxel ray pick on Voxy data, kept locally or on the self-hosted sync server, and map sharing relays Voxy sections through the same server."
       },
       {
         "id": "v3",
-        "label": "Nether roof & external bridges",
-        "focus": [
-          "mixin_hook",
-          "math_engine",
-          "action_bridge",
-          "mod_compat"
-        ],
-        "note": "Applies Nether roof culling policy and routes data to HappyGhast and Xaero."
+        "label": "HUD, minimap and optional mods",
+        "focus": ["hud_hooks", "minimap", "mc_client", "xaero_hook", "xaero", "vs_web", "vs_bridges", "player_markers", "settings", "config_files"],
+        "note": "The minimap and screenshot mode hook the HUD; Xaero, Iris and the VanillaSquad web map are optional and fail closed when absent."
       }
     ]
   },
   "components": [
     {
-      "id": "input_event",
+      "id": "mc_client",
       "type": "external",
-      "label": "Voxy LOD Pipeline",
-      "sublabel": "World Section Stream",
-      "tag": "Voxy Engine",
-      "pos": [
-        50,
-        270
-      ],
-      "size": [
-        180,
-        60
-      ]
+      "label": "Minecraft client",
+      "sublabel": "world pass, camera, HUD",
+      "tag": "Game",
+      "pos": [40, 40],
+      "size": [250, 68]
     },
     {
-      "id": "mixin_hook",
+      "id": "voxy",
+      "type": "external",
+      "label": "Voxy",
+      "sublabel": "LOD storage, MDIC renderer",
+      "tag": "Required mod",
+      "pos": [420, 40],
+      "size": [250, 68]
+    },
+    {
+      "id": "iris",
+      "type": "external",
+      "label": "Iris",
+      "sublabel": "shader pack includes, uniforms",
+      "tag": "Optional mod",
+      "pos": [800, 40],
+      "size": [250, 68]
+    },
+    {
+      "id": "xaero",
+      "type": "external",
+      "label": "Xaero's World Map",
+      "sublabel": "2D map screen",
+      "tag": "Optional mod",
+      "pos": [1180, 40],
+      "size": [250, 68]
+    },
+    {
+      "id": "vs_web",
+      "type": "external",
+      "label": "VanillaSquad web map",
+      "sublabel": "markers.json, players.json",
+      "tag": "HTTPS",
+      "pos": [1560, 40],
+      "size": [250, 68]
+    },
+    {
+      "id": "camera_hooks",
       "type": "security",
-      "label": "LevelRendererMixin",
-      "sublabel": "MDIC Section Hook",
-      "tag": "Fabric Mixin",
-      "pos": [
-        320,
-        270
-      ],
-      "size": [
-        180,
-        60
-      ]
+      "label": "Camera and world hooks",
+      "sublabel": "Camera, Level, LevelRenderer, VoxyClient",
+      "tag": "Mixins",
+      "pos": [40, 220],
+      "size": [250, 68]
     },
     {
-      "id": "core_engine",
+      "id": "shader_hooks",
+      "type": "security",
+      "label": "Voxy shader hooks",
+      "sublabel": "VoxyShaderLoader, MDICSectionRenderer",
+      "tag": "Mixins",
+      "pos": [420, 220],
+      "size": [250, 68]
+    },
+    {
+      "id": "fog_hooks",
+      "type": "security",
+      "label": "Fog hooks",
+      "sublabel": "FogRenderer, Iris include, Iris uniforms",
+      "tag": "Mixins",
+      "pos": [800, 220],
+      "size": [250, 68]
+    },
+    {
+      "id": "xaero_hook",
       "type": "backend",
-      "label": "VoxyMapClient",
-      "sublabel": "Map Orchestrator",
-      "tag": "Core Controller",
-      "pos": [
-        590,
-        270
-      ],
-      "size": [
-        180,
-        60
-      ]
+      "label": "XaeroWorldMapBridge",
+      "sublabel": "reflection, XaeroGuiMapMixin",
+      "tag": "Integration",
+      "pos": [1180, 220],
+      "size": [250, 68]
     },
     {
-      "id": "math_engine",
+      "id": "vs_bridges",
       "type": "backend",
-      "label": "NetherRoofPolicy",
-      "sublabel": "ConvexHull & Culling",
-      "tag": "Geometry Math",
-      "pos": [
-        320,
-        420
-      ],
-      "size": [
-        180,
-        60
-      ]
+      "label": "VanillaSquad layers",
+      "sublabel": "flags, territories, RemotePlayerMarkers",
+      "tag": "Integration",
+      "pos": [1560, 220],
+      "size": [250, 68]
     },
     {
-      "id": "data_cache",
-      "type": "database",
-      "label": "TerritoryClusterer",
-      "sublabel": "LOD Chunk Index",
-      "tag": "In-Memory Cache",
-      "pos": [
-        590,
-        420
-      ],
-      "size": [
-        180,
-        60
-      ]
+      "id": "camera_ctl",
+      "type": "backend",
+      "label": "VoxyMapCameraController",
+      "sublabel": "map camera pose and FOV",
+      "tag": "Render state",
+      "pos": [40, 400],
+      "size": [250, 68]
     },
     {
-      "id": "config_store",
-      "type": "database",
-      "label": "VoxyMapSettings",
-      "sublabel": "voxymap.json config",
-      "tag": "Disk Config",
-      "pos": [
-        860,
-        420
-      ],
-      "size": [
-        180,
-        60
-      ]
-    },
-    {
-      "id": "ui_screen",
+      "id": "map_screen",
       "type": "frontend",
       "label": "MapScreen",
-      "sublabel": "3D Interactive Screen",
-      "tag": "Client GUI",
-      "pos": [
-        590,
-        120
-      ],
-      "size": [
-        180,
-        60
-      ]
+      "sublabel": "input, projection, overlays, panels",
+      "tag": "Screen",
+      "pos": [420, 400],
+      "size": [250, 68]
     },
     {
-      "id": "hud_renderer",
+      "id": "roof_ore",
+      "type": "backend",
+      "label": "Roof cut and ore mask",
+      "sublabel": "NetherRoofController, OreMaskController",
+      "tag": "Shader uniforms",
+      "pos": [800, 400],
+      "size": [250, 68]
+    },
+    {
+      "id": "fog_patch",
+      "type": "backend",
+      "label": "ShaderPackFogPatcher",
+      "sublabel": "one flavour per shader pack",
+      "tag": "Source patch",
+      "pos": [1180, 400],
+      "size": [250, 68]
+    },
+    {
+      "id": "player_markers",
+      "type": "external",
+      "label": "playerMarkers source set",
+      "sublabel": "VanillaSquadPlayerMapBridge",
+      "tag": "Full jar only",
+      "pos": [1560, 400],
+      "size": [250, 68]
+    },
+    {
+      "id": "client",
+      "type": "backend",
+      "label": "VoxyMapClient",
+      "sublabel": "keys M and Z, client tick",
+      "tag": "Entrypoint",
+      "pos": [40, 580],
+      "size": [250, 68]
+    },
+    {
+      "id": "picker",
+      "type": "backend",
+      "label": "VoxyMapPicker",
+      "sublabel": "async voxel ray pick",
+      "tag": "Off-thread",
+      "pos": [420, 580],
+      "size": [250, 68]
+    },
+    {
+      "id": "waypoints",
+      "type": "database",
+      "label": "WaypointManager",
+      "sublabel": "local and shared pins, beacons, deaths",
+      "tag": "Per Voxy world",
+      "pos": [800, 580],
+      "size": [250, 68]
+    },
+    {
+      "id": "hud_hooks",
+      "type": "security",
+      "label": "HUD hooks",
+      "sublabel": "Hud, Gui, Screenshot, LivingEntityRenderer",
+      "tag": "Mixins",
+      "pos": [1180, 580],
+      "size": [250, 68]
+    },
+    {
+      "id": "minimap",
       "type": "frontend",
-      "label": "VoxyMapGuiRenderer",
-      "sublabel": "Single-Pass Shaders",
-      "tag": "Render Layer",
-      "pos": [
-        860,
-        120
-      ],
-      "size": [
-        180,
-        60
-      ]
+      "label": "MinimapRenderer",
+      "sublabel": "tile cache, mob markers and heads",
+      "tag": "HUD",
+      "pos": [1560, 580],
+      "size": [250, 68]
     },
     {
-      "id": "action_bridge",
-      "type": "external",
-      "label": "VanillaSquadBridge",
-      "sublabel": "Player & Flag Tracker",
-      "tag": "Squad Sync",
-      "pos": [
-        860,
-        270
-      ],
-      "size": [
-        180,
-        60
-      ]
+      "id": "sync_client",
+      "type": "backend",
+      "label": "Sync clients",
+      "sublabel": "WaypointSyncClient, MapShareClient",
+      "tag": "HTTP, off-thread",
+      "pos": [40, 760],
+      "size": [250, 68]
     },
     {
-      "id": "mod_compat",
+      "id": "section_bridge",
+      "type": "backend",
+      "label": "VoxySectionBridge",
+      "sublabel": "section export, import, id mapping",
+      "tag": "Voxy API",
+      "pos": [420, 760],
+      "size": [250, 68]
+    },
+    {
+      "id": "sync_server",
       "type": "external",
-      "label": "HappyGhastBridge",
-      "sublabel": "External Mod Interop",
-      "tag": "Reflection API",
-      "pos": [
-        1130,
-        270
-      ],
-      "size": [
-        180,
-        60
-      ]
+      "label": "voxymap-sync-server",
+      "sublabel": "WaypointStore, MapRelayHandler",
+      "tag": "Separate jar",
+      "pos": [800, 760],
+      "size": [250, 68]
+    },
+    {
+      "id": "settings",
+      "type": "database",
+      "label": "VoxyMapSettings",
+      "sublabel": "SettingsCatalog, Mod Menu screen",
+      "tag": "Config",
+      "pos": [1180, 760],
+      "size": [250, 68]
+    },
+    {
+      "id": "config_files",
+      "type": "database",
+      "label": "config/voxymap*.properties",
+      "sublabel": "AtomicPropertiesWriter, .bak copy",
+      "tag": "Disk",
+      "pos": [1560, 760],
+      "size": [250, 68]
     }
   ],
   "boundaries": [
     {
       "kind": "region",
-      "label": "VoxyMap Core & Math Engine",
-      "wraps": [
-        "core_engine",
-        "data_cache",
-        "math_engine"
-      ],
-      "pad": 20
+      "label": "Other mods and services",
+      "wraps": ["mc_client", "voxy", "iris", "xaero", "vs_web"],
+      "pad": 14
     },
     {
       "kind": "region",
-      "label": "Presentation & Display Pipeline",
-      "wraps": [
-        "ui_screen",
-        "hud_renderer"
-      ],
-      "pad": 20
+      "label": "Mixins and bridges",
+      "wraps": ["camera_hooks", "shader_hooks", "fog_hooks", "xaero_hook", "vs_bridges"],
+      "pad": 14
     }
   ],
   "connections": [
-    {
-      "from": "input_event",
-      "to": "mixin_hook",
-      "label": "LOD stream",
-      "variant": "emphasis"
-    },
-    {
-      "from": "mixin_hook",
-      "to": "core_engine",
-      "label": "intercept"
-    },
-    {
-      "from": "core_engine",
-      "to": "action_bridge",
-      "label": "sync players",
-      "variant": "emphasis"
-    },
-    {
-      "from": "action_bridge",
-      "to": "mod_compat",
-      "label": "route alerts"
-    },
-    {
-      "from": "core_engine",
-      "to": "ui_screen",
-      "label": "open map",
-      "fromSide": "top",
-      "toSide": "bottom",
-      "labelDy": -20
-    },
-    {
-      "from": "ui_screen",
-      "to": "hud_renderer",
-      "label": "draw mesh"
-    },
-    {
-      "from": "hud_renderer",
-      "to": "action_bridge",
-      "label": "render bounds",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "labelDy": 20
-    },
-    {
-      "from": "mixin_hook",
-      "to": "math_engine",
-      "label": "sample height",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "labelDy": 20
-    },
-    {
-      "from": "math_engine",
-      "to": "data_cache",
-      "label": "culled nodes"
-    },
-    {
-      "from": "core_engine",
-      "to": "data_cache",
-      "label": "index chunks",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "labelDy": 20
-    },
-    {
-      "from": "data_cache",
-      "to": "config_store",
-      "label": "save state",
-      "variant": "dashed"
-    }
+    { "from": "client", "to": "map_screen", "label": "M opens" },
+    { "from": "map_screen", "to": "camera_ctl", "label": "pose each frame", "variant": "emphasis" },
+    { "from": "camera_ctl", "to": "camera_hooks", "label": "map view active" },
+    { "from": "camera_hooks", "to": "mc_client", "label": "moved camera, no weather", "variant": "emphasis" },
+    { "from": "mc_client", "to": "voxy", "label": "world pass", "variant": "emphasis" },
+    { "from": "voxy", "to": "shader_hooks", "label": "shader source, draws" },
+    { "from": "map_screen", "to": "roof_ore", "label": "view center" },
+    { "from": "roof_ore", "to": "shader_hooks", "label": "uniforms, ore texture" },
+    { "from": "iris", "to": "fog_hooks", "label": "fog includes" },
+    { "from": "fog_hooks", "to": "fog_patch", "label": "patch source" },
+    { "from": "map_screen", "to": "picker", "label": "double click" },
+    { "from": "picker", "to": "voxy", "label": "read sections", "route": "gutter-left" },
+    { "from": "map_screen", "to": "waypoints", "label": "add, edit, delete" },
+    { "from": "waypoints", "to": "sync_client", "label": "shared pins" },
+    { "from": "sync_client", "to": "sync_server", "label": "plain HTTP", "route": "below" },
+    { "from": "sync_client", "to": "section_bridge", "label": "map share" },
+    { "from": "section_bridge", "to": "voxy", "label": "export, import", "route": "gutter-right" },
+    { "from": "hud_hooks", "to": "minimap", "label": "HUD pass" },
+    { "from": "vs_web", "to": "vs_bridges", "label": "flags, players" },
+    { "from": "vs_bridges", "to": "player_markers", "label": "loaded by name", "variant": "dashed" },
+    { "from": "map_screen", "to": "xaero_hook", "label": "hand off" },
+    { "from": "xaero_hook", "to": "xaero", "label": "open, return" },
+    { "from": "settings", "to": "config_files", "label": "save", "variant": "dashed" },
+    { "from": "waypoints", "to": "config_files", "label": "local pins", "variant": "dashed" }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "Voxy LOD Extraction Pipeline",
+      "title": "One world pass",
       "items": [
-        "MDICSectionRendererMixin intercepts world meshing at distant chunk levels",
-        "TerritoryClusterer partitions LOD vertices into spatial octree buckets for 60 FPS traversal"
+        "MapScreen feeds VoxyMapCameraController; CameraMixin moves Minecraft's own camera and FOV to that pose, so Voxy renders the map in its normal pass",
+        "VoxyClientMixin keeps Voxy's cached LODs in the near hand-off zone while the map is open, so terrain does not depend on the real camera's Sodium visibility set",
+        "LevelMixin, LevelRendererMixin and ClientClockManagerMixin clear weather and clouds and apply the map lighting setting"
       ]
     },
     {
       "dot": "emerald",
-      "title": "Dynamic Nether Aperture",
+      "title": "Anti-xray by construction",
       "items": [
-        "NetherRoofPolicy automatically detects player Y level and culls the ceiling bedrock layer",
-        "ConvexHull math calculates visibility volume preventing X-Ray glitching while exploring caves"
+        "VoxyShaderPatcher string-patches quads3.vert and quads.frag; the Nether roof is removed by discarding whole quads above a cut height, never by a fragment plane",
+        "OreMaskController marks vanilla ore and ancient debris models; the fragment shader paints them grey wherever Voxy draws them",
+        "If the shader markers are missing, patchSafely() leaves Voxy untouched and both features switch off"
       ]
     },
     {
       "dot": "violet",
-      "title": "Cross-Mod Interoperability",
+      "title": "Waypoints, sync and sharing",
       "items": [
-        "HappyGhastScannerBridge synchronizes live flight routes and ghast safe-zones on 3D map",
-        "VanillaSquadPlayerMapBridge and XaeroWorldMapBridge maintain unified multi-layer waypoints"
+        "VoxyMapPicker ray-picks the visible voxel off the render thread; pins are local or shared per waypoint",
+        "voxymap-sync-server stores shared pins as JSON per Voxy world and relays map shares without storing them",
+        "VoxySectionBridge imports only empty sections and translates block and biome ids through Voxy's mapper"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Two jars from one build",
+      "items": [
+        "voxy-map-<version>.jar includes the playerMarkers source set",
+        "voxy-map-<version>-no-player-markers.jar leaves it out; RemotePlayerMarkers finds no class and the players row disappears",
+        "Iris mixins apply only when Iris is loaded (VoxyMapMixinPlugin); Xaero is reached by reflection"
       ]
     }
   ]

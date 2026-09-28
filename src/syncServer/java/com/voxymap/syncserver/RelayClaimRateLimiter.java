@@ -3,7 +3,6 @@ package com.voxymap.syncserver;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-/** Per-address fixed-window limiter for relay code claims. */
 final class RelayClaimRateLimiter {
     private final int attemptsPerWindow;
     private final long windowNanos;

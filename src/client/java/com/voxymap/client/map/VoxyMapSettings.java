@@ -1,12 +1,15 @@
 package com.voxymap.client.map;
 
 import com.voxymap.client.VoxyMapClient;
+import com.voxymap.client.integration.RemotePlayerMarkers;
 import com.voxymap.client.integration.VanillaSquadServer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
-import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -129,11 +132,6 @@ public final class VoxyMapSettings {
         save();
     }
 
-    /**
-     * Sets the camera speed directly (the Mod Menu slider), snapped to the same {@value #CAMERA_SPEED_STEP}
-     * steps the in-map -/+ buttons move in. Does nothing, and does not rewrite the config file, when the
-     * snapped value is unchanged - a slider drag reports every pixel of movement.
-     */
     public static void setCameraSpeed(double multiplier) {
         load();
         double snapped = clamp(Math.round(multiplier / CAMERA_SPEED_STEP) * CAMERA_SPEED_STEP,
@@ -150,9 +148,8 @@ public final class VoxyMapSettings {
         return vanillaSquadPlayersEnabled;
     }
 
-    /** Enabled in the settings AND connected to VanillaSquad; the overlay and its fetching key off this. */
     public static boolean vanillaSquadPlayersActive() {
-        return vanillaSquadPlayersEnabled() && VanillaSquadServer.isConnected();
+        return RemotePlayerMarkers.available() && vanillaSquadPlayersEnabled() && VanillaSquadServer.isConnected();
     }
 
     public static void toggleVanillaSquadPlayers() {
@@ -166,7 +163,6 @@ public final class VoxyMapSettings {
         return vanillaSquadFlagsEnabled;
     }
 
-    /** Enabled in the settings AND connected to VanillaSquad; the overlay and its fetching key off this. */
     public static boolean vanillaSquadFlagsActive() {
         return vanillaSquadFlagsEnabled() && VanillaSquadServer.isConnected();
     }
@@ -255,10 +251,6 @@ public final class VoxyMapSettings {
         save();
     }
 
-    /** Whether VoxyMap should suppress environmental/shader-pack fog while the map is open. Defaults
-     * to on since the fullscreen map view reads poorly through normal ground-level fog; players who
-     * prefer the atmospheric look (or hit a shader incompatibility) can turn it back off. */
-    /** Whether the map draws the local player's field of view and look direction. */
     public static boolean viewDirectionEnabled() {
         load();
         return viewDirectionEnabled;
@@ -294,7 +286,6 @@ public final class VoxyMapSettings {
         save();
     }
 
-    /** Whether shader-pack fog should be removed from the map right now, given the current dimension. */
     public static boolean fogSuppressionActive() {
         Minecraft minecraft = Minecraft.getInstance();
         boolean nether = minecraft != null && minecraft.level != null
@@ -302,11 +293,6 @@ public final class VoxyMapSettings {
         return fogSuppressionMode().appliesIn(nether);
     }
 
-    /** Null while the map is closed or the user picked AUTO - in both cases every lighting-forcing
-     * mixin ({@code LevelMixin}, {@code ClientClockManagerMixin}) should leave the real day/night cycle
-     * untouched. Otherwise, the mode those mixins should pin the map's lighting to. Shared here so the
-     * two mixins - one on {@code Level}, one on the unrelated {@code ClientClockManager} - agree on the
-     * exact same condition rather than drifting apart. */
     public static TimeOfDay activeMapLightingOverride() {
         if (!VoxyMapCameraController.isActive()) {
             return null;
@@ -387,18 +373,13 @@ public final class VoxyMapSettings {
                 try {
                     return valueOf(value.trim().toUpperCase(Locale.ROOT));
                 } catch (IllegalArgumentException ignored) {
-                    // Preserve the safe automatic default for old or manually edited configs.
+
                 }
             }
             return AUTO;
         }
     }
 
-    /** Governs the lighting forced onto the fullscreen 3D map while it's open (see
-     * {@code LevelMixin}) - by default the map always keeps itself readable by forcing midday, no
-     * rain/thunder. AUTO instead lets the real world clock and weather show through; DAY/NIGHT pin the
-     * map to one lighting look regardless of the actual time, e.g. for a consistent screenshot. */
-    /** What the screenshot key keeps on the map. Declaration order is the order the setting cycles through. */
     public enum ScreenshotContent {
         NO_INTERFACE("screen.voxymap.settings.screenshot.clean"),
         WITH_MARKERS("screen.voxymap.settings.screenshot.markers");
@@ -418,14 +399,13 @@ public final class VoxyMapSettings {
                 try {
                     return valueOf(value.trim().toUpperCase(Locale.ROOT));
                 } catch (IllegalArgumentException ignored) {
-                    // Keep the clean default for hand-edited configs.
+
                 }
             }
             return NO_INTERFACE;
         }
     }
 
-    /** Where the map removes shader-pack fog. Declaration order is the order the setting cycles through. */
     public enum FogSuppression {
         ALWAYS("screen.voxymap.settings.on"),
         NETHER_ONLY("screen.voxymap.settings.fogsuppression.nether"),
@@ -441,7 +421,6 @@ public final class VoxyMapSettings {
             return translationKey;
         }
 
-        /** Whether fog is removed in the Nether ({@code nether}) or in every other dimension. */
         public boolean appliesIn(boolean nether) {
             return switch (this) {
                 case ALWAYS -> true;
@@ -450,16 +429,12 @@ public final class VoxyMapSettings {
             };
         }
 
-        /**
-         * @param mode   the stored {@code fogSuppressionMode}, or null when absent
-         * @param legacy the old on/off {@code fogSuppressionEnabled} value, used only when there is no mode yet
-         */
         static FogSuppression parse(String mode, String legacy) {
             if (mode != null) {
                 try {
                     return valueOf(mode.trim().toUpperCase(Locale.ROOT));
                 } catch (IllegalArgumentException ignored) {
-                    // Fall through to the legacy value / default for hand-edited configs.
+
                 }
             }
             if (legacy != null) {
@@ -469,12 +444,6 @@ public final class VoxyMapSettings {
         }
     }
 
-    /**
-     * Fixed lighting for the map. The world clock is pinned to {@link #clockTicks()}: 0 is sunrise,
-     * 6000 noon, 12000 sunset and 18000 midnight. Morning and evening sit 1000 ticks (about 15 degrees of
-     * sun height) after sunrise and before sunset, so the sun is low and warm but the terrain is still lit.
-     * Declaration order is the order the settings button cycles through.
-     */
     public enum TimeOfDay {
         AUTO("screen.voxymap.settings.timeofday.auto", -1L, false),
         MORNING("screen.voxymap.settings.timeofday.morning", 1000L, false),
@@ -496,17 +465,14 @@ public final class VoxyMapSettings {
             return translationKey;
         }
 
-        /** World clock value to pin, or -1 for {@link #AUTO}, which leaves the real clock alone. */
         public long clockTicks() {
             return clockTicks;
         }
 
-        /** Whether Minecraft should treat the sky as dark (mob spawning light, sky darkening). */
         public boolean isDark() {
             return dark;
         }
 
-        /** The value of {@code Level#getSkyDarken()} for this lighting: 11 at night, 0 otherwise. */
         public int skyDarken() {
             return dark ? 11 : 0;
         }
@@ -516,7 +482,7 @@ public final class VoxyMapSettings {
                 try {
                     return valueOf(value.trim().toUpperCase(Locale.ROOT));
                 } catch (IllegalArgumentException ignored) {
-                    // Preserve the safe automatic default for old or manually edited configs.
+
                 }
             }
             return AUTO;
@@ -526,8 +492,8 @@ public final class VoxyMapSettings {
     private static Properties readProperties(Path path, boolean logFailure) {
         if (!Files.exists(path)) return null;
         Properties properties = new Properties();
-        try (InputStream input = Files.newInputStream(path)) {
-            properties.load(input);
+        try (Reader reader = new InputStreamReader(Files.newInputStream(path), StandardCharsets.UTF_8)) {
+            properties.load(reader);
             return properties;
         } catch (IOException | IllegalArgumentException exception) {
             if (logFailure) {

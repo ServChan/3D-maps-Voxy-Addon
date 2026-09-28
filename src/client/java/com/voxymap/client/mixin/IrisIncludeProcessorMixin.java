@@ -11,10 +11,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Arrays;
 
-/**
- * Patches only the shader packs' small fog includes (see {@link ShaderPackFogPatcher}); no program
- * samplers or Voxy terrain shaders are touched.
- */
 @Mixin(value = IncludeProcessor.class, remap = false)
 public abstract class IrisIncludeProcessorMixin {
     @Inject(method = "getIncludedFile", at = @At("RETURN"), cancellable = true, remap = false, require = 0)

@@ -18,17 +18,18 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MapRelayHandlerTest {
+    private static final String SENDER_TOKEN_HEADER = "X-VoxyMap-Sender-Token";
+    private static final String RECEIVER_TOKEN_HEADER = "X-VoxyMap-Receiver-Token";
+
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(5))
             .build();
-    // A dedicated pool for the test's own background sender/receiver calls - the JVM-wide
-    // ForkJoinPool.commonPool() that CompletableFuture.supplyAsync() uses by default is shared with
-    // Gradle's own test-runner infrastructure, and under load a task can sit queued on it for seconds,
-    // which previously made these tests flaky (a fixed short sleep isn't enough to bound that delay).
+
     private static final ExecutorService BACKGROUND = Executors.newCachedThreadPool();
 
     private HttpServer server;
@@ -53,8 +54,6 @@ class MapRelayHandlerTest {
         return "http://127.0.0.1:" + server.getAddress().getPort();
     }
 
-    /** Retries a GET until it's no longer a 404, instead of guessing a fixed delay - the other side
-     * registering/claiming is an async, unbounded-latency event from the test's point of view. */
     private HttpResponse<byte[]> pollUntilNotFound(String path) throws IOException, InterruptedException {
         long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
         HttpResponse<byte[]> response;
@@ -68,6 +67,40 @@ class MapRelayHandlerTest {
             Thread.sleep(20);
         } while (System.nanoTime() < deadline);
         return response;
+    }
+
+    private String claim(String code) throws IOException, InterruptedException {
+        HttpResponse<byte[]> infoResponse = pollUntilNotFound("/relay/" + code + "/info");
+        assertEquals(200, infoResponse.statusCode());
+        String token = infoResponse.headers().firstValue(RECEIVER_TOKEN_HEADER).orElse(null);
+        assertNotNull(token, "receiver token header missing");
+        return token;
+    }
+
+    private HttpResponse<Void> post(String path, String header, String token) throws IOException, InterruptedException {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(baseUrl() + path))
+                .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5));
+        if (token != null) {
+            builder.header(header, token);
+        }
+        return CLIENT.send(builder.build(), HttpResponse.BodyHandlers.discarding());
+    }
+
+    private HttpResponse<byte[]> get(String path, String header, String token) throws IOException, InterruptedException {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(baseUrl() + path))
+                .GET().timeout(Duration.ofSeconds(10));
+        if (token != null) {
+            builder.header(header, token);
+        }
+        return CLIENT.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    private HttpResponse<Void> decline(String code, String receiverToken) throws IOException, InterruptedException {
+        return post("/relay/" + code + "/decline", RECEIVER_TOKEN_HEADER, receiverToken);
+    }
+
+    private HttpResponse<Void> confirm(String code, String receiverToken) throws IOException, InterruptedException {
+        return post("/relay/" + code + "/confirm", RECEIVER_TOKEN_HEADER, receiverToken);
     }
 
     private CompletableFuture<HttpResponse<Void>> sendWaitAsync(String code) {
@@ -85,33 +118,11 @@ class MapRelayHandlerTest {
         }, BACKGROUND);
     }
 
-    /** Drives one full sender+receiver pairing through wait -> info -> confirm -> data, returning both
-     * sides' final responses. Used by tests that only care about the happy path having worked. */
-    private record FullTransferResult(HttpResponse<Void> sendWaitResponse, HttpResponse<Void> sendDataResponse,
-                                       HttpResponse<byte[]> receiveResponse, String senderToken) {
-    }
-
-    private FullTransferResult runFullTransfer(String code, byte[] payload) throws Exception {
-        CompletableFuture<HttpResponse<Void>> waitFuture = sendWaitAsync(code);
-
-        HttpResponse<byte[]> infoResponse = pollUntilNotFound("/relay/" + code + "/info");
-        assertEquals(200, infoResponse.statusCode());
-
-        HttpResponse<Void> confirmResponse = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/" + code + "/confirm"))
-                        .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
-        assertEquals(200, confirmResponse.statusCode());
-
-        HttpResponse<Void> waitResponse = waitFuture.get(10, TimeUnit.SECONDS);
-        assertEquals(200, waitResponse.statusCode());
-        String token = waitResponse.headers().firstValue("X-VoxyMap-Sender-Token").orElse(null);
-        assertTrue(token != null && !token.isEmpty(), "sender token header missing");
-
-        CompletableFuture<HttpResponse<Void>> sendDataFuture = CompletableFuture.supplyAsync(() -> {
+    private CompletableFuture<HttpResponse<Void>> sendDataAsync(String code, String senderToken, byte[] payload) {
+        return CompletableFuture.supplyAsync(() -> {
             try {
                 return CLIENT.send(HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/" + code))
-                                .header("X-VoxyMap-Sender-Token", token)
+                                .header(SENDER_TOKEN_HEADER, senderToken)
                                 .POST(HttpRequest.BodyPublishers.ofByteArray(payload))
                                 .timeout(Duration.ofSeconds(10))
                                 .build(),
@@ -120,25 +131,32 @@ class MapRelayHandlerTest {
                 throw new RuntimeException(e);
             }
         }, BACKGROUND);
+    }
 
-        HttpResponse<byte[]> receiveResponse = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/" + code)).GET().timeout(Duration.ofSeconds(10)).build(),
-                HttpResponse.BodyHandlers.ofByteArray());
-
-        HttpResponse<Void> sendDataResponse = sendDataFuture.get(10, TimeUnit.SECONDS);
-        return new FullTransferResult(waitResponse, sendDataResponse, receiveResponse, token);
+    private static String senderToken(HttpResponse<Void> waitResponse) {
+        String token = waitResponse.headers().firstValue(SENDER_TOKEN_HEADER).orElse(null);
+        assertTrue(token != null && !token.isEmpty(), "sender token header missing");
+        return token;
     }
 
     @Test
     void fullHandshakeExchangesTheStreamLiveWithoutServerSideStorage() throws Exception {
         startServer();
         byte[] payload = "hello from the sender, this is explored terrain data".getBytes(StandardCharsets.UTF_8);
+        String code = "482910";
 
-        FullTransferResult result = runFullTransfer("482910", payload);
+        CompletableFuture<HttpResponse<Void>> waitFuture = sendWaitAsync(code);
+        String receiverToken = claim(code);
+        assertEquals(200, confirm(code, receiverToken).statusCode());
+        HttpResponse<Void> waitResponse = waitFuture.get(10, TimeUnit.SECONDS);
+        assertEquals(200, waitResponse.statusCode());
 
-        assertEquals(200, result.sendDataResponse().statusCode());
-        assertEquals(200, result.receiveResponse().statusCode());
-        assertEquals(new String(payload, StandardCharsets.UTF_8), new String(result.receiveResponse().body(), StandardCharsets.UTF_8));
+        CompletableFuture<HttpResponse<Void>> sendDataFuture = sendDataAsync(code, senderToken(waitResponse), payload);
+        HttpResponse<byte[]> receiveResponse = get("/relay/" + code, RECEIVER_TOKEN_HEADER, receiverToken);
+
+        assertEquals(200, sendDataFuture.get(10, TimeUnit.SECONDS).statusCode());
+        assertEquals(200, receiveResponse.statusCode());
+        assertEquals(new String(payload, StandardCharsets.UTF_8), new String(receiveResponse.body(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -150,93 +168,89 @@ class MapRelayHandlerTest {
         assertEquals(200, infoResponse.statusCode());
         assertEquals("12345", infoResponse.headers().firstValue("X-VoxyMap-Estimated-Bytes").orElse(null));
 
-        // Clean up: decline so the background wait future resolves instead of leaking past the test.
-        CLIENT.send(HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/222333/decline"))
-                .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
+        decline("222333", infoResponse.headers().firstValue(RECEIVER_TOKEN_HEADER).orElseThrow());
         waitFuture.get(10, TimeUnit.SECONDS);
     }
 
     @Test
-    void statusReflectsClaimAndConfirmationLive() throws Exception {
+    void statusReflectsClaimAndConfirmationLiveForTheSender() throws Exception {
         startServer();
         CompletableFuture<HttpResponse<Void>> waitFuture = sendWaitAsync("333444");
+        String receiverToken = claim("333444");
+        String senderToken = senderToken(waitFuture.get(10, TimeUnit.SECONDS));
 
-        // The phase-1 POST above is dispatched asynchronously - poll rather than assume it has already
-        // registered with the server by the time this next statement runs.
-        HttpResponse<byte[]> beforeClaim = pollUntilNotFound("/relay/333444/status");
-        assertEquals(200, beforeClaim.statusCode());
-        assertTrue(new String(beforeClaim.body(), StandardCharsets.UTF_8).contains("claimed=false"));
+        String beforeConfirm = new String(get("/relay/333444/status", SENDER_TOKEN_HEADER, senderToken).body(), StandardCharsets.UTF_8);
+        assertTrue(beforeConfirm.contains("claimed=true"), beforeConfirm);
+        assertTrue(beforeConfirm.contains("confirmed=false"), beforeConfirm);
 
-        pollUntilNotFound("/relay/333444/info");
+        confirm("333444", receiverToken);
 
-        HttpResponse<byte[]> afterClaimBeforeConfirm = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/333444/status")).GET().timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.ofByteArray());
-        String body = new String(afterClaimBeforeConfirm.body(), StandardCharsets.UTF_8);
-        assertTrue(body.contains("claimed=true"), body);
-        assertTrue(body.contains("confirmed=false"), body);
+        String afterConfirm = new String(get("/relay/333444/status", SENDER_TOKEN_HEADER, senderToken).body(), StandardCharsets.UTF_8);
+        assertTrue(afterConfirm.contains("confirmed=true"), afterConfirm);
+    }
 
-        CLIENT.send(HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/333444/confirm"))
-                        .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
+    @Test
+    void statusWithoutTheSenderTokenIsRejected() throws Exception {
+        startServer();
+        CompletableFuture<HttpResponse<Void>> waitFuture = sendWaitAsync("334455");
+        Thread.sleep(200);
 
-        HttpResponse<byte[]> afterConfirm = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/333444/status")).GET().timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.ofByteArray());
-        assertTrue(new String(afterConfirm.body(), StandardCharsets.UTF_8).contains("confirmed=true"));
+        assertEquals(403, get("/relay/334455/status", SENDER_TOKEN_HEADER, null).statusCode());
+        assertEquals(403, get("/relay/334455/status", SENDER_TOKEN_HEADER, "guessed").statusCode());
 
-        String token = waitFuture.get(10, TimeUnit.SECONDS).headers().firstValue("X-VoxyMap-Sender-Token").orElse(null);
-        assertTrue(token != null && !token.isEmpty());
+        decline("334455", claim("334455"));
+        waitFuture.get(10, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void anotherClientCannotConfirmOrDownloadAClaimedTransfer() throws Exception {
+        startServer();
+        byte[] payload = "private terrain".getBytes(StandardCharsets.UTF_8);
+        CompletableFuture<HttpResponse<Void>> waitFuture = sendWaitAsync("445566");
+        String receiverToken = claim("445566");
+
+        assertEquals(403, confirm("445566", null).statusCode());
+        assertEquals(403, confirm("445566", "forged").statusCode());
+        assertEquals(403, decline("445566", "forged").statusCode());
+
+        assertEquals(200, confirm("445566", receiverToken).statusCode());
+        CompletableFuture<HttpResponse<Void>> sendDataFuture =
+                sendDataAsync("445566", senderToken(waitFuture.get(10, TimeUnit.SECONDS)), payload);
+
+        assertEquals(403, get("/relay/445566", RECEIVER_TOKEN_HEADER, null).statusCode());
+        assertEquals(403, get("/relay/445566", RECEIVER_TOKEN_HEADER, "forged").statusCode());
+
+        HttpResponse<byte[]> receiveResponse = get("/relay/445566", RECEIVER_TOKEN_HEADER, receiverToken);
+        assertEquals(200, receiveResponse.statusCode());
+        assertEquals("private terrain", new String(receiveResponse.body(), StandardCharsets.UTF_8));
+        assertEquals(200, sendDataFuture.get(10, TimeUnit.SECONDS).statusCode());
     }
 
     @Test
     void decliningFreesTheCodeImmediatelyInsteadOfWaitingOutTheSenderTimeout() throws Exception {
         startServer();
         CompletableFuture<HttpResponse<Void>> waitFuture = sendWaitAsync("444555");
-        pollUntilNotFound("/relay/444555/info");
+        String receiverToken = claim("444555");
 
-        HttpResponse<Void> declineResponse = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/444555/decline"))
-                        .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
-        assertEquals(200, declineResponse.statusCode());
+        assertEquals(200, decline("444555", receiverToken).statusCode());
+        String senderToken = senderToken(waitFuture.get(10, TimeUnit.SECONDS));
+        assertEquals(404, get("/relay/444555/status", SENDER_TOKEN_HEADER, senderToken).statusCode());
 
-        // The sender's wait doesn't get a special "declined" status of its own - it learns the outcome
-        // by polling /status (which now 404s, since decline frees the code) rather than blocking
-        // forever; this test just confirms the code is actually freed, immediately, not after 30 minutes.
-        HttpResponse<byte[]> statusAfterDecline = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/444555/status")).GET().timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.ofByteArray());
-        assertEquals(404, statusAfterDecline.statusCode());
-
-        // A fresh sender can immediately reuse the code.
         CompletableFuture<HttpResponse<Void>> secondWaitFuture = sendWaitAsync("444555");
-        Thread.sleep(100);
-        HttpResponse<byte[]> secondInfo = pollUntilNotFound("/relay/444555/info");
-        assertEquals(200, secondInfo.statusCode());
-        CLIENT.send(HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/444555/decline"))
-                        .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
-        secondWaitFuture.get(10, TimeUnit.SECONDS);
-
-        assertTrue(waitFuture.isDone() || waitFuture.get(10, TimeUnit.SECONDS) != null);
+        String secondReceiverToken = claim("444555");
+        decline("444555", secondReceiverToken);
+        assertEquals(200, secondWaitFuture.get(10, TimeUnit.SECONDS).statusCode());
     }
 
     @Test
     void dataFetchWithoutConfirmingFirstIsRejected() throws Exception {
         startServer();
         CompletableFuture<HttpResponse<Void>> waitFuture = sendWaitAsync("555666");
-        pollUntilNotFound("/relay/555666/info");
+        String receiverToken = claim("555666");
 
-        HttpResponse<Void> prematureDataFetch = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/555666")).GET().timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
-        assertEquals(409, prematureDataFetch.statusCode());
+        assertEquals(409, get("/relay/555666", RECEIVER_TOKEN_HEADER, receiverToken).statusCode());
 
-        CLIENT.send(HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/555666/decline"))
-                        .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
+        decline("555666", receiverToken);
         waitFuture.get(10, TimeUnit.SECONDS);
     }
 
@@ -244,19 +258,11 @@ class MapRelayHandlerTest {
     void dataUploadWithWrongTokenIsRejected() throws Exception {
         startServer();
         CompletableFuture<HttpResponse<Void>> waitFuture = sendWaitAsync("666777");
-        pollUntilNotFound("/relay/666777/info");
-        CLIENT.send(HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/666777/confirm"))
-                        .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
+        confirm("666777", claim("666777"));
         waitFuture.get(10, TimeUnit.SECONDS);
 
-        HttpResponse<Void> forgedDataUpload = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/666777"))
-                        .header("X-VoxyMap-Sender-Token", "not-the-real-token")
-                        .POST(HttpRequest.BodyPublishers.ofByteArray(new byte[]{1, 2, 3}))
-                        .timeout(Duration.ofSeconds(5))
-                        .build(),
-                HttpResponse.BodyHandlers.discarding());
+        HttpResponse<Void> forgedDataUpload = sendDataAsync("666777", "not-the-real-token", new byte[]{1, 2, 3})
+                .get(10, TimeUnit.SECONDS);
         assertEquals(403, forgedDataUpload.statusCode());
     }
 
@@ -264,16 +270,11 @@ class MapRelayHandlerTest {
     void aSecondReceiverCannotClaimAnAlreadyClaimedCode() throws Exception {
         startServer();
         CompletableFuture<HttpResponse<Void>> waitFuture = sendWaitAsync("777888");
-        pollUntilNotFound("/relay/777888/info");
+        String receiverToken = claim("777888");
 
-        HttpResponse<Void> secondInfoAttempt = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/777888/info")).GET().timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
-        assertEquals(409, secondInfoAttempt.statusCode());
+        assertEquals(409, get("/relay/777888/info", RECEIVER_TOKEN_HEADER, null).statusCode());
 
-        CLIENT.send(HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/777888/decline"))
-                        .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
+        decline("777888", receiverToken);
         waitFuture.get(10, TimeUnit.SECONDS);
     }
 
@@ -292,34 +293,21 @@ class MapRelayHandlerTest {
                 HttpResponse.BodyHandlers.discarding());
         assertEquals(409, secondWaitAttempt.statusCode());
 
-        CLIENT.send(HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/888999/decline"))
-                        .POST(HttpRequest.BodyPublishers.noBody()).timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
-        pollUntilNotFound("/relay/888999/info");
+        decline("888999", claim("888999"));
         firstWait.get(10, TimeUnit.SECONDS);
     }
 
     @Test
     void receivingWithNoSenderRegisteredReturns404() throws Exception {
         startServer();
-        HttpResponse<Void> infoResponse = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/999111/info")).GET().timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
-        assertEquals(404, infoResponse.statusCode());
-
-        HttpResponse<Void> dataResponse = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/999111")).GET().timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
-        assertEquals(404, dataResponse.statusCode());
+        assertEquals(404, get("/relay/999111/info", RECEIVER_TOKEN_HEADER, null).statusCode());
+        assertEquals(404, get("/relay/999111", RECEIVER_TOKEN_HEADER, null).statusCode());
     }
 
     @Test
     void malformedCodeIsRejected() throws Exception {
         startServer();
-        HttpResponse<Void> response = CLIENT.send(
-                HttpRequest.newBuilder(URI.create(baseUrl() + "/relay/abc/info")).GET().timeout(Duration.ofSeconds(5)).build(),
-                HttpResponse.BodyHandlers.discarding());
-        assertEquals(404, response.statusCode());
+        assertEquals(404, get("/relay/abc/info", RECEIVER_TOKEN_HEADER, null).statusCode());
     }
 
     @Test

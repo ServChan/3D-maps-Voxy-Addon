@@ -12,7 +12,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Supplies an immediate, unsmoothed map-view signal to compatible shader-pack source patches. */
 @Mixin(value = CommonUniforms.class, remap = false)
 public abstract class IrisCommonUniformsMixin {
     @Inject(method = "generalCommonUniforms", at = @At("RETURN"), remap = false, require = 0)

@@ -1,6 +1,5 @@
 package com.voxymap.client.map;
 
-/** Minecraft-yaw to horizontal world direction conversion shared by player map overlays. */
 public final class PlayerViewConeGeometry {
     private PlayerViewConeGeometry() {
     }

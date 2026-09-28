@@ -11,20 +11,10 @@ import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.blockentity.BeaconRenderer;
 import net.minecraft.world.phys.Vec3;
 
-/**
- * Draws each of the current world's waypoints as a vertical beacon-style beam in the game world
- * itself, not just on the minimap/fullscreen map - closing the map used to leave a placed waypoint
- * with no visible presence in ordinary gameplay at all. Reuses vanilla's own
- * {@link BeaconRenderer#submitBeaconBeam} geometry instead of hand-rolled quads, so the beam's
- * blending, glow and depth behavior are identical to a real beacon's.
- */
 public final class WaypointBeaconRenderer {
-    // Tall enough to poke through any realistic build limit/mountain and read as "going up forever",
-    // matching the topmost segment of a vanilla multi-color beacon beam.
+
     private static final int BEAM_HEIGHT = 1024;
-    // A beam is meant to be visible from far away (that is the point), but an unbounded render
-    // distance would submit geometry for every waypoint in the world regardless of relevance -
-    // bounded generously past normal render distance instead.
+
     private static final double MAX_RENDER_DISTANCE_SQ = 512.0 * 512.0;
 
     private static boolean warnedOnce = false;
@@ -40,9 +30,7 @@ public final class WaypointBeaconRenderer {
         try {
             renderBeams(context);
         } catch (RuntimeException exception) {
-            // Never take down the render thread over a cosmetic overlay - log once so a genuine
-            // incompatibility (e.g. this Fabric API's render-event shape changing) is discoverable
-            // without spamming the log every single frame.
+
             if (!warnedOnce) {
                 warnedOnce = true;
                 VoxyMapClient.LOGGER.warn("[VoxyMap] Failed to render waypoint beacons in the world", exception);
@@ -54,7 +42,7 @@ public final class WaypointBeaconRenderer {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null || !VoxyMapSettings.waypointsEnabled()
                 || VoxyMapCameraController.isActive()) {
-            return; // Hidden while the fullscreen map's own detached camera is active, like the minimap.
+            return;
         }
 
         WorldIdentifier identifier = WorldIdentifier.of(minecraft.level);
@@ -77,8 +65,6 @@ public final class WaypointBeaconRenderer {
                 continue;
             }
 
-            // Waypoint colors carry an alpha byte for 2D map/minimap blending; the beam shader has its
-            // own hardcoded alpha handling and expects a plain opaque RGB, like a vanilla beacon's.
             int color = 0xFF000000 | (waypoint.color() & 0x00FFFFFF);
             poseStack.pushPose();
             poseStack.translate(dx, dy, dz);

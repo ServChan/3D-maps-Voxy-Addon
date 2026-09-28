@@ -6,6 +6,7 @@
   "client": [
     "CameraMixin",
     "ClientClockManagerMixin",
+    "LevelRendererMixin",
     "FogRendererMixin",
     "GameRendererMixin",
     "GuiMixin",
@@ -13,7 +14,7 @@
     "IrisCommonUniformsMixin",
     "IrisIncludeProcessorMixin",
     "LevelMixin",
-    "LevelRendererMixin",
+    "LivingEntityRendererMixin",
     "MDICSectionRendererMixin",
     "MinecraftMixin",
     "ScreenshotMixin",

@@ -3,15 +3,10 @@ package com.voxymap.client.integration;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Andrew's monotone-chain convex hull over 2D points, used to turn a cluster of same-named flag
- * markers into a single territory outline instead of drawing every point individually.
- */
 final class ConvexHull {
     private ConvexHull() {
     }
 
-    /** Returns the hull vertices in counter-clockwise order, deduplicated. Input is not mutated. */
     static List<double[]> compute(List<double[]> input) {
         List<double[]> points = new ArrayList<>(input);
         points.sort((a, b) -> a[0] != b[0] ? Double.compare(a[0], b[0]) : Double.compare(a[1], b[1]));

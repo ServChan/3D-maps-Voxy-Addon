@@ -25,12 +25,12 @@ class WaypointCodecTest {
     @Test
     void parseSkipsAnEntryWithAnInvalidWorldIdOrMissingFields() {
         Properties properties = new Properties();
-        // "not-a-world-id" is not 32 lowercase hex characters, so this whole entry must be dropped.
+
         properties.setProperty("waypoint.not-a-world-id.id1.name", "Base");
         properties.setProperty("waypoint.not-a-world-id.id1.x", "10");
         properties.setProperty("waypoint.not-a-world-id.id1.y", "64");
         properties.setProperty("waypoint.not-a-world-id.id1.z", "10");
-        // Missing "z" - incomplete waypoints must not surface as a marker with a garbage coordinate.
+
         properties.setProperty("waypoint." + WORLD_A + ".id2.name", "Incomplete");
         properties.setProperty("waypoint." + WORLD_A + ".id2.x", "5");
         properties.setProperty("waypoint." + WORLD_A + ".id2.y", "64");
@@ -52,17 +52,42 @@ class WaypointCodecTest {
 
         List<WaypointManager.Waypoint> worldAWaypoints = reparsed.get(WORLD_A);
         assertEquals(2, worldAWaypoints.size());
-        // parse() sorts alphabetically by name (code point order, so Latin sorts before Cyrillic),
-        // independent of Properties' unordered iteration.
-        assertEquals("Mine entrance", worldAWaypoints.get(0).name());
-        assertEquals("Дом", worldAWaypoints.get(1).name());
-        assertEquals(100.5, worldAWaypoints.get(1).x());
-        assertEquals(-200.25, worldAWaypoints.get(1).z());
-        assertEquals(0xFF62E7FF, worldAWaypoints.get(1).color());
-        assertEquals(false, worldAWaypoints.get(1).shared());
+
+        assertEquals("Дом", worldAWaypoints.get(0).name());
+        assertEquals("Mine entrance", worldAWaypoints.get(1).name());
+        assertEquals(100.5, worldAWaypoints.get(0).x());
+        assertEquals(-200.25, worldAWaypoints.get(0).z());
+        assertEquals(0xFF62E7FF, worldAWaypoints.get(0).color());
+        assertEquals(false, worldAWaypoints.get(0).shared());
 
         assertEquals(1, reparsed.get(WORLD_B).size());
         assertEquals("Other world", reparsed.get(WORLD_B).get(0).name());
+    }
+
+    @Test
+    void creationOrderSurvivesARestartSoTheOldestDeathPointIsStillFirst() {
+        List<WaypointManager.Waypoint> deaths = List.of(
+                new WaypointManager.Waypoint("f-oldest", "Death", 1.0, 2.0, 3.0, 0xFF8B2020, false),
+                new WaypointManager.Waypoint("a-middle", "Death", 4.0, 5.0, 6.0, 0xFF8B2020, false),
+                new WaypointManager.Waypoint("c-newest", "Death", 7.0, 8.0, 9.0, 0xFF8B2020, false));
+
+        List<WaypointManager.Waypoint> reparsed = WaypointCodec.parse(WaypointCodec.serialize(Map.of(WORLD_A, deaths))).get(WORLD_A);
+
+        assertEquals(List.of("f-oldest", "a-middle", "c-newest"), reparsed.stream().map(WaypointManager.Waypoint::id).toList());
+    }
+
+    @Test
+    void entriesSavedBeforeOrderWasStoredAreSortedByName() {
+        Properties properties = new Properties();
+        for (String[] entry : new String[][]{{"id1", "Zeta"}, {"id2", "alpha"}}) {
+            properties.setProperty("waypoint." + WORLD_A + "." + entry[0] + ".name", entry[1]);
+            properties.setProperty("waypoint." + WORLD_A + "." + entry[0] + ".x", "0");
+            properties.setProperty("waypoint." + WORLD_A + "." + entry[0] + ".y", "0");
+            properties.setProperty("waypoint." + WORLD_A + "." + entry[0] + ".z", "0");
+        }
+
+        assertEquals(List.of("alpha", "Zeta"),
+                WaypointCodec.parse(properties).get(WORLD_A).stream().map(WaypointManager.Waypoint::name).toList());
     }
 
     @Test

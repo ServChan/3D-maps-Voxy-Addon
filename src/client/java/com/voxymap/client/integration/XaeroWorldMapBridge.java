@@ -49,9 +49,7 @@ public final class XaeroWorldMapBridge {
             MinecraftCompat.showScreen(client, (Screen) screen);
             return true;
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
-            // Reflection into a soft (optional) dependency must never crash the render loop: an
-            // incompatible Xaero build can fail newInstance() with a plain RuntimeException (e.g.
-            // IllegalArgumentException on an argument-type mismatch), not just the checked exceptions.
+
             VoxyMapClient.LOGGER.warn("[VoxyMap] Could not open Xaero World Map from VoxyMap: {}", exception.toString());
             return false;
         }

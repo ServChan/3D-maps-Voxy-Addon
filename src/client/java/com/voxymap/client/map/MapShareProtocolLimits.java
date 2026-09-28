@@ -4,22 +4,14 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-/**
- * Defensive limits for the map-share wire format.
- *
- * <p>The relay deliberately does not inspect terrain bytes, so the receiving client is the trust
- * boundary. Every length and count read from a peer must pass through this class before it is used
- * for allocation or iteration. The limits are intentionally much larger than normal Voxy worlds;
- * they reject corrupt or hostile streams without making ordinary large map transfers impractical.
- */
 final class MapShareProtocolLimits {
     static final int MAX_MAPPING_ROWS = 65_536;
-    static final int MAX_MAPPING_ROW_BYTES = 1 << 20; // 1 MiB for one block/biome mapping entry.
+    static final int MAX_MAPPING_ROW_BYTES = 1 << 20;
     static final long MAX_MAPPING_BYTES = 64L << 20;
     static final int MAX_CHUNK_SECTIONS = 2_000_000;
     static final int MAX_ABS_SECTION_XZ = 2_000_000;
     static final int MAX_ABS_SECTION_Y = 131_072;
-    static final long MAX_DECOMPRESSED_BYTES = 70L << 30; // Slightly above 2M raw level-0 sections.
+    static final long MAX_DECOMPRESSED_BYTES = 70L << 30;
     static final long MAX_ESTIMATED_BYTES = 1L << 40;
 
     private MapShareProtocolLimits() {
@@ -75,7 +67,6 @@ final class MapShareProtocolLimits {
         }
     }
 
-    /** Counts decompressed bytes, so a tiny gzip body cannot expand without bound. */
     static InputStream limitDecompressed(InputStream input) {
         return limitDecompressed(input, MAX_DECOMPRESSED_BYTES);
     }

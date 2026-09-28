@@ -15,20 +15,13 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * HTTP client for the standalone waypoint sync server (protocol documented on
- * {@code WaypointSyncServer}'s class javadoc). {@link WaypointManager} is the only caller, and only
- * for a world that has an address configured in {@link WaypointSyncSettings} - every request here runs
- * off the render thread, since {@link #cached} is called every frame a synced world's pins are drawn.
- */
 final class WaypointSyncClient {
     private static final Duration REFRESH_INTERVAL = Duration.ofSeconds(4);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
     private static final String PASSWORD_HEADER = "X-VoxyMap-Password";
 
-    // Forced for the same reason as MapShareClient's HTTP client: the sync server only speaks
-    // HTTP/1.1, and HttpClient's default HTTP_2 upgrade attempt against it can stall requests.
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(REQUEST_TIMEOUT)
@@ -52,10 +45,9 @@ final class WaypointSyncClient {
         volatile boolean inFlight = false;
         volatile Status status = Status.SYNCING;
         volatile String lastError = null;
+        final AtomicLong mutations = new AtomicLong();
     }
 
-    /** Returns the last fetched snapshot immediately and kicks off a background refresh if the
-     * throttle window has elapsed - never blocks the caller on network I/O. */
     static List<WaypointManager.Waypoint> cached(String worldId, String address) {
         State state = stateFor(worldId, address);
         maybeRefresh(worldId, address, state);
@@ -66,10 +58,6 @@ final class WaypointSyncClient {
         return stateFor(worldId, address).status;
     }
 
-    /** Human-readable reason the last request failed (exception message or "HTTP &lt;code&gt;"), or
-     * null if the last attempt succeeded or none has completed yet. Also written to the log the first
-     * time a given world hits each distinct failure, since a settings-panel label alone ("Ошибка")
-     * gives no way to tell a timed-out connection from a rejected password from a malformed address. */
     static String lastError(String worldId, String address) {
         return stateFor(worldId, address).lastError;
     }
@@ -80,6 +68,7 @@ final class WaypointSyncClient {
         updated.removeIf(w -> w.id().equals(waypoint.id()));
         updated.add(waypoint);
         state.cached = List.copyOf(updated);
+        state.mutations.incrementAndGet();
 
         mutate(worldId, address, "PUT",
                 HttpRequest.BodyPublishers.ofString(WaypointJson.writeOne(toDto(waypoint)), StandardCharsets.UTF_8),
@@ -91,6 +80,7 @@ final class WaypointSyncClient {
         List<WaypointManager.Waypoint> updated = new ArrayList<>(state.cached);
         updated.removeIf(w -> w.id().equals(id));
         state.cached = List.copyOf(updated);
+        state.mutations.incrementAndGet();
 
         mutate(worldId, address, "DELETE", HttpRequest.BodyPublishers.noBody(), id, password);
     }
@@ -106,6 +96,7 @@ final class WaypointSyncClient {
         }
         state.inFlight = true;
         state.lastFetchStartNanos = now;
+        long mutationsAtStart = state.mutations.get();
 
         String url = normalize(address) + "/waypoints/" + worldId;
         HttpRequest request;
@@ -138,6 +129,10 @@ final class WaypointSyncClient {
                         VoxyMapClient.LOGGER.warn("[VoxyMap] Waypoint sync GET {} returned {}", url, response.statusCode());
                         return;
                     }
+                    if (state.mutations.get() != mutationsAtStart) {
+                        state.lastFetchStartNanos = Long.MIN_VALUE;
+                        return;
+                    }
                     state.cached = fromDtos(WaypointJson.readList(response.body()));
                     state.status = Status.OK;
                     state.lastError = null;
@@ -163,6 +158,9 @@ final class WaypointSyncClient {
                     .method(method, body)
                     .build();
         } catch (RuntimeException exception) {
+            state.status = Status.ERROR;
+            state.lastError = "Bad address or password: " + exception.getMessage();
+            VoxyMapClient.LOGGER.warn("[VoxyMap] Waypoint sync {} for {} could not be sent: {}", method, worldId, exception.toString());
             return;
         }
         HTTP.sendAsync(request, HttpResponse.BodyHandlers.discarding())
@@ -177,8 +175,8 @@ final class WaypointSyncClient {
                         VoxyMapClient.LOGGER.warn("[VoxyMap] Waypoint sync {} rejected for {}: HTTP {}", method, worldId, response.statusCode());
                         state.status = Status.ERROR;
                     }
-                    // Force the next cached() call to refetch right away, so a rejected optimistic
-                    // update (e.g. the server refused it) gets corrected instead of lingering locally.
+
+                    state.mutations.incrementAndGet();
                     state.lastFetchStartNanos = Long.MIN_VALUE;
                 });
     }

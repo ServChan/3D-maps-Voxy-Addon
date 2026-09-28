@@ -1,5 +1,7 @@
 package com.voxymap.client.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
+import com.voxymap.client.integration.RemotePlayerMarkers;
 import com.voxymap.client.integration.VanillaSquadServer;
 import com.voxymap.client.map.VoxyMapSettings;
 import com.voxymap.client.map.WaypointManager;
@@ -18,19 +20,12 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.BooleanSupplier;
 
-/**
- * Global settings screen opened from Mod Menu. It lists the same groups, in the same order, as the
- * in-map panel (both come from {@link SettingsCatalog}) in a scrollable column, so it stays usable at
- * any window size or GUI scale. Settings stored per world (sync address and password, the VanillaSquad
- * map) appear when the screen is opened from inside a world; map sharing needs the map itself.
- */
 public final class VoxyMapConfigScreen extends Screen {
     private static final int TITLE_BAR_HEIGHT = 28;
     private static final int FOOTER_HEIGHT = 36;
@@ -49,7 +44,6 @@ public final class VoxyMapConfigScreen extends Screen {
         HEADER, ROW, NOTE
     }
 
-    /** One line of the scrolling column; {@code top} is relative to the top of the content. */
     private static final class Item {
         final Kind kind;
         final int top;
@@ -106,7 +100,7 @@ public final class VoxyMapConfigScreen extends Screen {
 
         int y = 0;
         for (SettingsCatalog.Section section : SettingsCatalog.sections(
-                worldId != null, false, VanillaSquadServer.isConnected())) {
+                worldId != null, false, VanillaSquadServer.isConnected(), RemotePlayerMarkers.available())) {
             items.add(new Item(Kind.HEADER, y, HEADER_HEIGHT, Component.translatable(section.group().titleKey()), null, null));
             y += HEADER_HEIGHT;
             for (SettingsCatalog.Entry entry : section.entries()) {
@@ -180,7 +174,7 @@ public final class VoxyMapConfigScreen extends Screen {
                 syncPasswordBox = new EditBox(font, controlX, 0, controlWidth, CONTROL_HEIGHT,
                         Component.translatable(entry.labelKey()));
                 syncPasswordBox.setMaxLength(128);
-                // Show the password as dots; the stored value is unchanged.
+
                 syncPasswordBox.addFormatter((text, offset) ->
                         FormattedCharSequence.forward("*".repeat(text.length()), Style.EMPTY));
                 String password = WaypointSyncSettings.password(worldId);
@@ -235,7 +229,6 @@ public final class VoxyMapConfigScreen extends Screen {
         return Component.translatable(key).withStyle(color);
     }
 
-    /** Writes the sync fields to the per-world settings if they changed. Address first: a password needs one. */
     private void commitSyncFields() {
         if (worldId == null) {
             return;
@@ -299,7 +292,6 @@ public final class VoxyMapConfigScreen extends Screen {
         return Component.literal(String.format(Locale.ROOT, "%.2fx", VoxyMapSettings.cameraSpeedMultiplier()));
     }
 
-    /** Camera speed as a slider over the same range and steps as the in-map -/+ buttons. */
     private static final class SpeedSlider extends AbstractSliderButton {
         private static final double RANGE = VoxyMapSettings.CAMERA_SPEED_MAX - VoxyMapSettings.CAMERA_SPEED_MIN;
 
@@ -357,7 +349,7 @@ public final class VoxyMapConfigScreen extends Screen {
     public void setFocused(GuiEventListener focused) {
         super.setFocused(focused);
         if (focused == null) return;
-        // Keyboard navigation can reach controls that are currently scrolled out of view.
+
         for (Item item : items) {
             if (item.control == focused) {
                 ensureVisible(item);
@@ -423,7 +415,6 @@ public final class VoxyMapConfigScreen extends Screen {
                 contentLeft + 8, y + (ROW_HEIGHT - font.lineHeight) / 2 - 1, 0xFFDFF8FF);
     }
 
-    /** Trims {@code text} with an ellipsis so it never runs under the control on narrow windows. */
     private String fit(String text, int maxWidth) {
         if (font.width(text) <= maxWidth) return text;
         String ellipsis = "...";
@@ -436,7 +427,7 @@ public final class VoxyMapConfigScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        // Controls scrolled under the title bar or the footer are still positioned, only clipped.
+
         if (event.y() < viewportTop || event.y() >= viewportBottom) {
             return doneButton.mouseClicked(event, doubleClick);
         }
@@ -455,21 +446,21 @@ public final class VoxyMapConfigScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
-        if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER)
+        if ((key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER)
                 && (getFocused() == syncAddressBox || getFocused() == syncPasswordBox) && getFocused() != null) {
             commitSyncFields();
             setFocused(null);
             return true;
         }
-        if (key == GLFW.GLFW_KEY_ESCAPE) {
+        if (key == InputConstants.KEY_ESCAPE) {
             closeScreen();
             return true;
         }
-        if (key == GLFW.GLFW_KEY_PAGE_DOWN) {
+        if (key == InputConstants.KEY_PAGEDOWN) {
             scrollTo(scroll + viewportHeight());
             return true;
         }
-        if (key == GLFW.GLFW_KEY_PAGE_UP) {
+        if (key == InputConstants.KEY_PAGEUP) {
             scrollTo(scroll - viewportHeight());
             return true;
         }

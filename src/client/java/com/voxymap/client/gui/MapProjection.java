@@ -1,6 +1,5 @@
 package com.voxymap.client.gui;
 
-/** Pure screen projection and clipping math shared by every map overlay. */
 final class MapProjection {
     private static final double NEAR_PLANE = 0.1;
     private static final double MAX_PROJECTED_COORDINATE = 1.0E6;

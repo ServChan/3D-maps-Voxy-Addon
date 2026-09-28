@@ -22,7 +22,7 @@ class ProjectContractTest {
         assertEquals("voxymap", metadata.get("id").getAsString());
         assertEquals("client", metadata.get("environment").getAsString());
         assertEquals("LTS_Server", metadata.getAsJsonArray("authors").get(0).getAsString());
-        assertEquals("26.2", metadata.getAsJsonObject("depends").get("minecraft").getAsString());
+        assertEquals("~26.2", metadata.getAsJsonObject("depends").get("minecraft").getAsString());
         assertEquals(">=25", metadata.getAsJsonObject("depends").get("java").getAsString());
     }
 
@@ -139,7 +139,7 @@ class ProjectContractTest {
     @Test
     void remoteMapResponsesAreBoundedBeforeTheyReachTheJsonParser() throws IOException {
         String players = Files.readString(Path.of(
-                "src/client/java/com/voxymap/client/integration/VanillaSquadPlayerMapBridge.java"), StandardCharsets.UTF_8);
+                "src/playerMarkers/java/com/voxymap/client/playermarkers/VanillaSquadPlayerMapBridge.java"), StandardCharsets.UTF_8);
         String flags = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/integration/VanillaSquadFlagMapBridge.java"), StandardCharsets.UTF_8);
 
@@ -148,16 +148,41 @@ class ProjectContractTest {
     }
 
     @Test
+    void playerMarkerCodeIsReachedOnlyThroughTheFacadeSoItCanBeLeftOutOfTheBuild() throws IOException {
+        try (var files = Files.walk(Path.of("src/client/java"))) {
+            for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
+                String source = Files.readString(file, StandardCharsets.UTF_8);
+                assertFalse(source.contains("import com.voxymap.client.playermarkers"),
+                        file + " must not link to the optional player-marker module");
+                if (!file.endsWith("RemotePlayerMarkers.java")) {
+                    assertFalse(source.contains("com.voxymap.client.playermarkers"), file.toString());
+                }
+            }
+        }
+        String build = Files.readString(Path.of("build.gradle"), StandardCharsets.UTF_8);
+        assertTrue(build.contains("def playerMarkerClasses = \"com/voxymap/client/playermarkers/**\""));
+        int jarStart = build.indexOf("\njar {");
+        int jarEnd = build.indexOf("\n}", jarStart);
+        assertTrue(jarStart >= 0 && jarEnd > jarStart, "build.gradle must configure the main jar");
+        String mainJar = build.substring(jarStart, jarEnd);
+        assertFalse(mainJar.contains("sourceSets.playerMarkers.output"),
+                "The main release jar must not contain the VanillaSquad player markers");
+        assertTrue(mainJar.contains("Player-marker classes leaked into the main jar"));
+        assertTrue(build.contains("tasks.register(\"playerMarkersJar\", Zip)"));
+        assertTrue(build.contains("archiveClassifier = \"player-markers\""));
+    }
+
+    @Test
     void vanillaSquadPlayerFetchIsOffByDefaultAndGatedBehindTheSetting() throws IOException {
         String settings = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/map/VoxyMapSettings.java"), StandardCharsets.UTF_8);
         String bridge = Files.readString(Path.of(
-                "src/client/java/com/voxymap/client/integration/VanillaSquadPlayerMapBridge.java"), StandardCharsets.UTF_8);
+                "src/playerMarkers/java/com/voxymap/client/playermarkers/VanillaSquadPlayerMapBridge.java"), StandardCharsets.UTF_8);
         assertTrue(settings.contains("vanillaSquadPlayersEnabled = false"),
                 "Fetching from a third-party site must require an explicit opt-in, not be on by default");
         assertTrue(bridge.contains("if (!VoxyMapSettings.vanillaSquadPlayersActive() && !VoxyMapSettings.vanillaSquadFlagsActive())"),
                 "Realm detection may fetch only when a VanillaSquad overlay is enabled AND the client is on that server");
-        assertTrue(settings.contains("vanillaSquadPlayersEnabled() && VanillaSquadServer.isConnected()"),
+        assertTrue(settings.contains("RemotePlayerMarkers.available() && vanillaSquadPlayersEnabled() && VanillaSquadServer.isConnected()"),
                 "The overlay must not fetch from another server just because the setting is on");
     }
 
@@ -167,9 +192,7 @@ class ProjectContractTest {
                 "src/client/java/com/voxymap/client/gui/MapScreen.java"), StandardCharsets.UTF_8);
         assertTrue(source.contains("marker.local && isViewCenteredOn(marker)"));
         assertTrue(source.contains("new ScreenPoint(width / 2, height / 2)"));
-        // The up-vector is computed once per camera update (see updateCameraBasis(), called from
-        // syncWorldCamera()) rather than recomputed by every projectToScreen/mapPointAt call - see the
-        // efficiency fix that moved it. camUpX/camUpZ are the cached fields projectToScreen reads.
+
         assertTrue(source.contains("camUpX = -Math.sin(viewYaw) * Math.sin(pitch)"));
         assertTrue(source.contains("camUpZ = Math.cos(viewYaw) * Math.sin(pitch)"));
     }

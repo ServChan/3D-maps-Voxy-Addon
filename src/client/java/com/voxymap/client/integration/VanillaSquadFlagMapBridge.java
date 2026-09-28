@@ -20,11 +20,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
-/**
- * Pulls the "banners" (claim/nation flag) marker layer from VanillaSquad's public squaremap endpoint,
- * one such layer per dimension. Polled on a fixed interval, and only when the player has explicitly
- * enabled it in the map settings — same shape as {@link VanillaSquadPlayerMapBridge}.
- */
 public final class VanillaSquadFlagMapBridge {
     private static final String MARKERS_URL_TEMPLATE = "https://vanillasquad.com/map/proxy/%s/tiles/%s/markers.json";
     private static final String BANNER_SET_ID = "banners";
@@ -47,7 +42,6 @@ public final class VanillaSquadFlagMapBridge {
     private VanillaSquadFlagMapBridge() {
     }
 
-    /** @param dimensionId e.g. {@code "minecraft:overworld"} */
     public static void tick(String mapId, String dimensionId) {
         if (!VoxyMapSettings.vanillaSquadFlagsActive() || mapId == null || dimensionId == null) {
             return;
@@ -76,9 +70,9 @@ public final class VanillaSquadFlagMapBridge {
                 .whenComplete((response, throwable) -> {
                     try {
                         if (throwable != null) {
-                            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not fetch VanillaSquad flags for {}.", world, throwable);
+                            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not fetch VanillaSquad flags for {}: {}", world, throwable.toString());
                         } else if (response.statusCode() == 200) {
-                            // Clustering is done once here, off the render thread, not per frame.
+
                             TERRITORIES_BY_WORLD.put(cacheKey, TerritoryClusterer.cluster(parse(response.body())));
                         } else {
                             VoxyMapClient.LOGGER.warn("[VoxyMap] VanillaSquad markers endpoint returned HTTP {} for {}.", response.statusCode(), world);
@@ -141,7 +135,7 @@ public final class VanillaSquadFlagMapBridge {
                     String tooltip = marker.has("tooltip") ? stripHtml(marker.get("tooltip").getAsString()) : "";
                     flags.add(new Flag(x, z, icon, tooltip));
                 } catch (RuntimeException ignored) {
-                    // Keep valid markers when one public-map entry has the wrong JSON type.
+
                 }
             }
             return List.copyOf(flags);
@@ -155,7 +149,6 @@ public final class VanillaSquadFlagMapBridge {
         return cleaned.length() <= MAX_LABEL_LENGTH ? cleaned : cleaned.substring(0, MAX_LABEL_LENGTH);
     }
 
-    /** All currently known territory outlines in the given dimension (e.g. {@code "minecraft:the_nether"}). */
     public static List<Territory> territoriesInDimension(String mapId, String dimensionId) {
         if (mapId == null || dimensionId == null) {
             return List.of();
@@ -188,10 +181,6 @@ public final class VanillaSquadFlagMapBridge {
     public record Flag(double x, double z, String icon, String tooltip) {
     }
 
-    /**
-     * A named cluster of same-coloured banner markers, reduced to a convex-hull outline (or the raw
-     * points, for clusters too small to form one) plus a centroid for the label.
-     */
     public record Territory(String name, int color, List<double[]> outline, double centroidX, double centroidZ) {
     }
 }

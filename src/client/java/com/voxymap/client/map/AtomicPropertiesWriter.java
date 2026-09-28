@@ -21,7 +21,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-/** Serial, debounced persistence for client configuration files. */
 public final class AtomicPropertiesWriter {
     private static final long DEBOUNCE_MILLIS = 100;
     private static final ScheduledThreadPoolExecutor WORKER = new ScheduledThreadPoolExecutor(1, runnable -> {

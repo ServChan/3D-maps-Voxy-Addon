@@ -1,20 +1,15 @@
 package com.voxymap.client.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Stateful UI for browsing map objects. MapScreen supplies immutable snapshots and executes returned
- * actions; filtering, scrolling and hit testing stay here instead of adding another set of parallel
- * coordinate fields to the already large screen class.
- */
 final class MapObjectPanel {
     private static final int WIDTH = 252;
     private static final int ROW_H = 27;
@@ -141,11 +136,11 @@ final class MapObjectPanel {
 
     Action click(double mouseX, double mouseY, int button) {
         if (inside(mouseX, mouseY, toggleX, toggleY, toggleW, 22)) {
-            if (button == 0) toggle();
+            if (button == InputConstants.MOUSE_BUTTON_LEFT) toggle();
             return Action.consumed();
         }
         if (!open || !inside(mouseX, mouseY, panelX, panelY, WIDTH, panelH)) return null;
-        if (button != 0) return Action.consumed();
+        if (button != InputConstants.MOUSE_BUTTON_LEFT) return Action.consumed();
         int searchY = panelY + 27;
         if (inside(mouseX, mouseY, panelX + 8, searchY, WIDTH - 16, 20)) {
             searchFocused = true;
@@ -190,9 +185,9 @@ final class MapObjectPanel {
 
     boolean keyPressed(int keyCode) {
         if (!searchFocused) return false;
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == InputConstants.KEY_ESCAPE) {
             searchFocused = false;
-        } else if (keyCode == GLFW.GLFW_KEY_BACKSPACE && !query.isEmpty()) {
+        } else if (keyCode == InputConstants.KEY_BACKSPACE && !query.isEmpty()) {
             query.deleteCharAt(query.length() - 1);
             scroll = 0;
         }

@@ -3,7 +3,6 @@ package com.voxymap.client.gui;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Deterministic connected-component clustering for projected player labels. */
 final class PlayerMarkerClusterer {
     private PlayerMarkerClusterer() {
     }

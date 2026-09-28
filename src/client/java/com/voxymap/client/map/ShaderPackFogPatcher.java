@@ -6,25 +6,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Makes the "Fog suppression" setting work with the shader packs in use. With a shader pack loaded, Iris
- * draws fog inside the pack's own shaders, so neither Voxy's fog option nor vanilla's fog buffer has any
- * effect on it, and every pack measures its fog from the camera. The detached map camera sits hundreds of
- * blocks from the terrain it shows, so without this everything is fogged: in the Nether it is a flat
- * orange screen, elsewhere a heavy distance haze.
- *
- * <p>Each supported pack has its fog code in a small include that Iris hands to
- * {@code IncludeProcessor.getIncludedFile}; this class rewrites those includes so the fog does nothing
- * while the {@code voxymapMapView} uniform is 1 (map open with suppression active). Outside the map the
- * uniform is 0 and every patched function behaves exactly as before.
- *
- * <p>Two kinds of edit are used. {@link Replace} scales a fog amount right in front of where it is blended
- * in (Complementary and Rethinking Voxels, where several functions share one blend check).
- * {@link EntryReturn} makes a whole fog function return "no fog" as its first statement, which is more
- * robust for packs whose fog is a single function (Solas, BSL, Mellow, Photon). Supported: Complementary
- * Reimagined/Unbound, Rethinking Voxels, Solas, BSL, Mellow and Photon. A pack whose layout is not
- * recognised is left untouched.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public final class ShaderPackFogPatcher {
     private static final String UNIFORM_DECLARATION = """
             #ifndef VOXYMAP_MAP_VIEW_UNIFORM
@@ -42,7 +42,7 @@ public final class ShaderPackFogPatcher {
         String apply(String source);
     }
 
-    /** Replaces every occurrence of {@code anchor}; at least one must exist. */
+
     private record Replace(String anchor, String replacement) implements Edit {
         @Override
         public boolean matches(String source) {
@@ -55,7 +55,7 @@ public final class ShaderPackFogPatcher {
         }
     }
 
-    /** Inserts {@code statement} as the first statement of the function whose header starts with {@code prefix}. */
+
     private record EntryReturn(String prefix, String statement) implements Edit {
         private int bodyStart(String source) {
             int header = source.indexOf(prefix);
@@ -78,7 +78,7 @@ public final class ShaderPackFogPatcher {
         }
     }
 
-    /** One pack's edits for one include; all of them have to match for the flavour to apply. */
+
     private record Flavor(String pack, List<Edit> edits) {
         boolean matches(String source) {
             return edits.stream().allMatch(edit -> edit.matches(source));
@@ -96,8 +96,8 @@ public final class ShaderPackFogPatcher {
     private static final String NO_MAT = "return mat2x3(vec3(0.0), vec3(1.0));";
     private static final String RETURN_VOID = "if (" + IN_MAP + ") return;";
 
-    // Complementary blends fog only if it is above a threshold; scaling in front of that check covers
-    // the border fog in every dimension and the atmospheric fog in the Overworld and End.
+
+
     private static final String COMPLEMENTARY_THRESHOLD = "if (fog > 0.01 + 0.0025 * dither) {";
     private static final String COMPLEMENTARY_CAVE = "color = mix(color, vec4(caveFogColor, 0.0), fog);";
     private static final String RETHINKING_THRESHOLD = "if (fog > 0.0) {";
@@ -150,7 +150,7 @@ public final class ShaderPackFogPatcher {
     private ShaderPackFogPatcher() {
     }
 
-    /** Whether {@code path} is one of the includes this patcher rewrites. */
+
     public static boolean handles(String path) {
         return FLAVORS_BY_PATH.containsKey(path);
     }
@@ -174,8 +174,8 @@ public final class ShaderPackFogPatcher {
         if (flavors == null || source.contains(SENTINEL)) {
             return source;
         }
-        // A flavour applies only if every one of its anchors is present, so a partly recognised layout is
-        // left untouched rather than half patched.
+
+
         List<String> tried = new ArrayList<>();
         for (Flavor flavor : flavors) {
             if (flavor.matches(source)) {

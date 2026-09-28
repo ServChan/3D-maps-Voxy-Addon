@@ -22,8 +22,7 @@ class ClusterLayoutTest {
 
     @Test
     void aBoxWiderThanTheViewportStaysPinnedToTheMargin() {
-        // screenSize - size - margin < margin: the trailing bound would be before the leading one,
-        // so the leading margin must win rather than producing a negative-width visible clamp.
+
         assertEquals(3, ClusterLayout.clampOrigin(50, 900, 800, 3));
     }
 }

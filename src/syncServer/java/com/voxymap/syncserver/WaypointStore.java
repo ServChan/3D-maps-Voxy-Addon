@@ -15,12 +15,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-/**
- * Waypoints for every Voxy world this server has ever seen, one JSON file per world under the data
- * directory. Reuses {@link WaypointJson#writeList}/{@link WaypointJson#readList} verbatim for on-disk
- * storage - the wire format and the storage format are the same thing here, so there is no separate
- * persistence codec to keep in sync.
- */
 final class WaypointStore {
     private static final Pattern VOXY_WORLD_ID = Pattern.compile("[0-9a-f]{32}");
 
@@ -48,9 +42,6 @@ final class WaypointStore {
         return worldId != null && VOXY_WORLD_ID.matcher(worldId).matches();
     }
 
-    // Each world's own list doubles as that world's lock object (put/delete below synchronize on the
-    // same list instance list() reads here) instead of one instance-wide lock - a slow disk write for
-    // one world must not stall unrelated reads/writes for every other world on this server.
     List<WaypointDto> list(String worldId) {
         List<WaypointDto> list = byWorld.getOrDefault(worldId, List.of());
         synchronized (list) {

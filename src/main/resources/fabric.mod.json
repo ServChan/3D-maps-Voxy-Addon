@@ -25,10 +25,10 @@
   ],
   "depends": {
     "fabricloader": ">=0.19.3",
-    "minecraft": "26.2",
+    "minecraft": "~26.2",
     "java": ">=25",
     "fabric-api": "*",
-    "voxy": "=0.2.18-beta"
+    "voxy": ">=0.2.18-beta"
   },
   "suggests": {
     "iris": "*",

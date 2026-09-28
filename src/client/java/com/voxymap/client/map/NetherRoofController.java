@@ -3,13 +3,6 @@ package com.voxymap.client.map;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.Level;
 
-/**
- * Drives the Nether roof removal while the 3D map is open: it removes the bedrock ceiling and the
- * server anti-xray shell above the map so the caverns below can be seen. The patched Voxy shaders discard
- * only whole quads inside the roof band (never a fragment-level slice, which would expose server decoy
- * geometry as a tiled cross-section); this class computes the cut plane and the aperture around the
- * panned view and hands them to {@link NetherRoofState}.
- */
 public final class NetherRoofController {
     private static final String NETHER = "minecraft:the_nether";
 
@@ -18,7 +11,6 @@ public final class NetherRoofController {
     private NetherRoofController() {
     }
 
-    /** Updates cheap shader-only view parameters; safe to call whenever pan or zoom changes. */
     public static void updateViewContext(Minecraft minecraft, double viewX, double viewY, double viewZ,
                                          double blocksPerPixel, int viewportMinPixels) {
         if (minecraft == null || minecraft.level == null
@@ -33,7 +25,6 @@ public final class NetherRoofController {
         NetherRoofState.setAperture(viewX, viewZ, aperture.innerCutoff(), aperture.radius());
     }
 
-    /** Called from the screen tick, never from the per-frame render-state extraction path. */
     public static void tick(Minecraft minecraft) {
         if (minecraft == null || minecraft.level == null || minecraft.player == null) {
             deactivate();
@@ -43,8 +34,6 @@ public final class NetherRoofController {
         Level level = minecraft.level;
         boolean isNether = NETHER.equals(level.dimension().identifier().toString());
 
-        // This threshold never slices through cached voxels. The shader removes only complete quads
-        // wholly in the roof band, so it is safe on remote anti-xray caches as well.
         float netherRoofCutoff = isNether
                 ? NetherRoofPolicy.cutoff(
                         level.dimensionType().minY(),
@@ -55,12 +44,10 @@ public final class NetherRoofController {
         NetherRoofState.setUniformCutoff(netherRoofCutoff);
     }
 
-    /** Whether the roof is currently being removed from the map. */
     public static boolean isActive() {
         return VoxyMapCameraController.isActive() && cuttingSomething;
     }
 
-    /** Mirrors the shader's roof cut closely enough for CPU cursor picking. */
     static boolean isHiddenForMapPick(int x, int y, int z) {
         if (!cuttingSomething) return false;
         float global = NetherRoofState.uniformCutoff();

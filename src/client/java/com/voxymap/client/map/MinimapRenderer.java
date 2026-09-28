@@ -12,56 +12,40 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.Heightmap;
 
-/**
- * Always-on gameplay minimap - a small corner overlay distinct from the fullscreen VoxyMap opened with
- * {@code M}. Deliberately cheap: no second 3D camera pass over the scene (the fullscreen map achieves
- * its view by swapping out the game's one real camera for the whole frame, see {@code CameraMixin} -
- * doing that AND rendering the normal first-person view in the same frame would mean rendering the
- * world twice). Instead this draws a cached 2D texture built from {@link MinimapTileCache}, only
- * rebuilding and re-uploading it when the player crosses into a new chunk - every other frame is just
- * one cheap textured blit plus a handful of marker fills.
- */
 public final class MinimapRenderer {
-    // Texture covers a 17x17 chunk (272x272 block) area - bigger than the largest on-screen window
-    // (the enlarged size below) needs, so panning within it never has to rebuild mid-chunk.
+
     private static final int GRID_CHUNKS = 17;
     private static final int TEXTURE_SIZE = GRID_CHUNKS * MinimapTileCache.TILE_SIZE;
-    private static final int DISPLAY_SIZE = 128; // Normal on-screen size, in pixels.
-    private static final float ZOOM_SCALE = 1.6f; // Xaero-style "hold to enlarge".
+    private static final int DISPLAY_SIZE = 128;
+    private static final float ZOOM_SCALE = 1.6f;
     private static final int MARGIN = 8;
     private static final int MARKER_RADIUS = 2;
     private static final int MOB_MARKER_RADIUS = 1;
     private static final int PLAYER_HEAD_SIZE = 8;
+    private static final int MOB_HEAD_SIZE = 8;
+    private static final int FACE_UV_GRID = 4096;
     private static final double OFFSCREEN_EDGE_INSET = 9.0;
     private static final int COORD_BAR_HEIGHT = 14;
     private static final Identifier TEXTURE_ID = Identifier.fromNamespaceAndPath("voxymap", "minimap_dynamic");
 
-    // The largest blit radius that still samples entirely inside the cached texture. The player can sit
-    // anywhere within the center chunk (up to one full chunk width off from centerChunk's own origin -
-    // see originX/originZ below), so the safe margin is one grid-half short of the texture's own half,
-    // minus a small rounding cushion; not simply TEXTURE_SIZE/2, which left no room for that offset and
-    // let a sample rect run a few pixels past the texture edge whenever rotate and zoom were both on.
     private static final double MAX_BLIT_RADIUS = (GRID_CHUNKS / 2) * 16.0 - 4.0;
 
-    // How far (in blocks) the player must move vertically since the last rebuild before the tile
-    // they're standing on is refreshed again outside of a chunk crossing - catches "walked into a cave
-    // mouth" / "dug straight down" without refreshing on every single Y jitter (steps, jumps).
-    private static final int Y_REFRESH_THRESHOLD_BLOCKS = 8;
-    // How often a rebuild retries chunks that were still unloaded last time, while any remain missing.
+    private static final int Y_REFRESH_THRESHOLD_BLOCKS = MinimapTileCache.Y_TOLERANCE_BLOCKS;
+
+    private static final int TILE_RETENTION_RADIUS_CHUNKS = GRID_CHUNKS;
+
     private static final long MISSING_TILE_RETRY_MILLIS = 500L;
 
-    // Vertical marker fade (mobs/other players): full strength within NEAR_Y_BLOCKS of the player's own
-    // altitude, fading down to FAR_Y_ALPHA by FAR_Y_BLOCKS away - a mob or player that's horizontally
-    // close but many blocks above/below (a different cave layer, a tower) reads as "not really nearby"
-    // instead of drawing identically to one standing right next to the player.
+    private static final long BACKGROUND_REFRESH_MILLIS = 250L;
+
+    private static final int BACKGROUND_REFRESH_TILES = 12;
+
     private static final double NEAR_Y_BLOCKS = 24.0;
     private static final double FAR_Y_BLOCKS = 64.0;
     private static final int FAR_Y_ALPHA = 0x50;
 
-    // A chunk that hasn't loaded yet is painted with this sparse hint instead of solid transparency, so
-    // "the client is still waiting on this chunk" reads differently from a loaded chunk's legitimately
-    // empty (void/air) columns, which stay fully transparent.
     private static final int UNLOADED_CHUNK_HINT_COLOR = 0x40FFB000;
 
     private static final MinimapTileCache TILES = new MinimapTileCache();
@@ -70,24 +54,17 @@ public final class MinimapRenderer {
     private static int centerChunkZ = Integer.MIN_VALUE;
     private static int lastRebuildPlayerY = Integer.MIN_VALUE;
     private static ResourceKey<Level> lastDimension = null;
-    // The Level instance the texture was last built against. Dimension keys repeat across worlds/servers
-    // (every overworld shares the same "minecraft:overworld" key), so comparing that alone can't tell a
-    // reconnect to a *different* world in the same dimension from staying in the same one - only the
-    // Level reference (a fresh instance every dimension change, world rejoin, or reconnect) can.
+
     private static Level lastLevel = null;
-    // Whether the most recent rebuild left any tile unresolved (chunk not loaded yet). A rebuild only
-    // ever runs on a chunk crossing or a retry, so without this a chunk that was still loading at the
-    // moment of the last crossing would show its "not loaded" hint forever unless the player crossed
-    // another chunk boundary - this drives a periodic retry instead.
+
     private static boolean hasMissingTiles = false;
     private static long nextRetryAtMillis = 0L;
-    // One flag per grid cell (relative to center), true where that tile was unresolved last rebuild -
-    // lets a same-center retry repaint only the handful of still-missing tiles (plus the player's own,
-    // force-refreshed every rebuild) instead of repainting the whole 17x17 grid for no visual change.
+    private static MinimapTileCache.ScanMode lastMode = null;
+    private static int refreshCursor = 0;
+    private static long nextBackgroundRefreshAtMillis = 0L;
+
     private static final boolean[] missingMask = new boolean[GRID_CHUNKS * GRID_CHUNKS];
-    // Set the moment HudMixin's injection actually fires - lets a watchdog (see VoxyMapClient) tell a
-    // genuinely disabled minimap apart from HudMixin having silently failed to apply (it's a @Pseudo,
-    // require = 0 mixin, so a mapping mismatch wouldn't throw, it would just never call in here).
+
     private static volatile boolean hudHookFired = false;
 
     private MinimapRenderer() {
@@ -97,7 +74,7 @@ public final class MinimapRenderer {
         hudHookFired = true;
         if (!VoxyMapSettings.minimapEnabled() || minecraft.level == null || minecraft.player == null
                 || VoxyMapCameraController.isActive()) {
-            return; // Hidden while the fullscreen map itself is open, or disabled in Settings.
+            return;
         }
 
         Player player = minecraft.player;
@@ -109,33 +86,35 @@ public final class MinimapRenderer {
 
         ensureTexture(minecraft);
 
+        MinimapTileCache.ScanMode mode = MinimapTileCache.scanMode(level.dimensionType().hasCeiling(), playerY,
+                level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                        (int) Math.floor(player.getX()), (int) Math.floor(player.getZ())));
         boolean changedPosition = centerChunkX != playerChunkX || centerChunkZ != playerChunkZ;
         boolean changedWorld = !dimension.equals(lastDimension) || level != lastLevel;
-        if (changedPosition || changedWorld) {
+        boolean changedMode = mode != lastMode;
+        boolean movedVertically = mode == MinimapTileCache.ScanMode.CAVE
+                && Math.abs(playerY - lastRebuildPlayerY) >= Y_REFRESH_THRESHOLD_BLOCKS;
+        long now = System.currentTimeMillis();
+        if (changedPosition || changedWorld || changedMode || movedVertically) {
             lastDimension = dimension;
             lastLevel = level;
+            lastMode = mode;
             lastRebuildPlayerY = playerY;
-            rebuild(level, playerChunkX, playerChunkZ, playerY, true);
-        } else {
-            boolean movedVertically = Math.abs(playerY - lastRebuildPlayerY) >= Y_REFRESH_THRESHOLD_BLOCKS;
-            boolean retryDue = hasMissingTiles && System.currentTimeMillis() >= nextRetryAtMillis;
-            if (movedVertically || retryDue) {
-                lastRebuildPlayerY = playerY;
-                rebuild(level, centerChunkX, centerChunkZ, playerY, false);
-            }
+            rebuild(level, playerChunkX, playerChunkZ, mode, playerY, Refresh.FULL_WINDOW);
+        } else if (hasMissingTiles && now >= nextRetryAtMillis) {
+            rebuild(level, centerChunkX, centerChunkZ, mode, lastRebuildPlayerY, Refresh.MISSING);
+        } else if (now >= nextBackgroundRefreshAtMillis) {
+            nextBackgroundRefreshAtMillis = now + BACKGROUND_REFRESH_MILLIS;
+            rebuild(level, centerChunkX, centerChunkZ, mode, lastRebuildPlayerY, Refresh.NEXT_BATCH);
         }
 
         int displaySize = VoxyMapClient.isMinimapZoomHeld() ? Math.round(DISPLAY_SIZE * ZOOM_SCALE) : DISPLAY_SIZE;
-        double worldRadius = displaySize / 2.0; // 1 block == 1 texture pixel == 1 screen pixel, at any size.
+        double worldRadius = displaySize / 2.0;
         int screenX = MARGIN;
         int screenY = MARGIN;
         int centerX = screenX + displaySize / 2;
         int centerY = screenY + displaySize / 2;
 
-        // Rotates every offset drawn on the minimap (background, markers, grid, cardinal letters) so the
-        // player's own facing direction always points straight up, Xaero-"rotate" style, instead of the
-        // map staying fixed north-up. cosA=1/sinA=0 (rotation=0) when the setting is off, which makes
-        // every rotatedX/rotatedZ call below an identity - the non-rotating code path is unchanged.
         double rotation = 0.0;
         if (VoxyMapSettings.minimapRotates()) {
             double dirX = PlayerViewConeGeometry.directionX(player.getYRot());
@@ -151,9 +130,6 @@ public final class MinimapRenderer {
         g.fill(screenX - 2, screenY - 2, screenX + displaySize + 2, screenY + displaySize + 2, 0xAA030914);
         g.enableScissor(screenX, screenY, screenX + displaySize, screenY + displaySize);
 
-        // A rotated square must sample a wider source area to still cover every corner of the display
-        // square after rotation (classic "diagonal of a square" factor), clamped to MAX_BLIT_RADIUS so
-        // it never reads past the cached texture's own edge (see that constant's doc).
         double diagonalFactor = rotation == 0.0 ? 1.0 : 1.4143;
         double blitRadius = Math.min(worldRadius * diagonalFactor, MAX_BLIT_RADIUS);
         int blitSize = (int) Math.ceil(blitRadius * 2.0);
@@ -181,7 +157,6 @@ public final class MinimapRenderer {
         drawCoordinateBar(g, minecraft, screenX - 2, screenY + displaySize + 3, displaySize + 4);
     }
 
-    /** Whether {@link #extract} has ever actually run - see {@link #hudHookFired}. */
     public static boolean hudHookFired() {
         return hudHookFired;
     }
@@ -206,35 +181,49 @@ public final class MinimapRenderer {
         minecraft.getTextureManager().register(TEXTURE_ID, texture);
     }
 
-    /** Repaints the 17x17 tile grid centered on ({@code chunkX}, {@code chunkZ}). When
-     * {@code fullWindow} is false (a same-center retry - see {@link #extract}), every tile already sits
-     * at the correct pixels from the previous full rebuild, so only the player's own tile (kept fresh
-     * for cave descents) and whatever was still unloaded last time get repainted. */
-    private static void rebuild(Level level, int chunkX, int chunkZ, int playerY, boolean fullWindow) {
+    private enum Refresh { FULL_WINDOW, MISSING, NEXT_BATCH }
+
+    private static void rebuild(Level level, int chunkX, int chunkZ, MinimapTileCache.ScanMode mode, int playerY,
+                                Refresh refresh) {
         centerChunkX = chunkX;
         centerChunkZ = chunkZ;
         NativeImage pixels = texture.getPixels();
         int half = GRID_CHUNKS / 2;
         int tileSize = MinimapTileCache.TILE_SIZE;
-        boolean missing = false;
-        for (int cz = -half; cz <= half; cz++) {
-            for (int cx = -half; cx <= half; cx++) {
-                int index = (cz + half) * GRID_CHUNKS + (cx + half);
-                boolean isPlayerChunk = cx == 0 && cz == 0;
-                if (!fullWindow && !isPlayerChunk && !missingMask[index]) {
-                    continue;
-                }
-
-                int[] tile = TILES.tileFor(level, chunkX + cx, chunkZ + cz, playerY, isPlayerChunk);
-                int baseX = (cx + half) * tileSize;
-                int baseY = (cz + half) * tileSize;
-                paintTile(pixels, baseX, baseY, tileSize, tile);
-                missingMask[index] = tile == null;
-                missing |= tile == null;
+        int tileCount = GRID_CHUNKS * GRID_CHUNKS;
+        int batchStart = refreshCursor;
+        if (refresh == Refresh.NEXT_BATCH) {
+            refreshCursor = (refreshCursor + BACKGROUND_REFRESH_TILES) % tileCount;
+        }
+        for (int index = 0; index < tileCount; index++) {
+            int cx = index % GRID_CHUNKS - half;
+            int cz = index / GRID_CHUNKS - half;
+            boolean isPlayerChunk = cx == 0 && cz == 0;
+            boolean inBatch = Math.floorMod(index - batchStart, tileCount) < BACKGROUND_REFRESH_TILES;
+            boolean selected = switch (refresh) {
+                case FULL_WINDOW -> true;
+                case MISSING -> isPlayerChunk || missingMask[index];
+                case NEXT_BATCH -> isPlayerChunk || inBatch;
+            };
+            if (!selected) {
+                continue;
             }
+            boolean force = isPlayerChunk || refresh == Refresh.NEXT_BATCH;
+            int[] tile = TILES.tileFor(level, chunkX + cx, chunkZ + cz, mode, playerY, force);
+            paintTile(pixels, (cx + half) * tileSize, (cz + half) * tileSize, tileSize, tile);
+            missingMask[index] = tile == null;
+        }
+        boolean missing = false;
+        for (boolean tileMissing : missingMask) {
+            missing |= tileMissing;
+        }
+        if (refresh == Refresh.FULL_WINDOW) {
+            TILES.retainWithin(chunkX, chunkZ, TILE_RETENTION_RADIUS_CHUNKS);
+        }
+        if (refresh != Refresh.NEXT_BATCH) {
+            nextRetryAtMillis = System.currentTimeMillis() + MISSING_TILE_RETRY_MILLIS;
         }
         hasMissingTiles = missing;
-        nextRetryAtMillis = System.currentTimeMillis() + MISSING_TILE_RETRY_MILLIS;
         texture.upload();
     }
 
@@ -263,16 +252,7 @@ public final class MinimapRenderer {
     private static void drawMarkers(GuiGraphicsExtractor g, Minecraft minecraft, int screenX, int screenY,
                                      int displaySize, int centerX, int centerY, double cosA, double sinA) {
         Player player = minecraft.player;
-
-        for (Player other : minecraft.level.players()) {
-            if (other == player) continue;
-            double dx = other.getX() - player.getX();
-            double dz = other.getZ() - player.getZ();
-            int px = centerX + (int) Math.round(rotatedX(dx, dz, cosA, sinA));
-            int py = centerY + (int) Math.round(rotatedZ(dx, dz, cosA, sinA));
-            if (px < screenX || px >= screenX + displaySize || py < screenY || py >= screenY + displaySize) continue;
-            drawPlayerMarker(g, minecraft, other, px, py, verticalAlpha(other.getY(), player.getY()));
-        }
+        boolean heads = MinimapHeads.shown(minecraft);
 
         if (VoxyMapSettings.mobsEnabled()) {
             for (MobMarkerCache.MobSnapshot mob : MobMarkerCache.snapshot()) {
@@ -282,8 +262,23 @@ public final class MinimapRenderer {
                 int py = centerY + (int) Math.round(rotatedZ(dx, dz, cosA, sinA));
                 if (px < screenX || px >= screenX + displaySize || py < screenY || py >= screenY + displaySize) continue;
                 int baseColor = mob.hostile() ? 0xFFFF5555 : 0xFF7CFC6E;
-                drawDot(g, px, py, MOB_MARKER_RADIUS, scaleAlpha(baseColor, verticalAlpha(mob.y(), player.getY())));
+                int alpha = verticalAlpha(mob.y(), player.getY());
+                if (heads && mob.face() != null) {
+                    drawMobHead(g, mob.face(), px, py, scaleAlpha(baseColor, alpha), alpha);
+                } else {
+                    drawDot(g, px, py, MOB_MARKER_RADIUS, scaleAlpha(baseColor, alpha));
+                }
             }
+        }
+
+        for (Player other : minecraft.level.players()) {
+            if (other == player) continue;
+            double dx = other.getX() - player.getX();
+            double dz = other.getZ() - player.getZ();
+            int px = centerX + (int) Math.round(rotatedX(dx, dz, cosA, sinA));
+            int py = centerY + (int) Math.round(rotatedZ(dx, dz, cosA, sinA));
+            if (px < screenX || px >= screenX + displaySize || py < screenY || py >= screenY + displaySize) continue;
+            drawPlayerMarker(g, minecraft, other, px, py, verticalAlpha(other.getY(), player.getY()), heads);
         }
 
         String worldId = currentWorldId(minecraft);
@@ -302,8 +297,6 @@ public final class MinimapRenderer {
             }
         }
 
-        // When the map itself rotates to track the player's facing, that facing is by definition always
-        // straight up - only the static north-up mode needs the wedge computed from the real yaw.
         if (cosA == 1.0 && sinA == 0.0) {
             drawFacingIndicator(g, centerX, centerY, player.getYRot());
         } else {
@@ -313,7 +306,6 @@ public final class MinimapRenderer {
         drawDot(g, centerX, centerY, MARKER_RADIUS, 0xFF55E7FF);
     }
 
-    /** Fades a marker's opacity by vertical distance from the player - see {@link #NEAR_Y_BLOCKS}. */
     static int verticalAlpha(double markerY, double playerY) {
         double dy = Math.abs(markerY - playerY);
         if (dy <= NEAR_Y_BLOCKS) return 0xFF;
@@ -322,7 +314,6 @@ public final class MinimapRenderer {
         return (int) Math.round(0xFF - t * (0xFF - FAR_Y_ALPHA));
     }
 
-    /** Scales an ARGB color's own alpha channel by {@code alpha}/0xFF, leaving its RGB untouched. */
     static int scaleAlpha(int argb, int alpha) {
         int baseAlpha = (argb >>> 24) & 0xFF;
         int scaled = (baseAlpha * alpha) / 0xFF;
@@ -337,8 +328,6 @@ public final class MinimapRenderer {
         return dx * sinA + dz * cosA;
     }
 
-    /** Subtle lines at every chunk boundary within the display window, rotated the same way markers are
-     * so they stay aligned with the terrain underneath in rotate mode. */
     private static void drawChunkGrid(GuiGraphicsExtractor g, Player player, int centerX, int centerY,
                                        int displaySize, double cosA, double sinA) {
         if (!VoxyMapSettings.chunkGridEnabled()) {
@@ -368,10 +357,7 @@ public final class MinimapRenderer {
         int y1 = centerY + (int) Math.round(rotatedZ(dx1, dz1, cosA, sinA));
         int x2 = centerX + (int) Math.round(rotatedX(dx2, dz2, cosA, sinA));
         int y2 = centerY + (int) Math.round(rotatedZ(dx2, dz2, cosA, sinA));
-        // Every grid line is axis-aligned in world space (one endpoint pair shares an X, the other a Z),
-        // and cosA==1/sinA==0 (see the facing-indicator branch above) means north-up mode leaves it
-        // axis-aligned on screen too - draw it as one filled rect instead of walking it a pixel at a
-        // time, since the whole grid redraws every frame the minimap is on screen.
+
         if (cosA == 1.0 && sinA == 0.0) {
             g.fill(Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2) + 1, Math.max(y1, y2) + 1, color);
         } else {
@@ -379,8 +365,6 @@ public final class MinimapRenderer {
         }
     }
 
-    /** N/E/S/W around the minimap's edge, orbiting with it in rotate mode - drawn upright regardless of
-     * rotation since only their orbit position (not the glyph itself) is rotated. */
     private static void drawCardinalLetters(GuiGraphicsExtractor g, Minecraft minecraft, int centerX, int centerY,
                                              int displaySize, double cosA, double sinA) {
         double radius = displaySize / 2.0 - 8.0;
@@ -398,12 +382,20 @@ public final class MinimapRenderer {
         g.text(minecraft.font, letter, x - textWidth / 2, y - 4, color);
     }
 
-    /** Draws another player as their skin's face (falling back to a plain dot if the client hasn't
-     * cached that player's skin yet, e.g. the tick they join) plus a name label above it, clipped to the
-     * minimap by the scissor rect {@link #extract} already has active. {@code alpha} (0-0xFF) fades the
-     * whole marker by vertical distance - see {@link #verticalAlpha}. */
-    private static void drawPlayerMarker(GuiGraphicsExtractor g, Minecraft minecraft, Player other, int px, int py, int alpha) {
-        Identifier skin = PlayerHeadIcon.resolveSkinTexture(minecraft, other.getUUID());
+    private static void drawMobHead(GuiGraphicsExtractor g, MobHeadIcons.Face face, int px, int py, int frameColor, int alpha) {
+        int half = MOB_HEAD_SIZE / 2;
+        g.fill(px - half - 1, py - half - 1, px - half + MOB_HEAD_SIZE + 1, py - half + MOB_HEAD_SIZE + 1, frameColor);
+        MobHeadIcons.FaceRect rect = face.rect();
+        g.blit(RenderPipelines.GUI_TEXTURED, face.texture(), px - half, py - half,
+                rect.u0() * FACE_UV_GRID, rect.v0() * FACE_UV_GRID, MOB_HEAD_SIZE, MOB_HEAD_SIZE,
+                Math.max(1, Math.round((rect.u1() - rect.u0()) * FACE_UV_GRID)),
+                Math.max(1, Math.round((rect.v1() - rect.v0()) * FACE_UV_GRID)),
+                FACE_UV_GRID, FACE_UV_GRID, scaleAlpha(0xFFFFFFFF, alpha));
+    }
+
+    private static void drawPlayerMarker(GuiGraphicsExtractor g, Minecraft minecraft, Player other, int px, int py, int alpha,
+                                         boolean heads) {
+        Identifier skin = heads ? PlayerHeadIcon.resolveSkinTexture(minecraft, other.getUUID()) : null;
         if (skin != null) {
             drawDot(g, px, py, MARKER_RADIUS + 2, scaleAlpha(0xEE0A0A12, alpha));
             PlayerHeadIcon.draw(g, skin, px - PLAYER_HEAD_SIZE / 2, py - PLAYER_HEAD_SIZE / 2, PLAYER_HEAD_SIZE,
@@ -420,10 +412,6 @@ public final class MinimapRenderer {
         g.text(minecraft.font, name, nameX, nameY, scaleAlpha(0xFFFFFFFF, alpha));
     }
 
-    /** For a waypoint too far to fit inside the minimap's own display window - clamps its direction to
-     * a point on the minimap's edge (so a waypoint thousands of blocks away still shows which way to go,
-     * not just ones already close enough to plot at their real position) and draws it as a marker with a
-     * short tail pointing further outward, distinguishing it from an in-range dot at a glance. */
     private static void drawOffscreenWaypoint(GuiGraphicsExtractor g, int centerX, int centerY, double edgeHalf,
                                                double dx, double dz, int color) {
         if (Math.hypot(dx, dz) < 0.001) {
@@ -439,8 +427,6 @@ public final class MinimapRenderer {
         drawDot(g, ex, ey, MARKER_RADIUS, color);
     }
 
-    /** Where the ray from the center toward (dx, dz) crosses a square of half-size {@code edgeHalf} -
-     * used to pin an off-screen waypoint's indicator to the minimap's edge. */
     static SquareEdgePoint squareEdgeIntersection(double dx, double dz, double edgeHalf) {
         double distance = Math.hypot(dx, dz);
         double dirX = dx / distance;
@@ -454,8 +440,6 @@ public final class MinimapRenderer {
     record SquareEdgePoint(int x, int y, double dirX, double dirZ) {
     }
 
-    /** A short wedge pointing where the player is currently facing - the only facing cue on the minimap
-     * in north-up mode, since the map itself doesn't rotate there. */
     private static void drawFacingIndicator(GuiGraphicsExtractor g, int centerX, int centerY, float yawDegrees) {
         drawFacingIndicator(g, centerX, centerY,
                 PlayerViewConeGeometry.directionX(yawDegrees), PlayerViewConeGeometry.directionZ(yawDegrees));
@@ -481,11 +465,6 @@ public final class MinimapRenderer {
         drawLine(g, lx, lz, rx, rz, 0x8855E7FF);
     }
 
-    /** Draws a 1px line as a single filled rect walked through a rotate+translate transform, instead of
-     * a per-pixel DDA loop each issuing its own {@code fill()} call - this runs every frame for the
-     * chunk grid (in rotate mode), off-screen waypoint tails and the facing-indicator wedge, so
-     * collapsing what could be a hundred-plus 1x1 fills into one draw call per line matters at that
-     * frequency. */
     private static void drawLine(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int color) {
         double dx = x2 - x1;
         double dy = y2 - y1;

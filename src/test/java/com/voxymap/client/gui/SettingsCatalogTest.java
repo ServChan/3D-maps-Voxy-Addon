@@ -84,6 +84,22 @@ class SettingsCatalogTest {
     }
 
     @Test
+    void theBuildWithoutPlayerMarkersHidesOnlyThePlayerMarkerRow() {
+        for (boolean inWorld : new boolean[] {true, false}) {
+            for (boolean inMap : new boolean[] {true, false}) {
+                Set<SettingsCatalog.Entry> withMarkers = EnumSet.noneOf(SettingsCatalog.Entry.class);
+                Set<SettingsCatalog.Entry> withoutMarkers = EnumSet.noneOf(SettingsCatalog.Entry.class);
+                SettingsCatalog.sections(inWorld, inMap, true, true).forEach(section -> withMarkers.addAll(section.entries()));
+                SettingsCatalog.sections(inWorld, inMap, true, false).forEach(section -> withoutMarkers.addAll(section.entries()));
+
+                assertFalse(withoutMarkers.contains(SettingsCatalog.Entry.VANILLASQUAD_PLAYERS));
+                withMarkers.remove(SettingsCatalog.Entry.VANILLASQUAD_PLAYERS);
+                assertEquals(withMarkers, withoutMarkers);
+            }
+        }
+    }
+
+    @Test
     void everySettingHasDistinctTranslationKeys() {
         Set<String> keys = new HashSet<>();
         for (SettingsCatalog.Group group : SettingsCatalog.Group.values()) {

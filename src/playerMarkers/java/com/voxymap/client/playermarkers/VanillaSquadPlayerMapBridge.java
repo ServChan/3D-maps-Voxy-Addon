@@ -1,10 +1,13 @@
-package com.voxymap.client.integration;
+package com.voxymap.client.playermarkers;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.voxymap.client.VoxyMapClient;
+import com.voxymap.client.integration.RemotePlayerMarkers;
+import com.voxymap.client.integration.RemotePlayerMarkers.Observer;
+import com.voxymap.client.integration.RemotePlayerMarkers.RemotePlayer;
 import com.voxymap.client.map.VoxyMapSettings;
 
 import java.net.URI;
@@ -22,13 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
-/**
- * Pulls global player positions from VanillaSquad's public squaremap live-map endpoint, so the 3D map
- * can show players anywhere on the server instead of only the ones the client happens to have loaded
- * nearby. Polled on a fixed interval rather than per-frame since it's a network round trip to a
- * third-party site; only runs when the player has explicitly enabled a VanillaSquad overlay.
- */
-public final class VanillaSquadPlayerMapBridge {
+public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.Source {
     private static final String PLAYERS_URL_TEMPLATE = "https://vanillasquad.com/map/proxy/%s/tiles/players.json";
     private static final List<String> MAP_IDS = List.of("build", "farm", "art");
     private static final long DEFAULT_INTERVAL_SECONDS = 15L;
@@ -38,7 +35,6 @@ public final class VanillaSquadPlayerMapBridge {
     private static final int MAX_NAME_LENGTH = 64;
     private static final int MAX_WORLD_LENGTH = 128;
     private static final Pattern CONTROL_CHARACTERS = Pattern.compile("\\p{Cntrl}");
-    private static final Pattern COMPACT_UUID = Pattern.compile("[0-9a-f]{32}");
 
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .connectTimeout(REQUEST_TIMEOUT)
@@ -53,35 +49,32 @@ public final class VanillaSquadPlayerMapBridge {
     private static volatile boolean autoResolved;
     private static WeakReference<Object> lastWorldIdentity = new WeakReference<>(null);
     private static volatile long worldGeneration;
-    // selectActiveMap is already re-run from fetchIfNeeded's async completion callback whenever fresh
-    // remote data actually arrives - the per-tick call in tick() below only exists to catch up with the
-    // LOCAL player moving between overlapping map regions between fetches, so once a map has been
-    // resolved it doesn't need to redo that full players x maps x observers search at full 20Hz tick
-    // rate. See tick().
+
     private static final long LOCAL_RESOLVE_INTERVAL_NANOS = 1_000_000_000L;
     private static volatile long lastLocalResolveNanos;
 
-    private VanillaSquadPlayerMapBridge() {
+    public VanillaSquadPlayerMapBridge() {
     }
 
-    public static void tick(Object worldIdentity, String dimensionId, UUID playerUuid, String playerName,
+    @Override
+    public void tick(Object worldIdentity, String dimensionId, UUID playerUuid, String playerName,
                             double playerX, double playerZ, List<Observer> observers, String voxyWorldId) {
         if (!VoxyMapSettings.vanillaSquadPlayersActive() && !VoxyMapSettings.vanillaSquadFlagsActive()) {
             return;
         }
 
         if (worldIdentity != lastWorldIdentity.get()) {
-            // Do not keep an old ClientLevel alive after disconnecting or changing proxy worlds.
+
             lastWorldIdentity = new WeakReference<>(worldIdentity);
             worldGeneration++;
-            activeMapId = fallbackMapId(voxyWorldId);
+            activeMapId = RemotePlayerMarkers.configuredOrDefaultMapId(voxyWorldId);
             autoResolved = false;
             PLAYERS_BY_MAP.clear();
             LAST_FETCH_NANOS_BY_MAP.clear();
             FETCHED_GENERATION_BY_MAP.clear();
         }
         SelectionContext context = new SelectionContext(worldGeneration, dimensionId,
-                normalizeUuid(playerUuid == null ? null : playerUuid.toString()),
+                RemotePlayerMarkers.normalizeUuid(playerUuid == null ? null : playerUuid.toString()),
                 playerName == null ? "" : playerName.toLowerCase(Locale.ROOT), playerX, playerZ,
                 observers == null ? List.of() : List.copyOf(observers), voxyWorldId);
         selectionContext = context;
@@ -96,8 +89,7 @@ public final class VanillaSquadPlayerMapBridge {
         for (String mapId : MAP_IDS) {
             fetchIfNeeded(mapId, context.generation());
         }
-        // Resolve promptly (every tick) until the first successful auto-detection, then throttle -
-        // see LOCAL_RESOLVE_INTERVAL_NANOS's comment.
+
         long now = System.nanoTime();
         if (!autoResolved || now - lastLocalResolveNanos >= LOCAL_RESOLVE_INTERVAL_NANOS) {
             lastLocalResolveNanos = now;
@@ -126,8 +118,11 @@ public final class VanillaSquadPlayerMapBridge {
                         HttpResponse.BodyHandlers.ofString(), MAX_RESPONSE_CHARS))
                 .whenComplete((response, throwable) -> {
                     try {
+                        if (generation != worldGeneration) {
+                            return;
+                        }
                         if (throwable != null) {
-                            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not fetch VanillaSquad player positions for {}.", mapId, throwable);
+                            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not fetch VanillaSquad player positions for {}: {}", mapId, throwable.toString());
                         } else if (response.statusCode() == 200) {
                             PLAYERS_BY_MAP.put(mapId, parse(response.body()));
                         } else {
@@ -136,7 +131,9 @@ public final class VanillaSquadPlayerMapBridge {
                     } catch (RuntimeException exception) {
                         VoxyMapClient.LOGGER.warn("[VoxyMap] Could not parse VanillaSquad player positions for {}.", mapId, exception);
                     } finally {
-                        FETCHED_GENERATION_BY_MAP.put(mapId, generation);
+                        if (generation == worldGeneration) {
+                            FETCHED_GENERATION_BY_MAP.put(mapId, generation);
+                        }
                         fetching.set(false);
                         SelectionContext latest = selectionContext;
                         if (latest != null) {
@@ -200,9 +197,7 @@ public final class VanillaSquadPlayerMapBridge {
                 }
             }
         }
-        // During a proxy transfer squaremap can briefly list the player in both worlds. If the two
-        // positions are effectively tied, wait for the next five-second refresh instead of choosing
-        // the first map id and flashing an unrelated overlay.
+
         if (Double.isFinite(secondDistanceSquared)
                 && Math.sqrt(secondDistanceSquared) - Math.sqrt(bestDistanceSquared) < 8.0) {
             return null;
@@ -229,12 +224,8 @@ public final class VanillaSquadPlayerMapBridge {
                 || !normalizedName.isEmpty() && normalizedName.equals(remote.name().toLowerCase(Locale.ROOT));
     }
 
-    private static String fallbackMapId(String voxyWorldId) {
-        String configured = VoxyMapSettings.vanillaSquadMap(voxyWorldId).mapId();
-        return configured == null ? "build" : configured;
-    }
-
-    public static String activeMapId() {
+    @Override
+    public String activeMapId() {
         return activeMapId;
     }
 
@@ -269,16 +260,16 @@ public final class VanillaSquadPlayerMapBridge {
                 }
                 parsed.add(new RemotePlayer(
                         name, world, x, y, z,
-                        entry.has("uuid") ? normalizeUuid(entry.get("uuid").getAsString()) : null));
+                        entry.has("uuid") ? RemotePlayerMarkers.normalizeUuid(entry.get("uuid").getAsString()) : null));
             } catch (RuntimeException ignored) {
-                // A single malformed public-map entry must not discard the rest of the snapshot.
+
             }
         }
         return List.copyOf(parsed);
     }
 
-    /** All currently known remote players in the given dimension (e.g. {@code "minecraft:the_nether"}). */
-    public static List<RemotePlayer> playersInDimension(String dimensionId) {
+    @Override
+    public List<RemotePlayer> playersInDimension(String dimensionId) {
         String mapId = activeMapId;
         if (dimensionId == null || mapId == null) {
             return List.of();
@@ -292,37 +283,6 @@ public final class VanillaSquadPlayerMapBridge {
             }
         }
         return filtered;
-    }
-
-    /** Strips dashes and lower-cases a UUID so squaremap's compact form can be compared to Java's. */
-    public static String normalizeUuid(String uuid) {
-        if (uuid == null) return null;
-        String compact = uuid.replace("-", "").toLowerCase(Locale.ROOT);
-        return COMPACT_UUID.matcher(compact).matches() ? compact : null;
-    }
-
-    /** Parses squaremap's dashless UUID form (or a normal one) into a {@link java.util.UUID}. */
-    public static java.util.UUID toJavaUuid(String uuid) {
-        if (uuid == null) {
-            return null;
-        }
-        String hex = uuid.replace("-", "");
-        if (hex.length() != 32) {
-            return null;
-        }
-        String dashed = hex.substring(0, 8) + "-" + hex.substring(8, 12) + "-" + hex.substring(12, 16) + "-"
-                + hex.substring(16, 20) + "-" + hex.substring(20);
-        try {
-            return java.util.UUID.fromString(dashed);
-        } catch (IllegalArgumentException exception) {
-            return null;
-        }
-    }
-
-    public record RemotePlayer(String name, String world, double x, double y, double z, String uuid) {
-    }
-
-    public record Observer(String uuid, String name, double x, double z) {
     }
 
     private record SelectionContext(long generation, String dimensionId, String uuid, String name,

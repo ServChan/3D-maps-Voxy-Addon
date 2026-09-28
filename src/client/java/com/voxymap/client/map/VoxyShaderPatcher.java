@@ -2,11 +2,11 @@ package com.voxymap.client.map;
 
 import com.voxymap.client.VoxyMapClient;
 
-/**
- * Patches Voxy's native LOD shaders with the map's two shader-side features: a whole-quad Nether roof
- * remover (see {@link NetherRoofController}) and the ore mask (see {@link OreMaskController}).
- * Removing complete roof quads avoids manufacturing cross-sections through server anti-xray decoy LODs.
- */
+
+
+
+
+
 public final class VoxyShaderPatcher {
     public static final int ENABLED_UNIFORM_LOCATION = 30;
     public static final int GLOBAL_CUTOFF_UNIFORM_LOCATION = 33;
@@ -50,9 +50,6 @@ public final class VoxyShaderPatcher {
 
 
                 if (voxymapCutawayEnabled != 0) {
-                    // The global Nether threshold removes only complete quads belonging to the roof
-                    // band. Per-fragment clipping here would expose fake anti-xray volume as a tiled
-                    // cross-section.
                     float voxymapRoofCutY = voxymapGlobalCutawayY;
                     if (voxymapApertureRadius > 0.0) {
                         float voxymapDistance = distance(voxymapQuadCenterXZ,
@@ -69,10 +66,6 @@ public final class VoxyShaderPatcher {
                 }
 
                 if (voxymapOreMaskEnabled != 0) {
-                    // Independent of voxymapCutawayEnabled above: an ore can be exposed by the Nether
-                    // roof trim, or simply by Voxy meshing the boundary of its cached data as an
-                    // ordinary opaque wall (see OreMaskController) - there is no signal here to tell
-                    // those apart, so this masks every rendered ore uniformly.
                     uint voxymapModelId = getModelId();
                     ivec2 voxymapOreTexel = ivec2(voxymapModelId & 0xFFu, (voxymapModelId >> 8) & 0xFFu);
                     if (texelFetch(voxymapOreMask, voxymapOreTexel, 0).r > 0.5) {
@@ -85,16 +78,16 @@ public final class VoxyShaderPatcher {
     private VoxyShaderPatcher() {
     }
 
-    /** Whether the shaders were successfully patched; false if a Voxy update changed their layout. */
+
     public static boolean isSupported() {
         return !unsupported;
     }
 
-    /**
-     * Same as {@link #patch}, but never throws: a Voxy update that changes the shader layout must
-     * disable the roof removal and ore mask and let the rest of Voxy keep loading, not crash shader
-     * compilation for the whole client.
-     */
+
+
+
+
+
     public static String patchSafely(String resource, String source) {
         try {
             return patch(resource, source);
@@ -135,9 +128,9 @@ public final class VoxyShaderPatcher {
             throw new IllegalStateException("Unsupported Voxy fragment shader layout");
         }
         String withDeclarations = source.replace(mainMarker, FRAGMENT_DECLARATIONS + mainMarker);
-        // Insert after the existing depth-bounds discard, i.e. once texture derivatives
-        // (dFdx/dFdy/textureGrad) have already been resolved - discarding earlier leaves derivatives
-        // undefined for fragments neighbouring the cut and corrupts their mip selection/texturing.
+
+
+
         return withDeclarations.replace(FRAGMENT_CLIP_ANCHOR, FRAGMENT_CLIP_ANCHOR + FRAGMENT_CLIP);
     }
 }

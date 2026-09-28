@@ -1,5 +1,6 @@
-package com.voxymap.client.integration;
+package com.voxymap.client.playermarkers;
 
+import com.voxymap.client.integration.RemotePlayerMarkers;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,10 +19,10 @@ class VanillaSquadPlayerMapBridgeTest {
                 ]}
                 """;
 
-        List<VanillaSquadPlayerMapBridge.RemotePlayer> players = VanillaSquadPlayerMapBridge.parse(body);
+        List<RemotePlayerMarkers.RemotePlayer> players = VanillaSquadPlayerMapBridge.parse(body);
 
         assertEquals(2, players.size());
-        VanillaSquadPlayerMapBridge.RemotePlayer thost = players.get(0);
+        RemotePlayerMarkers.RemotePlayer thost = players.get(0);
         assertEquals("thost", thost.name());
         assertEquals("minecraft_overworld", thost.world());
         assertEquals(31.0, thost.x());
@@ -33,10 +34,10 @@ class VanillaSquadPlayerMapBridgeTest {
     @Test
     void selectsTheMapWhosePlayerSnapshotMatchesTheClientsCurrentPosition() {
         String uuid = "2f4c3b65811535398569b527957f6721";
-        Map<String, List<VanillaSquadPlayerMapBridge.RemotePlayer>> snapshots = Map.of(
-                "build", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+        Map<String, List<RemotePlayerMarkers.RemotePlayer>> snapshots = Map.of(
+                "build", List.of(new RemotePlayerMarkers.RemotePlayer(
                         "thost", "minecraft_overworld", 5000, 64, 5000, uuid)),
-                "farm", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+                "farm", List.of(new RemotePlayerMarkers.RemotePlayer(
                         "thost", "minecraft_overworld", 31, 69, 179, uuid)));
 
         assertEquals("farm", VanillaSquadPlayerMapBridge.selectMapId(
@@ -46,15 +47,15 @@ class VanillaSquadPlayerMapBridgeTest {
     @Test
     void refusesStaleOrAmbiguousCrossWorldPlayerSnapshots() {
         String uuid = "2f4c3b65811535398569b527957f6721";
-        VanillaSquadPlayerMapBridge.RemotePlayer stale = new VanillaSquadPlayerMapBridge.RemotePlayer(
+        RemotePlayerMarkers.RemotePlayer stale = new RemotePlayerMarkers.RemotePlayer(
                 "thost", "minecraft_overworld", 5000, 64, 5000, uuid);
         assertTrue(VanillaSquadPlayerMapBridge.selectMapId(
                 Map.of("build", List.of(stale)), "minecraft:overworld", uuid, "thost", 0, 0) == null);
 
-        Map<String, List<VanillaSquadPlayerMapBridge.RemotePlayer>> ambiguous = Map.of(
-                "build", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+        Map<String, List<RemotePlayerMarkers.RemotePlayer>> ambiguous = Map.of(
+                "build", List.of(new RemotePlayerMarkers.RemotePlayer(
                         "thost", "minecraft_overworld", 2, 64, 0, uuid)),
-                "farm", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+                "farm", List.of(new RemotePlayerMarkers.RemotePlayer(
                         "thost", "minecraft_overworld", 3, 64, 0, uuid)));
         assertTrue(VanillaSquadPlayerMapBridge.selectMapId(
                 ambiguous, "minecraft:overworld", uuid, "thost", 0, 0) == null);
@@ -63,17 +64,17 @@ class VanillaSquadPlayerMapBridgeTest {
     @Test
     void selectsRealmFromAnotherLoadedPlayerWhenTheLocalPlayerIsHiddenFromSquaremap() {
         String observerUuid = "770f80234155382b9bdee7e399cb92be";
-        Map<String, List<VanillaSquadPlayerMapBridge.RemotePlayer>> snapshots = Map.of(
-                "build", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+        Map<String, List<RemotePlayerMarkers.RemotePlayer>> snapshots = Map.of(
+                "build", List.of(new RemotePlayerMarkers.RemotePlayer(
                         "RonnyLearn", "minecraft_overworld", 44, 64, 239, observerUuid)),
-                "farm", List.of(new VanillaSquadPlayerMapBridge.RemotePlayer(
+                "farm", List.of(new RemotePlayerMarkers.RemotePlayer(
                         "Other", "minecraft_overworld", 44, 64, 239,
                         "27d05abbd6494df6b1513eaee244fd43")));
 
         String selected = VanillaSquadPlayerMapBridge.selectMapId(
                 snapshots, "minecraft:overworld", "d087dd7791514f7b96213593fd584a89",
                 "LTS_Server", 37, 184,
-                List.of(new VanillaSquadPlayerMapBridge.Observer(observerUuid, "RonnyLearn", 45, 240)));
+                List.of(new RemotePlayerMarkers.Observer(observerUuid, "RonnyLearn", 45, 240)));
 
         assertEquals("build", selected);
     }
@@ -82,7 +83,7 @@ class VanillaSquadPlayerMapBridgeTest {
     void skipsEntriesMissingRequiredFieldsInsteadOfThrowing() {
         String body = "{\"players\":[{\"world\":\"minecraft_overworld\",\"name\":\"noPosition\"}]}";
 
-        List<VanillaSquadPlayerMapBridge.RemotePlayer> players = VanillaSquadPlayerMapBridge.parse(body);
+        List<RemotePlayerMarkers.RemotePlayer> players = VanillaSquadPlayerMapBridge.parse(body);
 
         assertTrue(players.isEmpty());
     }
@@ -101,7 +102,7 @@ class VanillaSquadPlayerMapBridgeTest {
                 ]}
                 """;
 
-        List<VanillaSquadPlayerMapBridge.RemotePlayer> players = VanillaSquadPlayerMapBridge.parse(body);
+        List<RemotePlayerMarkers.RemotePlayer> players = VanillaSquadPlayerMapBridge.parse(body);
 
         assertEquals(1, players.size());
         assertEquals("valid", players.get(0).name());
@@ -112,8 +113,8 @@ class VanillaSquadPlayerMapBridgeTest {
         String mojangStyle = "2F4C3B65-8115-3539-8569-B527957F6721";
         String squaremapStyle = "2f4c3b65811535398569b527957f6721";
 
-        assertEquals(VanillaSquadPlayerMapBridge.normalizeUuid(squaremapStyle),
-                VanillaSquadPlayerMapBridge.normalizeUuid(mojangStyle));
-        assertEquals(null, VanillaSquadPlayerMapBridge.normalizeUuid("not-a-uuid"));
+        assertEquals(RemotePlayerMarkers.normalizeUuid(squaremapStyle),
+                RemotePlayerMarkers.normalizeUuid(mojangStyle));
+        assertEquals(null, RemotePlayerMarkers.normalizeUuid("not-a-uuid"));
     }
 }

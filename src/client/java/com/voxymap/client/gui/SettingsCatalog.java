@@ -3,11 +3,6 @@ package com.voxymap.client.gui;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Single source of truth for which settings exist, how they are grouped and in what order. The
- * in-map settings panel and the Mod Menu screen both render from this list, so a setting can never
- * appear in one and be missing or misplaced in the other.
- */
 public final class SettingsCatalog {
     private SettingsCatalog() {
     }
@@ -30,17 +25,15 @@ public final class SettingsCatalog {
         }
     }
 
-    /** Where a setting can be shown. */
     public enum Availability {
-        /** Global: on the map and in the Mod Menu screen, in or out of a world. */
+
         EVERYWHERE,
-        /** Stored per world, so it needs a loaded world: on the map, and in Mod Menu opened from a world. */
+
         IN_WORLD,
-        /** Needs the map's own interaction (selecting an area, typing a code), so only on the map. */
+
         IN_MAP
     }
 
-    /** Declaration order is display order inside a group. */
     public enum Entry {
         PAUSE(Group.GENERAL, "screen.voxymap.settings.pause", Availability.EVERYWHERE, false),
         SPEED(Group.GENERAL, "screen.voxymap.settings.speed", Availability.EVERYWHERE, false),
@@ -92,7 +85,6 @@ public final class SettingsCatalog {
             return availability;
         }
 
-        /** True for the VanillaSquad settings, which only exist while connected to that server. */
         public boolean vanillaSquadOnly() {
             return vanillaSquadOnly;
         }
@@ -101,20 +93,19 @@ public final class SettingsCatalog {
     public record Section(Group group, List<Entry> entries) {
     }
 
-    /**
-     * @param inWorld        whether a world is loaded (the map, or Mod Menu opened from inside a world)
-     * @param inMap          whether this is the map's own settings panel, which can also run the map-only actions
-     * @param onVanillaSquad whether the client is connected to the VanillaSquad server; the VanillaSquad
-     *                       settings are hidden everywhere else
-     * @return the non-empty groups in display order
-     */
     public static List<Section> sections(boolean inWorld, boolean inMap, boolean onVanillaSquad) {
+        return sections(inWorld, inMap, onVanillaSquad, true);
+    }
+
+    public static List<Section> sections(boolean inWorld, boolean inMap, boolean onVanillaSquad,
+                                         boolean playerMarkersBuiltIn) {
         List<Section> sections = new ArrayList<>();
         for (Group group : Group.values()) {
             List<Entry> entries = new ArrayList<>();
             for (Entry entry : Entry.values()) {
                 if (entry.group != group) continue;
                 if (entry.vanillaSquadOnly && !onVanillaSquad) continue;
+                if (entry == Entry.VANILLASQUAD_PLAYERS && !playerMarkersBuiltIn) continue;
                 boolean available = switch (entry.availability) {
                     case EVERYWHERE -> true;
                     case IN_WORLD -> inWorld || inMap;

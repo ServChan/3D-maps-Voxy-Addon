@@ -17,17 +17,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-/**
- * Player-placed map pins, persisted per Voxy world id - the same identifier
- * {@link VoxyMapSettings}'s VanillaSquad map selection is keyed on, since raw block
- * coordinates are only meaningful within a single world. Parsing/serialization is delegated to
- * {@link WaypointCodec}, which has no FabricLoader dependency and stays unit-testable.
- *
- * <p>A world can hold both local-only pins and server-shared pins at once - {@link #forWorld} returns
- * the union, each tagged via {@link Waypoint#shared()}. {@link #rename} and {@link #remove} look the
- * waypoint up by id to find which backend (local file or sync server) actually owns it, rather than
- * assuming "this world has sync configured" means every pin in it is shared.
- */
 public final class WaypointManager {
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("voxymap-waypoints.properties");
     private static final Path BACKUP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".bak");
@@ -35,9 +24,7 @@ public final class WaypointManager {
 
     private static boolean loaded = false;
     private static final Map<String, List<Waypoint>> byWorld = new ConcurrentHashMap<>();
-    // byWorld's lists are mutated in place by add/rename/remove (see those methods), so their
-    // references never change - this version instead marks "something local changed" for forWorld's
-    // cache below, bumped on every local mutation and on load().
+
     private static volatile int localVersion = 0;
     private static final Map<String, MergedCacheEntry> mergedCache = new ConcurrentHashMap<>();
 
@@ -49,13 +36,6 @@ public final class WaypointManager {
 
     public enum SyncStatus { DISABLED, READ_ONLY, SYNCING, OK, ERROR }
 
-    /** Caches {@link #forWorld}'s merged local+remote result per world, keyed on the two things that
-     * actually change it: {@link #localVersion} (bumped by add/rename/remove/load) and the remote list's
-     * own identity ({@link WaypointSyncClient#cached} only ever replaces that reference, never mutates
-     * it in place, on a successful background refresh - see that method's own javadoc). Without this,
-     * every caller of forWorld() - critically the always-on corner minimap, not just the occasionally-
-     * open fullscreen map - reallocated and re-copied the full waypoint list every single render frame,
-     * even though the underlying data is almost always unchanged between one frame and the next. */
     private record MergedCacheEntry(int localVersion, List<Waypoint> remoteSnapshot, List<Waypoint> merged) {
     }
 
@@ -83,17 +63,11 @@ public final class WaypointManager {
         return merged;
     }
 
-    /** Whether this world can currently accept new shared (server-synced) waypoints - the add-waypoint
-     * menu uses this to decide whether to offer the "share to server" option at all. */
     public static boolean canShare(String worldId) {
         load();
         return WaypointSyncSettings.address(worldId) != null && WaypointSyncSettings.password(worldId) != null;
     }
 
-    /** Read-only sync (address without a password) reports {@link SyncStatus#READ_ONLY} rather than
-     * {@link SyncStatus#OK} so the settings panel can explain why shared pins can't be added/edited.
-     * Also doubles as the "keep the background refresh alive" call for worlds whose pins aren't
-     * currently drawn (e.g. while {@code waypointsEnabled} is off but the sync rows are still visible). */
     public static SyncStatus syncStatus(String worldId) {
         load();
         String address = WaypointSyncSettings.address(worldId);
@@ -107,9 +81,6 @@ public final class WaypointManager {
         };
     }
 
-    /** The most recent transport-level failure reason for this world's sync connection (timeout,
-     * connection refused, HTTP status, ...), or null if the last attempt succeeded or none has run
-     * yet. Surfaced in the settings panel so "Ошибка" isn't a dead end. */
     public static String syncErrorDetail(String worldId) {
         load();
         String address = WaypointSyncSettings.address(worldId);
@@ -123,7 +94,7 @@ public final class WaypointManager {
         if (shared) {
             String address = WaypointSyncSettings.address(worldId);
             String password = address != null ? WaypointSyncSettings.password(worldId) : null;
-            if (password == null) return null; // Not shareable: refuse rather than silently keeping it local.
+            if (password == null) return null;
             Waypoint waypoint = new Waypoint(UUID.randomUUID().toString(), name.trim(), x, y, z, color, true);
             WaypointSyncClient.add(worldId, address, password, waypoint);
             return waypoint;
@@ -137,15 +108,12 @@ public final class WaypointManager {
         return waypoint;
     }
 
-    /** A color the add-waypoint menu can preselect, cycling through the palette by how many pins this
-     * world already has (local and shared combined) - purely a starting suggestion, not persisted. */
     public static int suggestedColor(String worldId) {
         load();
         int count = forWorld(worldId).size();
         return WaypointCodec.PALETTE[count % WaypointCodec.PALETTE.length];
     }
 
-    /** The fixed color choices the add-waypoint menu offers. */
     public static int[] palette() {
         return WaypointCodec.PALETTE.clone();
     }
@@ -198,7 +166,6 @@ public final class WaypointManager {
         WaypointSyncClient.remove(worldId, address, password, id);
     }
 
-    /** Restores an exact waypoint snapshot, preserving its id for undo and remote reconciliation. */
     public static boolean restore(String worldId, Waypoint waypoint) {
         load();
         if (!WaypointCodec.validWorldId(worldId) || waypoint == null) return false;

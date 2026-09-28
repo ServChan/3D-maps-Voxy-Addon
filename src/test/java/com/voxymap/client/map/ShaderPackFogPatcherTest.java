@@ -22,13 +22,13 @@ class ShaderPackFogPatcherTest {
         return count;
     }
 
-    /** The first statement of the function whose header starts with {@code header}. */
+
     private static String firstStatement(String source, String header) {
         int body = source.indexOf('{', source.indexOf(header)) + 1;
         return source.substring(body, source.indexOf('\n', body + 2)).strip();
     }
 
-    // ---- Complementary Reimagined / Unbound ----
+
 
     private static final String COMPLEMENTARY_MAIN = """
             void DoCaveFog(inout vec4 color, float lViewPos) {
@@ -60,7 +60,7 @@ class ShaderPackFogPatcherTest {
 
         assertTrue(patched.contains(DECLARATION));
         assertEquals(3, count(patched, NO_FOG), "border, atmospheric and cave fog are each scaled");
-        // The scaling has to land after the value is computed and before it is blended in.
+
         assertTrue(patched.indexOf("fog *= altitudeFactor;") < patched.lastIndexOf(NO_FOG));
         int borderFog = patched.indexOf("float fog = lPos");
         assertTrue(patched.indexOf(NO_FOG, borderFog) < patched.indexOf("if (fog > 0.01", borderFog));
@@ -79,7 +79,7 @@ class ShaderPackFogPatcherTest {
         assertTrue(storm.contains("isEyeInWater != 0 || voxymapMapView > 0.5"));
     }
 
-    // ---- Rethinking Voxels (a Complementary fork with vec3 colours and a different threshold) ----
+
 
     private static final String RETHINKING_MAIN = """
             void DoBorderFog(inout vec3 color, inout float skyFade, float lPos) {
@@ -114,7 +114,7 @@ class ShaderPackFogPatcherTest {
         assertTrue(patched.contains(DECLARATION));
     }
 
-    // ---- packs whose fog is one function: the function returns "no fog" first ----
+
 
     @Test
     void solasNormalFogReturnsImmediatelyInTheMapView() {
@@ -186,7 +186,7 @@ class ShaderPackFogPatcherTest {
         assertTrue(ShaderPackFogPatcher.handles("/include/fog/end_fog_vl.glsl"));
     }
 
-    // ---- safety ----
+
 
     @Test
     void ignoresUnrelatedIncludes() {
@@ -205,12 +205,12 @@ class ShaderPackFogPatcherTest {
 
     @Test
     void aPartlyRecognisedLayoutIsNotHalfPatched() {
-        // Complementary's border fog anchor without its cave fog anchor.
+
         String onlyBorderFog = "if (fog > 0.01 + 0.0025 * dither) {";
         assertThrows(IllegalStateException.class, () -> ShaderPackFogPatcher.patch(MAIN_FOG, onlyBorderFog));
         assertEquals(onlyBorderFog, ShaderPackFogPatcher.patchSafely(MAIN_FOG, onlyBorderFog));
 
-        // Photon's include with only one of its three functions.
+
         String onlyBorder = "float border_fog(vec3 a, vec3 b) {\n    return 1.0;\n}\n";
         assertThrows(IllegalStateException.class,
                 () -> ShaderPackFogPatcher.patch("/include/fog/simple_fog.glsl", onlyBorder));

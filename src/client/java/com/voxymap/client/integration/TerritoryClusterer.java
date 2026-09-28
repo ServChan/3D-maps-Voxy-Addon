@@ -5,12 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Groups {@link VanillaSquadFlagMapBridge.Flag} points sharing a name (and colour) into a single
- * territory outline, instead of rendering every individual banner marker. A named group with 1200+
- * members otherwise means 1200+ per-frame marker draws and text-width measurements — the actual cause
- * of the severe frame drop when the flags layer was first shown one marker at a time.
- */
 final class TerritoryClusterer {
     private static final int MIN_POINTS_FOR_OUTLINE = 3;
 
@@ -21,8 +15,7 @@ final class TerritoryClusterer {
         Map<GroupKey, List<VanillaSquadFlagMapBridge.Flag>> groups = new LinkedHashMap<>();
         for (VanillaSquadFlagMapBridge.Flag flag : flags) {
             if (flag.tooltip().isEmpty()) {
-                // An unnamed banner isn't a "territory" and there can be hundreds of them; only
-                // named clusters are worth an outline.
+
                 continue;
             }
             groups.computeIfAbsent(new GroupKey(flag.tooltip(), flag.icon()), ignored -> new ArrayList<>()).add(flag);

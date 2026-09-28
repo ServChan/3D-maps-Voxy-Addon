@@ -7,19 +7,9 @@ import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Drops a waypoint at the player's position the moment their health crosses to zero - an automatic
- * death point, Xaero-style. Tracked by watching the health transition rather than any death event: there
- * is no client-side "you died" callback, and by the time the death screen shows, the player entity may
- * already have respawned elsewhere, so this has to catch the exact tick health first reaches zero, while
- * the entity is still standing where it died.
- */
 public final class DeathWaypointTracker {
     private static final int DEATH_COLOR = 0xFF8B2020;
-    // Keeps a short history of deaths instead of just the latest one - dying again used to silently
-    // delete every earlier death point sharing the same name, which threw away exactly the information
-    // (where past deaths happened) the feature exists to keep. Capped so a rough session doesn't leave
-    // dozens of markers behind: once the cap is hit, only the single oldest one is dropped to make room.
+
     private static final int MAX_DEATH_WAYPOINTS = 5;
 
     private static float lastHealth = -1.0f;
@@ -42,8 +32,7 @@ public final class DeathWaypointTracker {
             return;
         }
         if (!worldId.equals(lastWorldId)) {
-            // A fresh world/dimension - seed the baseline instead of comparing against a stale health
-            // value from wherever the player was tracked last, which could otherwise fire a false death.
+
             lastWorldId = worldId;
             lastHealth = minecraft.player.getHealth();
             return;
@@ -58,8 +47,7 @@ public final class DeathWaypointTracker {
                     previousDeaths.add(wp);
                 }
             }
-            // forWorld() returns local waypoints in insertion order, so index 0 is the oldest - trim
-            // from the front until there's room for the new one instead of wiping the whole history.
+
             while (previousDeaths.size() >= MAX_DEATH_WAYPOINTS) {
                 WaypointManager.Waypoint oldest = previousDeaths.remove(0);
                 WaypointManager.remove(worldId.getWorldId(), oldest.id());

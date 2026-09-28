@@ -31,7 +31,7 @@ class WaypointJsonTest {
 
     @Test
     void readOneUsesFallbackIdWhenBodyOmitsIt() {
-        // The PUT endpoint's request body never carries an id - it's the URL path segment instead.
+
         String bodyWithoutId = "{\"name\":\"Base\",\"x\":1,\"y\":2,\"z\":3,\"color\":\"ff62e7ff\"}";
         WaypointDto parsed = WaypointJson.readOne(bodyWithoutId, "from-url");
         assertEquals("from-url", parsed.id());
@@ -53,6 +53,13 @@ class WaypointJsonTest {
         List<WaypointDto> parsed = WaypointJson.readList(json);
         assertEquals(1, parsed.size());
         assertEquals("Complete", parsed.get(0).name());
+    }
+
+    @Test
+    void deeplyNestedInputIsRejectedInsteadOfOverflowingTheStack() {
+        String nested = "[".repeat(100_000) + "]".repeat(100_000);
+        assertTrue(WaypointJson.readList(nested).isEmpty());
+        assertNull(WaypointJson.readOne(nested, "fallback"));
     }
 
     @Test

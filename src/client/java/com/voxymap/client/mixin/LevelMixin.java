@@ -16,8 +16,6 @@ public abstract class LevelMixin {
                 && (Object) this instanceof ClientLevel;
     }
 
-    /** See {@link VoxyMapSettings#activeMapLightingOverride()} - gated here to only the client level,
-     * since this mixin also applies to a singleplayer world's integrated ServerLevel. */
     private VoxyMapSettings.TimeOfDay voxymap$activeTimeOfDayOverride() {
         return (Object) this instanceof ClientLevel ? VoxyMapSettings.activeMapLightingOverride() : null;
     }

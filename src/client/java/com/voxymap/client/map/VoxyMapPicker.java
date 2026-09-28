@@ -11,7 +11,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Performs exact cursor picking against Voxy's explored level-0 voxel data. */
 public final class VoxyMapPicker {
     private static final ExecutorService PICKER_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "VoxyMap surface picker");
@@ -29,16 +28,17 @@ public final class VoxyMapPicker {
     public record Hit(double x, double y, double z, int blockX, int blockY, int blockZ, Direction face) {
     }
 
-    public static CompletableFuture<Hit> pickAsync(WorldIdentifier worldId, Ray ray, double maxDistance) {
+    public static CompletableFuture<Hit> pickAsync(WorldIdentifier worldId, Ray ray, double maxDistance,
+                                                  int minBlockY, int maxBlockYExclusive) {
         if (worldId == null || ray == null) return CompletableFuture.completedFuture(null);
-        return CompletableFuture.supplyAsync(() -> pick(worldId, ray, maxDistance), PICKER_EXECUTOR);
+        return CompletableFuture.supplyAsync(() -> pick(worldId, ray, maxDistance, minBlockY, maxBlockYExclusive), PICKER_EXECUTOR);
     }
 
-    private static Hit pick(WorldIdentifier worldId, Ray ray, double maxDistance) {
+    private static Hit pick(WorldIdentifier worldId, Ray ray, double maxDistance, int minBlockY, int maxBlockYExclusive) {
         WorldEngine engine = VoxySectionBridge.liveEngine(worldId);
         if (engine == null) return null;
 
-        try (SectionReader reader = new SectionReader(engine)) {
+        try (SectionReader reader = new SectionReader(engine, minBlockY, maxBlockYExclusive)) {
             VoxelRayPicker.Hit hit = VoxelRayPicker.pick(
                     ray.originX(), ray.originY(), ray.originZ(),
                     ray.directionX(), ray.directionY(), ray.directionZ(), maxDistance,
@@ -46,8 +46,7 @@ public final class VoxyMapPicker {
             return hit == null ? null : new Hit(hit.x(), hit.y(), hit.z(), hit.blockX(), hit.blockY(),
                     hit.blockZ(), hit.face());
         } catch (RuntimeException | LinkageError exception) {
-            // Input can race a dimension unload or a Voxy engine replacement. A missed click is much
-            // safer than letting an internal lifecycle mismatch escape the screen event handler.
+
             VoxyMapClient.LOGGER.warn("[VoxyMap] Could not pick the Voxy surface under the cursor.", exception);
             return null;
         }
@@ -55,18 +54,22 @@ public final class VoxyMapPicker {
 
     private static final class SectionReader implements AutoCloseable {
         private final WorldEngine engine;
+        private final int minBlockY;
+        private final int maxBlockYExclusive;
         private WorldSection section;
         private long[] data;
         private int sectionX = Integer.MIN_VALUE;
         private int sectionY = Integer.MIN_VALUE;
         private int sectionZ = Integer.MIN_VALUE;
 
-        private SectionReader(WorldEngine engine) {
+        private SectionReader(WorldEngine engine, int minBlockY, int maxBlockYExclusive) {
             this.engine = engine;
+            this.minBlockY = minBlockY;
+            this.maxBlockYExclusive = maxBlockYExclusive;
         }
 
         private boolean occupied(int x, int y, int z) {
-            if (y < -4096 || y >= 4096) return false;
+            if (y < minBlockY || y >= maxBlockYExclusive) return false;
             int sx = Math.floorDiv(x, 32);
             int sy = Math.floorDiv(y, 32);
             int sz = Math.floorDiv(z, 32);

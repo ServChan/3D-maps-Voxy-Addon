@@ -8,7 +8,6 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-/** Keeps integrations with suggested (not required) mods out of Mixin's target set when absent. */
 public final class VoxyMapMixinPlugin implements IMixinConfigPlugin {
     private static final String IRIS_MIXIN_PREFIX = "com.voxymap.client.mixin.Iris";
 

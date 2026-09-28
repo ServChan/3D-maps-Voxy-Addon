@@ -6,19 +6,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * Minimal JSON encode/decode for the waypoint sync wire format, shared by the client mod's HTTP sync
- * client and the standalone {@code voxymap-sync-server}. Deliberately hand-rolled instead of pulling in
- * a JSON library: the mod ships no runtime JSON dependency today, and the server module is meant to be
- * a single dependency-free jar.
- */
 public final class WaypointJson {
     private static final int DEFAULT_COLOR = 0xFF62E7FF;
+    private static final int MAX_NESTING_DEPTH = 32;
 
     private WaypointJson() {
     }
 
-    /** {@code {"waypoints":[{...}, ...]}} - the GET response body. */
     public static String writeList(List<WaypointDto> waypoints) {
         StringBuilder sb = new StringBuilder();
         sb.append("{\"waypoints\":[");
@@ -30,15 +24,12 @@ public final class WaypointJson {
         return sb.toString();
     }
 
-    /** A single {@code {...}} object - the PUT request/response body. */
     public static String writeOne(WaypointDto waypoint) {
         StringBuilder sb = new StringBuilder();
         writeObject(sb, waypoint);
         return sb.toString();
     }
 
-    /** Parses a {@link #writeList} body. Malformed input or entries missing required fields are
-     * dropped rather than thrown, since this always reads data this same codec produced. */
     public static List<WaypointDto> readList(String json) {
         try {
             Object root = new Parser(json).parseValue();
@@ -56,8 +47,6 @@ public final class WaypointJson {
         }
     }
 
-    /** Parses a {@link #writeOne} body. {@code fallbackId} is used when the body omits "id" - the PUT
-     * endpoint takes the id from the URL path, not the body. Returns null on malformed input. */
     public static WaypointDto readOne(String json, String fallbackId) {
         try {
             return toWaypoint(new Parser(json).parseValue(), fallbackId);
@@ -141,7 +130,7 @@ public final class WaypointJson {
             try {
                 return (int) Long.parseLong(value, 16);
             } catch (NumberFormatException ignored) {
-                // Fall through to the default below.
+
             }
         }
         return DEFAULT_COLOR;
@@ -159,13 +148,10 @@ public final class WaypointJson {
         return null;
     }
 
-    /**
-     * Minimal recursive-descent JSON parser covering exactly what this protocol needs: objects,
-     * arrays, strings (with standard escapes including {@code \\uXXXX}), numbers, and true/false/null.
-     */
     private static final class Parser {
         private final String text;
         private int pos;
+        private int depth;
 
         Parser(String text) {
             this.text = text;
@@ -173,6 +159,9 @@ public final class WaypointJson {
 
         Object parseValue() {
             char c = peek();
+            if ((c == '{' || c == '[') && depth >= MAX_NESTING_DEPTH) {
+                throw new IllegalArgumentException("JSON nested too deeply at " + pos);
+            }
             return switch (c) {
                 case '{' -> parseObject();
                 case '[' -> parseArray();
@@ -186,9 +175,11 @@ public final class WaypointJson {
 
         private Map<String, Object> parseObject() {
             expect('{');
+            depth++;
             Map<String, Object> result = new LinkedHashMap<>();
             if (peek() == '}') {
                 pos++;
+                depth--;
                 return result;
             }
             while (true) {
@@ -201,14 +192,17 @@ public final class WaypointJson {
                 if (next == '}') break;
                 if (next != ',') throw new IllegalArgumentException("Expected ',' or '}' at " + pos);
             }
+            depth--;
             return result;
         }
 
         private List<Object> parseArray() {
             expect('[');
+            depth++;
             List<Object> result = new ArrayList<>();
             if (peek() == ']') {
                 pos++;
+                depth--;
                 return result;
             }
             while (true) {
@@ -218,6 +212,7 @@ public final class WaypointJson {
                 if (next == ']') break;
                 if (next != ',') throw new IllegalArgumentException("Expected ',' or ']' at " + pos);
             }
+            depth--;
             return result;
         }
 

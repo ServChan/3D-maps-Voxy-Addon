@@ -7,7 +7,6 @@ import org.lwjgl.opengl.GL45C;
 
 import java.nio.ByteBuffer;
 
-/** Uploads client-memory pixels without inheriting Voxy's transient pixel-unpack-buffer binding. */
 final class GlClientTextureUpload {
     private GlClientTextureUpload() {
     }

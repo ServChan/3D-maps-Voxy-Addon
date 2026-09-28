@@ -11,7 +11,7 @@ import me.cortex.voxy.client.core.rendering.section.backend.mdic.MDICViewport;
 import org.lwjgl.opengl.GL20C;
 import org.lwjgl.opengl.GL41C;
 import org.lwjgl.opengl.GL11C;
-import org.lwjgl.opengl.GL30C;
+import org.lwjgl.opengl.GL13C;
 import org.lwjgl.opengl.GL45C;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -30,13 +30,6 @@ public abstract class MDICSectionRendererMixin {
     private int voxymap$opaquePreviousOreTexture = -1;
     private int voxymap$translucentPreviousOreTexture = -1;
 
-    // The layout(location = N) qualifiers in VoxyShaderPatcher's injected declarations are only a
-    // request - nothing verifies the driver's linker actually honored them, so a location that silently
-    // ended up different (an uncommon but real possibility across GL implementations, and impossible to
-    // tell apart from "the feature is just broken" without this) would make every uniform write below
-    // land on the wrong slot, or none at all, with no error and no visible symptom besides the roof
-    // removal / ore mask never doing anything. Resolving the real location per compiled program with
-    // glGetUniformLocation instead of trusting the hardcoded constants removes that whole class of doubt.
     private static final Map<Integer, VoxymapUniformLocations> voxymap$uniformCache = new HashMap<>();
 
     private record VoxymapUniformLocations(int enabled, int globalCutoff, int apertureCenterX,
@@ -65,25 +58,25 @@ public abstract class MDICSectionRendererMixin {
         });
     }
 
-    @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"))
+    @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"), require = 0)
     private void voxymap$setOpaqueRoofCut(MDICViewport viewport, CallbackInfo ci) {
         voxymap$setRoofCutUniforms(terrainShader);
         voxymap$opaquePreviousOreTexture = voxymap$setOreMaskUniforms(terrainShader);
     }
 
-    @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("RETURN"))
+    @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("RETURN"), require = 0)
     private void voxymap$restoreOpaqueTexture(MDICViewport viewport, CallbackInfo ci) {
         voxymap$restoreTexture(voxymap$opaquePreviousOreTexture, OreMaskTexture.TEXTURE_UNIT);
         voxymap$opaquePreviousOreTexture = -1;
     }
 
-    @Inject(method = "renderTranslucent(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"))
+    @Inject(method = "renderTranslucent(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"), require = 0)
     private void voxymap$setTranslucentRoofCut(MDICViewport viewport, CallbackInfo ci) {
         voxymap$setRoofCutUniforms(translucentTerrainShader);
         voxymap$translucentPreviousOreTexture = voxymap$setOreMaskUniforms(translucentTerrainShader);
     }
 
-    @Inject(method = "renderTranslucent(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("RETURN"))
+    @Inject(method = "renderTranslucent(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("RETURN"), require = 0)
     private void voxymap$restoreTranslucentTexture(MDICViewport viewport, CallbackInfo ci) {
         voxymap$restoreTexture(voxymap$translucentPreviousOreTexture, OreMaskTexture.TEXTURE_UNIT);
         voxymap$translucentPreviousOreTexture = -1;
@@ -117,10 +110,6 @@ public abstract class MDICSectionRendererMixin {
         }
     }
 
-    /** Independent of {@link #voxymap$setRoofCutUniforms} - ore masking is a fairness safeguard against
-     * the x-ray described in {@link com.voxymap.client.map.OreMaskController}, not a cosmetic preference,
-     * so unlike the other map overlays it has no user-facing toggle: it applies whenever any ore has been
-     * discovered, regardless of dimension or roof removal. */
     private static int voxymap$setOreMaskUniforms(Shader shader) {
         if (!VoxyShaderPatcher.isSupported()) {
             return -1;
@@ -131,7 +120,10 @@ public abstract class MDICSectionRendererMixin {
             GL41C.glProgramUniform1i(shader.id(), locations.oreMaskEnabled(), enabled ? 1 : 0);
         }
         if (enabled) {
-            int previousTexture = GL30C.glGetIntegeri(GL11C.GL_TEXTURE_BINDING_2D, OreMaskTexture.TEXTURE_UNIT);
+            int previousActiveTexture = GL11C.glGetInteger(GL13C.GL_ACTIVE_TEXTURE);
+            GL13C.glActiveTexture(GL13C.GL_TEXTURE0 + OreMaskTexture.TEXTURE_UNIT);
+            int previousTexture = GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D);
+            GL13C.glActiveTexture(previousActiveTexture);
             GL45C.glBindTextureUnit(OreMaskTexture.TEXTURE_UNIT, OreMaskTexture.textureId());
             return previousTexture;
         }

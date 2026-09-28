@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(value = Screenshot.class, remap = false)
 public abstract class ScreenshotMixin {
-    /** Redirects the screenshot key to the interface-free map capture while the map is open. */
+
     @Inject(method = "grab(Lnet/minecraft/client/Minecraft;Z)V", at = @At("HEAD"), cancellable = true,
             remap = false, require = 0)
     private static void voxymap$captureMapWithoutInterface(Minecraft minecraft, boolean panorama, CallbackInfo ci) {

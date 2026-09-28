@@ -1,10 +1,5 @@
 package com.voxymap.client.map;
 
-/**
- * The Nether roof-removal parameters the patched Voxy shaders read each frame: the global cut plane and
- * the inspection aperture around the panned map centre (see {@link NetherRoofPolicy}). Plain state, set
- * from the screen tick by {@link NetherRoofController} and read by the render mixin.
- */
 public final class NetherRoofState {
     public static final float NO_CUT_VALUE = 1.0e8f;
 
@@ -33,7 +28,6 @@ public final class NetherRoofState {
         apertureRadius = 0.0f;
     }
 
-    /** Global horizontal cut plane: whole quads at or above it are discarded; {@link #NO_CUT_VALUE} means none. */
     public static float uniformCutoff() {
         return uniformCutoff;
     }

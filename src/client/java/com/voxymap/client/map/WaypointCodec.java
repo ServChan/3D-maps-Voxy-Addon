@@ -10,13 +10,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
-/**
- * Pure parsing/serialization for {@link WaypointManager}'s waypoint list, kept free of
- * FabricLoader/file I/O so it can be unit tested directly. {@link WaypointManager} touches
- * {@code FabricLoader.getInstance()} in a static field initializer, and any static method call on
- * that class - even a pure one - would trigger that same initializer and throw outside a running
- * Fabric environment, so the pure logic lives here instead, in a class with no such field.
- */
 final class WaypointCodec {
     static final Pattern VOXY_WORLD_ID = Pattern.compile("[0-9a-f]{32}");
     static final int[] PALETTE = {
@@ -44,7 +37,7 @@ final class WaypointCodec {
 
         Map<String, List<WaypointManager.Waypoint>> result = new LinkedHashMap<>();
         for (Map.Entry<String, Map<String, Map<String, String>>> worldEntry : raw.entrySet()) {
-            List<WaypointManager.Waypoint> list = new ArrayList<>();
+            List<OrderedWaypoint> list = new ArrayList<>();
             for (Map.Entry<String, Map<String, String>> idEntry : worldEntry.getValue().entrySet()) {
                 Map<String, String> fields = idEntry.getValue();
                 String name = fields.get("name");
@@ -52,11 +45,13 @@ final class WaypointCodec {
                 Double y = parseDouble(fields.get("y"));
                 Double z = parseDouble(fields.get("z"));
                 if (name == null || name.isBlank() || x == null || y == null || z == null) continue;
-                // Local storage only ever holds non-shared pins - shared ones live on the sync server.
-                list.add(new WaypointManager.Waypoint(idEntry.getKey(), name, x, y, z, parseColor(fields.get("color")), false));
+
+                list.add(new OrderedWaypoint(parseOrder(fields.get("order")),
+                        new WaypointManager.Waypoint(idEntry.getKey(), name, x, y, z, parseColor(fields.get("color")), false)));
             }
-            list.sort(Comparator.comparing(w -> w.name().toLowerCase(Locale.ROOT)));
-            result.put(worldEntry.getKey(), list);
+            list.sort(Comparator.comparingLong(OrderedWaypoint::order)
+                    .thenComparing(entry -> entry.waypoint().name().toLowerCase(Locale.ROOT)));
+            result.put(worldEntry.getKey(), new ArrayList<>(list.stream().map(OrderedWaypoint::waypoint).toList()));
         }
         return result;
     }
@@ -64,8 +59,11 @@ final class WaypointCodec {
     static Properties serialize(Map<String, List<WaypointManager.Waypoint>> data) {
         Properties properties = new Properties();
         for (Map.Entry<String, List<WaypointManager.Waypoint>> worldEntry : data.entrySet()) {
-            for (WaypointManager.Waypoint waypoint : worldEntry.getValue()) {
+            List<WaypointManager.Waypoint> waypoints = worldEntry.getValue();
+            for (int index = 0; index < waypoints.size(); index++) {
+                WaypointManager.Waypoint waypoint = waypoints.get(index);
                 String prefix = "waypoint." + worldEntry.getKey() + "." + waypoint.id() + ".";
+                properties.setProperty(prefix + "order", Integer.toString(index));
                 properties.setProperty(prefix + "name", waypoint.name());
                 properties.setProperty(prefix + "x", Double.toString(waypoint.x()));
                 properties.setProperty(prefix + "y", Double.toString(waypoint.y()));
@@ -74,6 +72,18 @@ final class WaypointCodec {
             }
         }
         return properties;
+    }
+
+    private record OrderedWaypoint(long order, WaypointManager.Waypoint waypoint) {
+    }
+
+    private static long parseOrder(String value) {
+        if (value == null) return Long.MAX_VALUE;
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException ignored) {
+            return Long.MAX_VALUE;
+        }
     }
 
     private static Double parseDouble(String value) {
@@ -91,7 +101,7 @@ final class WaypointCodec {
             try {
                 return (int) Long.parseLong(value, 16);
             } catch (NumberFormatException ignored) {
-                // Fall through to the default below.
+
             }
         }
         return PALETTE[0];

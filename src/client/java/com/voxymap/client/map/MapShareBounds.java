@@ -1,7 +1,5 @@
 package com.voxymap.client.map;
 
-/** Horizontal selection for a terrain share. Vertical sections are intentionally left unrestricted:
- * selecting a rectangle on the map sends the complete explored column between its two corners. */
 public record MapShareBounds(int minSectionX, int maxSectionX, int minSectionZ, int maxSectionZ) {
     private static final int SECTION_SIZE = 32;
 

@@ -27,24 +27,32 @@ repositories {
 
 loom {
     splitEnvironmentSourceSets()
-    mods {
-        "voxymap" {
-            sourceSet sourceSets.main
-            sourceSet sourceSets.client
-        }
-    }
 }
 
-// Standalone waypoint sync server: a plain dependency-free Java program (no Minecraft/Fabric API),
-// shipped as its own jar so it can run on a machine that has no Minecraft install at all. It only
-// shares the wire-format code in src/main/java/com/voxymap/shared - never anything client-side.
 sourceSets {
+    playerMarkers {
+        java {
+            srcDir "src/playerMarkers/java"
+        }
+        compileClasspath += sourceSets.main.output + sourceSets.client.output + sourceSets.client.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.client.output + sourceSets.client.runtimeClasspath
+    }
     syncServer {
         java {
             srcDir "src/syncServer/java"
         }
         compileClasspath += sourceSets.main.output
         runtimeClasspath += sourceSets.main.output
+    }
+}
+
+loom {
+    mods {
+        "voxymap" {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+            sourceSet sourceSets.playerMarkers
+        }
     }
 }
 
@@ -59,6 +67,7 @@ dependencies {
     compileOnly("maven.modrinth:iris:${project.iris_version}") { transitive = false }
     compileOnly("com.terraformersmc:modmenu:${project.modmenu_version}") { transitive = false }
     testImplementation sourceSets.client.output
+    testImplementation sourceSets.playerMarkers.output
     testImplementation sourceSets.syncServer.output
     testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
@@ -108,10 +117,43 @@ tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
 
+def playerMarkerClasses = "com/voxymap/client/playermarkers/**"
+
 jar {
     from("LICENSE") {
         rename { "${it}_${licenseArchiveName}" }
     }
+    doLast {
+        def leaked = zipTree(archiveFile.get().asFile).matching { include playerMarkerClasses }.files
+        if (!leaked.isEmpty()) {
+            throw new GradleException("Player-marker classes leaked into the main jar: ${leaked*.name}")
+        }
+    }
+}
+
+def playerMarkersJar = tasks.register("playerMarkersJar", Zip) {
+    group = "build"
+    description = "Builds the mod jar with the VanillaSquad web-map player markers."
+    dependsOn tasks.named("jar"), tasks.named("playerMarkersClasses")
+    archiveBaseName = project.archives_base_name
+    archiveVersion = modVersion
+    archiveClassifier = "player-markers"
+    archiveExtension = "jar"
+    destinationDirectory = tasks.named("jar", Jar).flatMap { it.destinationDirectory }
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    from(zipTree(tasks.named("jar", Jar).flatMap { it.archiveFile }))
+    from(sourceSets.playerMarkers.output)
+    doLast {
+        def included = zipTree(archiveFile.get().asFile).matching { include playerMarkerClasses }.files
+        if (included.isEmpty()) {
+            throw new GradleException("Player-marker classes are missing from the player-markers jar")
+        }
+    }
+}
+
+tasks.named("assemble") {
+    dependsOn playerMarkersJar
 }
 
 publishing {

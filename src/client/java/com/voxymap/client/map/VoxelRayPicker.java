@@ -2,9 +2,8 @@ package com.voxymap.client.map;
 
 import net.minecraft.core.Direction;
 
-/** Deterministic grid traversal used to pick the first occupied voxel under the map cursor. */
 final class VoxelRayPicker {
-    // A diagonal ray crosses up to three voxel boundaries per block of travelled distance.
+
     private static final int MAX_STEPS = 131_072;
 
     private VoxelRayPicker() {

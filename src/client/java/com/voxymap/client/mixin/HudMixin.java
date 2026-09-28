@@ -29,7 +29,6 @@ public abstract class HudMixin {
         }
     }
 
-    /** A markers-only map screenshot keeps the map's markers but not the HUD or chat. */
     @Inject(method = "extractRenderState", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void voxymap$hideHudForMarkerScreenshot(GuiGraphicsExtractor g, DeltaTracker deltaTracker, CallbackInfo ci) {
         if (MapScreenshot.markersOnlyFrame()) {

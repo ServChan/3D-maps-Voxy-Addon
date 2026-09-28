@@ -81,8 +81,7 @@ class VoxyShaderPatcherTest {
         java.util.regex.Matcher matcher = java.util.regex.Pattern
                 .compile("layout\\(location = (\\d+)\\) (?:uniform|in flat|in)").matcher(patched);
         while (matcher.find()) {
-            // Fragment inputs and uniforms live in separate namespaces, but reusing a number for
-            // both would still be a mistake here.
+
             assertTrue(locations.add(matcher.group(1)), "location " + matcher.group(1) + " declared twice");
         }
         assertTrue(locations.contains(Integer.toString(VoxyShaderPatcher.ENABLED_UNIFORM_LOCATION)));

@@ -1,6 +1,5 @@
 package com.voxymap.client.gui;
 
-/** Pure sizing and scrolling policy for the custom in-map settings panel. */
 final class SettingsPanelLayout {
     private static final int MIN_PANEL_HEIGHT = 96;
 

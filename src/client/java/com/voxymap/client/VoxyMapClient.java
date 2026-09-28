@@ -18,7 +18,6 @@ import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
-import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,12 +31,7 @@ public class VoxyMapClient implements ClientModInitializer {
     private static KeyMapping openMapKey;
     private static KeyMapping minimapZoomKey;
 
-    // Watches for HudMixin's injection never actually firing - it's a @Pseudo, require = 0 mixin (see
-    // that class), chosen so a mapping mismatch degrades instead of crashing the client, but that same
-    // choice means such a mismatch would otherwise be completely silent: the minimap just never renders
-    // and nothing logs why. Once ticks-in-world reaches the threshold below without a single call into
-    // MinimapRenderer.extract(), that's logged once instead of staying silent forever.
-    private static final int HUD_HOOK_WATCHDOG_TICKS = 100; // ~5s at 20 TPS.
+    private static final int HUD_HOOK_WATCHDOG_TICKS = 100;
     private static int ticksInWorld = -1;
     private static boolean hudHookWatchdogReported = false;
 
@@ -45,9 +39,9 @@ public class VoxyMapClient implements ClientModInitializer {
     public void onInitializeClient() {
         VoxyMapSettings.load();
         openMapKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-                "key.voxymap.open_map", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_M, CATEGORY));
+                "key.voxymap.open_map", InputConstants.Type.KEYSYM, InputConstants.KEY_M, CATEGORY));
         minimapZoomKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-                "key.voxymap.minimap_zoom", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_Z, CATEGORY));
+                "key.voxymap.minimap_zoom", InputConstants.Type.KEYSYM, InputConstants.KEY_Z, CATEGORY));
         WaypointBeaconRenderer.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -57,11 +51,9 @@ public class VoxyMapClient implements ClientModInitializer {
                 }
                 MinecraftCompat.showScreen(client, new MapScreen());
             }
-            // Map-share has no lifecycle hook of its own tied to a world/connection - this is what
-            // actually stops a forgotten "Share" from silently outliving the world it was started for.
+
             MapShareClient.stopIfWorldChanged(client);
-            // Voxy renders its cached LOD terrain during ordinary gameplay too, not just while the
-            // fullscreen map is open, so this has to tick unconditionally rather than from MapScreen.
+
             OreMaskController.tick(client);
             DeathWaypointTracker.tick(client);
             MobMarkerCache.tick(client);

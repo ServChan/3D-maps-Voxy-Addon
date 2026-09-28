@@ -5,19 +5,31 @@ where this project deliberately deviates from that default, plus patterns specif
 
 ## Deviations from the workspace default
 
-- **Minecraft `26.2` only, single target** - unlike most workspace mods, this is a user-requested
-  boundary, not an oversight. Do not add a `26.1.2` compile target or a dual-build verification step
-  unless the user asks for it.
+- **Minecraft `26.2` only, single target. This is the one exception to the workspace's 26.3 rule** (user
+  decision 2026-09-28): Voxy has no 26.3 build yet, so VoxyMap stays on 26.2 until Voxy ships one. Then port it
+  to 26.3 like the rest of the workspace (SDL3 input, `EntityRenderer`/`LevelRenderer`/`ClientClockManager`
+  changes; see the root `AGENTS.md` rule 0). Do not add a second compile target.
 - **Package is `com.voxymap.client`**, not `org.lts.voxymap`. Keep using the existing package; do not
   "correct" it to match the workspace default.
 - Mod ID `voxymap`, archives base name `voxy-map` (so the built jar is `voxy-map-<version>.jar`, not
   `voxymap-<version>.jar` - check `build/libs/` by that name).
+- **Two mod jars per build.** The main `voxy-map-<version>.jar` is the release build and has **no**
+  VanillaSquad web-map player markers: `com/voxymap/client/playermarkers/**`, the separate `src/playerMarkers`
+  source set that fetches player positions from the VanillaSquad web map, is not in it.
+  `voxy-map-<version>-player-markers.jar` (task `playerMarkersJar`) is the same jar plus that source set. Client code reaches
+  that module only through `integration/RemotePlayerMarkers`, which loads it by class name and falls back to
+  "no markers" when it is absent. Never import `com.voxymap.client.playermarkers` from `src/client`;
+  `ProjectContractTest` pins this; the `jar` task fails if a player-marker class leaks into the main jar, and
+  `playerMarkersJar` fails if they are missing from the variant.
 
 ## Voxy shader coupling (fragile - read before touching `VoxyShaderPatcher`)
 
-`VoxyShaderPatcher` string-patches Voxy `0.2.18-beta`'s exact internal `quads3.vert`/
-`quads.frag` source (marker strings, uniform locations `30` and `33`-`38`). Bumping the `voxy_version` in
-`gradle.properties` can silently change that layout.
+`VoxyShaderPatcher` string-patches Voxy's internal `quads3.vert`/`quads.frag` source (marker strings,
+uniform locations `30` and `33`-`38`). The mod declares `voxy >= 0.2.18-beta` in `fabric.mod.json` and is
+compiled against `voxy_version` in `gradle.properties` (`0.2.18-beta`). `0.2.19-beta` was checked by diffing:
+the four shader files are byte-identical and every Voxy class and member VoxyMap uses is unchanged, except
+that `VoxyConfig.useEnvironmentalFog` (boolean) became `fogMode` (String), which `VoxyBridge` already handles.
+A newer Voxy can still change that layout, so re-check it (see below) before widening the claim.
 
 - The patcher fails loudly (`patch()` throws `IllegalStateException`) by design - `VoxyShaderPatcherTest`
   pins this. Do not make `patch()` itself swallow the mismatch.
@@ -26,6 +38,8 @@ where this project deliberately deviates from that default, plus patterns specif
   `MDICSectionRendererMixin` before touching their uniforms), and logs a warning - so an
   incompatible Voxy update degrades gracefully instead of crashing shader compilation for the whole
   client. Keep both halves in sync if you touch either.
+- Every `@Inject` into a Voxy class carries `require = 0`: the dependency range is open-ended (`>=0.2.18-beta`), and a
+  renamed Voxy method must switch the feature off, not stop the game from starting.
 - After bumping `voxy_version`, re-verify the marker strings in `VoxyShaderPatcher` against the
   new Voxy jar's actual shader source before assuming the patch still applies.
 
@@ -37,6 +51,27 @@ server's anti-xray decoy LODs and shows them as a tiled cross-section that looks
 `ProjectContractTest` pins this. Do not add a per-fragment height cut, and do not add any feature that
 treats client data the server may have withheld (unloaded or obfuscated chunks) as verified terrain or
 open air - the removed room cutaway was exactly that kind of guess.
+
+The ore mask follows the same rule from the other side: `OreMaskController` marks every Voxy model whose
+block is a vanilla `minecraft:*_ore` or `minecraft:ancient_debris`, and the patched fragment shader paints
+those models grey everywhere Voxy draws them, not only on the map. It has no setting; it switches off only
+together with the Voxy shader patch (`VoxyShaderPatcher.isSupported()`) or when Voxy's `modelService` field
+cannot be read.
+
+## Mixin gating
+
+`VoxyMapMixinPlugin` applies a mixin whose class name starts with `Iris` only when Iris is loaded, so Iris
+classes are never touched without Iris. A new mixin that targets Iris must use that prefix; any other
+optional target (Xaero) uses `@Pseudo` plus `require = 0`, as `XaeroGuiMapMixin` does.
+
+## Minimap heads
+
+Holding the player-list key swaps minimap dots for heads (`MinimapHeads`). Mob faces are not hardcoded:
+while the minimap and its mobs are on, `LivingEntityRendererMixin` hands each rendered mob to
+`MobHeadIcons`, which stores the `head` part's face rectangle per texture (at most 4096, then the cache
+resets). Renderers with a single model get their face without being seen first; for the rest, a texture
+variant never rendered this session keeps its dot. All of it catches `RuntimeException | LinkageError`
+and falls back to the dot.
 
 ## Shader-pack fog patches (`ShaderPackFogPatcher`)
 
