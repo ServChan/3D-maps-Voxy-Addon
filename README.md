@@ -1,12 +1,12 @@
 # VoxyMap LTS
 
-[![Minecraft](https://img.shields.io/badge/Minecraft-26.2-62B47A)](https://www.minecraft.net/)
-[![Fabric](https://img.shields.io/badge/Fabric-0.19.3+-DBD0B4)](https://fabricmc.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-26.3-62B47A)](https://www.minecraft.net/)
+[![Fabric](https://img.shields.io/badge/Fabric-0.19.5+-DBD0B4)](https://fabricmc.net/)
 [![Java](https://img.shields.io/badge/Java-25-E76F00)](https://adoptium.net/)
 [![Client](https://img.shields.io/badge/side-client-4C8BF5)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://github.com/raben12paste/3D-maps-Voxy-Addon). It opens a full-screen 3D map backed by Voxy LOD data for Minecraft 26.2.
+VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://github.com/raben12paste/3D-maps-Voxy-Addon). It opens a full-screen 3D map backed by Voxy LOD data for Minecraft 26.3.
 
 ## Features
 
@@ -50,11 +50,11 @@ English, Russian, Spanish (Spain and Mexico), and Polish translations.
 
 ## Requirements
 
-- Minecraft `26.2`.
+- Minecraft `26.3`.
 - Java `25`.
-- Fabric Loader `0.19.3` or newer.
+- Fabric Loader `0.19.5` or newer.
 - Fabric API.
-- Voxy `0.2.18-beta` or newer for Minecraft 26.2. VoxyMap is compiled against `0.2.18-beta`. It stays on 26.2 until Voxy is released for 26.3. The Nether roof removal and ore mask shader patches target Voxy's internal shader layout; if a newer Voxy changes it, those two features switch themselves off instead of breaking the game.
+- Voxy `0.2.20-beta` or newer for Minecraft 26.3. No Voxy for 26.3 is published yet; VoxyMap is compiled against a build of upstream Voxy's `263` branch (`tools/deps/voxy-0.2.20-beta-26.3.jar`). Upstream marks that branch as not release-ready and warns that it can corrupt Voxy worlds saved by older versions, so back up `.minecraft/.voxy` first. It also refuses Minecraft's Vulkan backend, so the game has to run on OpenGL. The Nether roof removal and ore mask shader patches target Voxy's internal shader layout; if a newer Voxy changes it, those two features switch themselves off instead of breaking the game.
 
 Iris, Xaero's World Map and Mod Menu are optional integrations. The mod is client-only and does not need to be installed on the server.
 
@@ -104,7 +104,7 @@ Settings are stored in `config/voxymap.properties`, local waypoints in `config/v
 
 ## Build
 
-The build targets Minecraft 26.2 and produces the distributable JAR:
+The build targets Minecraft 26.3 and produces the distributable JAR:
 
 ```powershell
 .\gradlew.bat clean build --warning-mode all
@@ -161,11 +161,11 @@ Not a single byte of real terrain data moves until the receiver has seen the siz
 
 ## Русский
 
-VoxyMap LTS — поддерживаемый клиентский форк 3D Maps Voxy Addon для Minecraft 26.2. Он открывает полноэкранную трёхмерную карту на данных LOD из Voxy и добавляет миникарту в углу экрана. На сервер мод ставить не нужно.
+VoxyMap LTS — поддерживаемый клиентский форк 3D Maps Voxy Addon для Minecraft 26.3. Он открывает полноэкранную трёхмерную карту на данных LOD из Voxy и добавляет миникарту в углу экрана. На сервер мод ставить не нужно.
 
 ### Требования
 
-Minecraft 26.2, Java 25, Fabric Loader 0.19.3 или новее, Fabric API и Voxy 0.2.18-beta или новее для Minecraft 26.2. VoxyMap собран против 0.2.18-beta и останется на 26.2, пока Voxy не выйдет для 26.3. Iris, Xaero's World Map и Mod Menu необязательны.
+Minecraft 26.3, Java 25, Fabric Loader 0.19.5 или новее, Fabric API и Voxy 0.2.20-beta или новее для Minecraft 26.3. Опубликованного Voxy под 26.3 пока нет: VoxyMap собран против сборки ветки `263` из upstream Voxy (`tools/deps/voxy-0.2.20-beta-26.3.jar`). Автор Voxy помечает её как незаконченную и предупреждает, что она может испортить миры Voxy, сохранённые старыми версиями, поэтому сначала сделайте копию `.minecraft/.voxy`. Эта сборка не запускается на Vulkan-бэкенде, игра должна работать на OpenGL. Iris, Xaero's World Map и Mod Menu необязательны.
 
 ### Полноэкранная карта
 

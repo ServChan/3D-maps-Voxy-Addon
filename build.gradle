@@ -7,6 +7,8 @@ version = project.mod_version
 group = project.maven_group
 def modVersion = project.version.toString()
 def licenseArchiveName = project.name
+def localVoxy = file(project.voxy_jar)
+def localModMenu = file(project.modmenu_jar)
 
 base {
     archivesName = project.archives_base_name
@@ -63,9 +65,17 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-lifecycle-events-v1:${project.fabric_lifecycle_events_version}"
     implementation "net.fabricmc.fabric-api:fabric-rendering-v1:${project.fabric_rendering_v1_version}"
 
-    compileOnly("maven.modrinth:voxy:${project.voxy_version}") { transitive = false }
+    if (localVoxy.isFile()) {
+        compileOnly files(localVoxy)
+    } else {
+        compileOnly("maven.modrinth:voxy:${project.voxy_version}") { transitive = false }
+    }
     compileOnly("maven.modrinth:iris:${project.iris_version}") { transitive = false }
-    compileOnly("com.terraformersmc:modmenu:${project.modmenu_version}") { transitive = false }
+    if (localModMenu.isFile()) {
+        compileOnly files(localModMenu)
+    } else {
+        compileOnly("com.terraformersmc:modmenu:${project.modmenu_version}") { transitive = false }
+    }
     testImplementation sourceSets.client.output
     testImplementation sourceSets.playerMarkers.output
     testImplementation sourceSets.syncServer.output

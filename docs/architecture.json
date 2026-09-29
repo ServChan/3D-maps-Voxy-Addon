@@ -300,7 +300,7 @@
       "items": [
         "MapScreen feeds VoxyMapCameraController; CameraMixin moves Minecraft's own camera and FOV to that pose, so Voxy renders the map in its normal pass",
         "VoxyClientMixin keeps Voxy's cached LODs in the near hand-off zone while the map is open, so terrain does not depend on the real camera's Sodium visibility set",
-        "LevelMixin, LevelRendererMixin and ClientClockManagerMixin clear weather and clouds and apply the map lighting setting"
+        "LevelMixin, CloudRendererMixin, WeatherEffectRendererMixin and ClientClockManagerMixin clear weather and clouds and apply the map lighting setting"
       ]
     },
     {

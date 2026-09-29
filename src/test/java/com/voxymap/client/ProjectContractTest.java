@@ -22,7 +22,7 @@ class ProjectContractTest {
         assertEquals("voxymap", metadata.get("id").getAsString());
         assertEquals("client", metadata.get("environment").getAsString());
         assertEquals("LTS_Server", metadata.getAsJsonArray("authors").get(0).getAsString());
-        assertEquals("~26.2", metadata.getAsJsonObject("depends").get("minecraft").getAsString());
+        assertEquals("~26.3", metadata.getAsJsonObject("depends").get("minecraft").getAsString());
         assertEquals(">=25", metadata.getAsJsonObject("depends").get("java").getAsString());
     }
 

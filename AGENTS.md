@@ -5,10 +5,12 @@ where this project deliberately deviates from that default, plus patterns specif
 
 ## Deviations from the workspace default
 
-- **Minecraft `26.2` only, single target. This is the one exception to the workspace's 26.3 rule** (user
-  decision 2026-09-28): Voxy has no 26.3 build yet, so VoxyMap stays on 26.2 until Voxy ships one. Then port it
-  to 26.3 like the rest of the workspace (SDL3 input, `EntityRenderer`/`LevelRenderer`/`ClientClockManager`
-  changes; see the root `AGENTS.md` rule 0). Do not add a second compile target.
+- **Voxy comes from a local jar, not Modrinth.** No Voxy for Minecraft 26.3 is published yet, so `build.gradle`
+  compiles against `voxy_jar` (`../tools/deps/voxy-0.2.20-beta-26.3.jar`, built from upstream Voxy's `263` branch,
+  commit `2c5698e6`) and falls back to `maven.modrinth:voxy:${voxy_version}` only when that file is missing. When
+  Voxy publishes a 26.3 release, point `voxy_version` at it and delete `voxy_jar`. Upstream marks the `263` branch
+  as not release-ready ("CORRUPTS OLD WORLDS"): tell users to back up `.voxy` before trying it. It also throws on
+  Minecraft's Vulkan backend, so test on OpenGL.
 - **Package is `com.voxymap.client`**, not `org.lts.voxymap`. Keep using the existing package; do not
   "correct" it to match the workspace default.
 - Mod ID `voxymap`, archives base name `voxy-map` (so the built jar is `voxy-map-<version>.jar`, not
@@ -25,10 +27,10 @@ where this project deliberately deviates from that default, plus patterns specif
 ## Voxy shader coupling (fragile - read before touching `VoxyShaderPatcher`)
 
 `VoxyShaderPatcher` string-patches Voxy's internal `quads3.vert`/`quads.frag` source (marker strings,
-uniform locations `30` and `33`-`38`). The mod declares `voxy >= 0.2.18-beta` in `fabric.mod.json` and is
-compiled against `voxy_version` in `gradle.properties` (`0.2.18-beta`). `0.2.19-beta` was checked by diffing:
-the four shader files are byte-identical and every Voxy class and member VoxyMap uses is unchanged, except
-that `VoxyConfig.useEnvironmentalFog` (boolean) became `fogMode` (String), which `VoxyBridge` already handles.
+uniform locations `30` and `33`-`38`). The mod declares `voxy >= 0.2.20-beta` in `fabric.mod.json` and is
+compiled against the `voxy_jar` build of `0.2.20-beta` (26.3). `0.2.19-beta` and the `263` branch were checked by
+diffing: the four shader files are byte-identical to `0.2.18-beta` and every Voxy class and member VoxyMap uses is
+unchanged, except that `VoxyConfig.useEnvironmentalFog` (boolean) became `fogMode` (String), which `VoxyBridge` already handles.
 A newer Voxy can still change that layout, so re-check it (see below) before widening the claim.
 
 - The patcher fails loudly (`patch()` throws `IllegalStateException`) by design - `VoxyShaderPatcherTest`

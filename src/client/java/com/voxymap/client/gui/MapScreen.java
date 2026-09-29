@@ -30,7 +30,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLScancode;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -294,7 +294,7 @@ public class MapScreen extends Screen {
     }
 
     private static boolean keyDown(int key) {
-        return InputConstants.isKeyDown(Minecraft.getInstance().getWindow(), key);
+        return InputConstants.isKeyDown(key);
     }
 
     private GroundPoint mapPointAt(double mouseX, double mouseY) {
@@ -2421,7 +2421,7 @@ public class MapScreen extends Screen {
             zoomAt(lastZoomMouseX(), lastZoomMouseY(), 0.8);
             return true;
         }
-        if (keyCode == InputConstants.KEY_MINUS || keyCode == GLFW.GLFW_KEY_KP_SUBTRACT) {
+        if (keyCode == InputConstants.KEY_MINUS || keyCode == SDLScancode.SDL_SCANCODE_KP_MINUS) {
             zoomAt(lastZoomMouseX(), lastZoomMouseY(), 1.25);
             return true;
         }

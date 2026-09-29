@@ -39,9 +39,9 @@ public class VoxyMapClient implements ClientModInitializer {
     public void onInitializeClient() {
         VoxyMapSettings.load();
         openMapKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-                "key.voxymap.open_map", InputConstants.Type.KEYSYM, InputConstants.KEY_M, CATEGORY));
+                "key.voxymap.open_map", InputConstants.Type.KEYBOARD, InputConstants.KEY_M, CATEGORY));
         minimapZoomKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-                "key.voxymap.minimap_zoom", InputConstants.Type.KEYSYM, InputConstants.KEY_Z, CATEGORY));
+                "key.voxymap.minimap_zoom", InputConstants.Type.KEYBOARD, InputConstants.KEY_Z, CATEGORY));
         WaypointBeaconRenderer.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {

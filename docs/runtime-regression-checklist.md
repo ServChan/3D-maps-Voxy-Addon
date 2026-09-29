@@ -1,20 +1,21 @@
 # VoxyMap runtime regression checklist
 
-Run this checklist against the exact JAR intended for release in the Everything Voxy Minecraft 26.2
-profile. A successful Gradle build is required first, but does not replace these checks.
+Run this checklist against the exact JAR intended for release in a Minecraft 26.3
+profile (the Everything Voxy profile was set up for 26.2; switch its game version first). A successful Gradle build is required first, but does not replace these checks.
 
 ## Startup and compatibility
 
 - Confirm exactly one `voxy-map-*.jar` is active and its SHA-256 matches `build/libs`. With the main
   JAR the "VanillaSquad players" row must be absent, `latest.log` must say it was built without web-map
   player markers, and flags must still work. Repeat the VanillaSquad checks with the `-player-markers` JAR.
-- Start with a Voxy build for Minecraft 26.2, Iris and the normal shader pack; inspect `latest.log` for VoxyMap,
+- Back up `.minecraft/.voxy`, then start with a Voxy build for Minecraft 26.3 on the OpenGL backend, Iris and the normal shader pack; inspect `latest.log` for VoxyMap,
   mixin, shader and OpenGL errors.
 - Open Settings and confirm Diagnostics reports that all integrations are ready.
 - Toggle the shader pack off and on, reopen the map and verify terrain and ore masking recover.
 
 ## Full-screen map
 
+- With the map open, confirm clouds, rain and the first-person hand are hidden and the lighting setting changes the sky.
 - Open and close the map repeatedly; pan, rotate, zoom at the cursor and center on the player.
 - Test a small window or large GUI scale: scroll the settings panel and confirm rows neither draw nor
   receive clicks outside the panel. Confirm each setting sits under its group header and that clicking a
