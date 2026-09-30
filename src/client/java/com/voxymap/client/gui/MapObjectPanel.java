@@ -131,7 +131,8 @@ final class MapObjectPanel {
         drawActionButton(g, font, panelX + 9, buttonY, 51, "screen.voxymap.objects.center", true);
         drawActionButton(g, font, panelX + 63, buttonY, 51, "screen.voxymap.objects.follow", selected.followable);
         drawActionButton(g, font, panelX + 117, buttonY, 51, "screen.voxymap.objects.edit", selected.editable);
-        drawActionButton(g, font, panelX + 171, buttonY, 72, "screen.voxymap.objects.delete", selected.editable);
+        drawActionButton(g, font, panelX + 171, buttonY, 72, "screen.voxymap.objects.delete",
+                selected.editable && selected.kind != Kind.SCHEMATIC);
     }
 
     Action click(double mouseX, double mouseY, int button) {
@@ -171,7 +172,8 @@ final class MapObjectPanel {
             if (inside(mouseX, mouseY, panelX + 9, buttonY, 51, BUTTON_H)) return new Action(ActionType.CENTER, selected);
             if (inside(mouseX, mouseY, panelX + 63, buttonY, 51, BUTTON_H) && selected.followable) return new Action(ActionType.FOLLOW, selected);
             if (inside(mouseX, mouseY, panelX + 117, buttonY, 51, BUTTON_H) && selected.editable) return new Action(ActionType.EDIT, selected);
-            if (inside(mouseX, mouseY, panelX + 171, buttonY, 72, BUTTON_H) && selected.editable) return new Action(ActionType.DELETE, selected);
+            if (inside(mouseX, mouseY, panelX + 171, buttonY, 72, BUTTON_H) && selected.editable
+                    && selected.kind != Kind.SCHEMATIC) return new Action(ActionType.DELETE, selected);
         }
         return Action.consumed();
     }
@@ -241,10 +243,11 @@ final class MapObjectPanel {
             case PLAYER -> "◆";
             case WAYPOINT -> "◇";
             case TERRITORY -> "□";
+            case SCHEMATIC -> "▣";
         };
     }
 
-    enum Kind { PLAYER, WAYPOINT, TERRITORY }
+    enum Kind { PLAYER, WAYPOINT, TERRITORY, SCHEMATIC }
 
     enum ActionType { CONSUMED, REFILTER, SELECT, CENTER, FOLLOW, EDIT, DELETE }
 
@@ -260,7 +263,7 @@ final class MapObjectPanel {
 
     private enum Filter {
         ALL("all", null), PLAYERS("players", Kind.PLAYER), WAYPOINTS("waypoints", Kind.WAYPOINT),
-        TERRITORIES("territories", Kind.TERRITORY);
+        TERRITORIES("territories", Kind.TERRITORY), SCHEMATICS("schematics", Kind.SCHEMATIC);
 
         private final String key;
         private final Kind kind;

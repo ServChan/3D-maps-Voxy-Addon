@@ -104,6 +104,7 @@
   "screen.voxymap.objects.filter.players": "Игроки",
   "screen.voxymap.objects.filter.waypoints": "Метки",
   "screen.voxymap.objects.filter.territories": "Территории",
+  "screen.voxymap.objects.filter.schematics": "Схемы",
   "screen.voxymap.objects.empty": "Ничего не найдено",
   "screen.voxymap.objects.select": "Выберите объект для действий",
   "screen.voxymap.objects.center": "Центр",

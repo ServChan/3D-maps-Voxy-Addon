@@ -2,6 +2,7 @@ package com.voxymap.client.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.voxymap.client.VoxyMapClient;
+import com.voxymap.client.integration.LitematicaPlusBridge;
 import com.voxymap.client.integration.VanillaSquadFlagMapBridge;
 import com.voxymap.client.integration.RemotePlayerMarkers;
 import com.voxymap.client.integration.VanillaSquadServer;
@@ -677,6 +678,7 @@ public class MapScreen extends Screen {
 
     private void drawWorldViewerOverlay(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         drawFlagMarkers(g);
+        drawSchematicPlacements(g, mouseX, mouseY);
         drawWaypoints(g, mouseX, mouseY);
         drawPlayerMarkers(g, mouseX, mouseY);
         drawMapShareSelection(g);
@@ -758,6 +760,11 @@ public class MapScreen extends Screen {
                         territory.centroidX(), viewCenterY, territory.centroidZ(), territory.color(), false, false));
             }
         }
+        for (LitematicaPlusBridge.Placement placement : LitematicaPlusBridge.placements()) {
+            entries.add(new MapObjectPanel.Entry(schematicObjectId(placement), MapObjectPanel.Kind.SCHEMATIC,
+                    placement.name(), schematicDetail(placement), placement.centerX(), placement.maxY(),
+                    placement.centerZ(), schematicColor(placement), false, true));
+        }
         objectPanel.setObjects(entries, selectedObjectId, followingPlayerId);
     }
 
@@ -769,6 +776,10 @@ public class MapScreen extends Screen {
         }
         MapObjectPanel.Entry entry = action.entry();
         if (entry == null) return;
+        if (entry.kind() == MapObjectPanel.Kind.SCHEMATIC) {
+            handleSchematicAction(action.type(), entry);
+            return;
+        }
         if (action.type() == MapObjectPanel.ActionType.SELECT) {
             selectObject(entry);
         } else if (action.type() == MapObjectPanel.ActionType.CENTER) {
@@ -799,6 +810,112 @@ public class MapScreen extends Screen {
 
     private void stopFollowing() {
         followingPlayerId = null;
+    }
+
+    private static final String SCHEMATIC_PREFIX = "schematic:";
+    private static final int SCHEMATIC_COLOR = 0xFF2FC7FF;
+    private static final int SCHEMATIC_SELECTED_COLOR = 0xFF00E5FF;
+    private static final int SCHEMATIC_HIDDEN_COLOR = 0xFF8FA7BF;
+    private List<ScreenRect> schematicLabelRects = List.of();
+    private List<String> schematicLabelIds = List.of();
+
+    private static String schematicObjectId(LitematicaPlusBridge.Placement placement) {
+        return SCHEMATIC_PREFIX + placement.id();
+    }
+
+    private static int schematicColor(LitematicaPlusBridge.Placement placement) {
+        return !placement.shown() ? SCHEMATIC_HIDDEN_COLOR : placement.selected() ? SCHEMATIC_SELECTED_COLOR : SCHEMATIC_COLOR;
+    }
+
+    private static String schematicDetail(LitematicaPlusBridge.Placement placement) {
+        String size = (placement.maxX() - placement.minX()) + " x " + (placement.maxY() - placement.minY()) + " x "
+                + (placement.maxZ() - placement.minZ());
+        return placement.progress() < 0.0 ? size
+                : String.format(java.util.Locale.ROOT, "%.1f%%  ·  %s", placement.progress() * 100.0, size);
+    }
+
+    private void handleSchematicAction(MapObjectPanel.ActionType type, MapObjectPanel.Entry entry) {
+        String id = entry.id().substring(SCHEMATIC_PREFIX.length());
+        selectedObjectId = entry.id();
+        selectedWaypointId = null;
+        if (type == MapObjectPanel.ActionType.DELETE || type == MapObjectPanel.ActionType.FOLLOW) {
+            return;
+        }
+        LitematicaPlusBridge.select(id);
+        if (type == MapObjectPanel.ActionType.CENTER) {
+            stopFollowing();
+            viewCenterX = entry.x();
+            viewCenterY = entry.y();
+            viewCenterZ = entry.z();
+            moveVelocityX = moveVelocityZ = 0.0;
+            syncWorldCamera();
+        } else if (type == MapObjectPanel.ActionType.EDIT) {
+            closeMapView();
+            LitematicaPlusBridge.openEditor(id);
+        }
+    }
+
+    private String hitTestSchematic(double mouseX, double mouseY) {
+        for (int i = 0; i < schematicLabelRects.size(); i++) {
+            if (schematicLabelRects.get(i).contains(mouseX, mouseY)) {
+                return schematicLabelIds.get(i);
+            }
+        }
+        return null;
+    }
+
+    private void drawSchematicPlacements(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        schematicLabelRects = List.of();
+        schematicLabelIds = List.of();
+        if (!VoxyMapCameraController.isActive() || !LitematicaPlusBridge.isAvailable()) {
+            return;
+        }
+        List<ScreenRect> rects = new ArrayList<>();
+        List<String> ids = new ArrayList<>();
+        for (LitematicaPlusBridge.Placement placement : LitematicaPlusBridge.placements()) {
+            int color = schematicColor(placement);
+            double x0 = placement.minX();
+            double y0 = placement.minY();
+            double z0 = placement.minZ();
+            double x1 = placement.maxX();
+            double y1 = placement.maxY();
+            double z1 = placement.maxZ();
+            for (int i = 0; i < 2; i++) {
+                double y = i == 0 ? y0 : y1;
+                draw3DLine(g, x0, y, z0, x1, y, z0, color);
+                draw3DLine(g, x1, y, z0, x1, y, z1, color);
+                draw3DLine(g, x1, y, z1, x0, y, z1, color);
+                draw3DLine(g, x0, y, z1, x0, y, z0, color);
+            }
+            draw3DLine(g, x0, y0, z0, x0, y1, z0, color);
+            draw3DLine(g, x1, y0, z0, x1, y1, z0, color);
+            draw3DLine(g, x1, y0, z1, x1, y1, z1, color);
+            draw3DLine(g, x0, y0, z1, x0, y1, z1, color);
+
+            ScreenPoint labelPoint = projectToScreen(placement.centerX(), y1, placement.centerZ());
+            if (labelPoint == null || labelPoint.x < 6 || labelPoint.x >= width - 6
+                    || labelPoint.y < 12 || labelPoint.y >= height - 6) {
+                continue;
+            }
+            String label = placement.progress() < 0.0 ? placement.name()
+                    : placement.name() + "  " + String.format(java.util.Locale.ROOT, "%.1f%%", placement.progress() * 100.0);
+            int labelWidth = minecraft.font.width(label) + 8;
+            int labelX = Mth.clamp(labelPoint.x - labelWidth / 2, 3, Math.max(3, width - labelWidth - 3));
+            int labelY = labelPoint.y - 14;
+            ScreenRect rect = new ScreenRect(labelX, labelY, labelWidth, 11);
+            boolean hovered = rect.contains(mouseX, mouseY) || schematicObjectId(placement).equals(selectedObjectId);
+            g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, hovered ? 0xEE030914 : 0xCC030914);
+            g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, color);
+            if (placement.progress() >= 0.0) {
+                g.fill(labelX, labelY + 10, labelX + (int) Math.round(labelWidth * Math.min(1.0, placement.progress())),
+                        labelY + 11, 0xFF55FF55);
+            }
+            g.text(minecraft.font, label, labelX + 4, labelY + 2, 0xFFE9F2FF);
+            rects.add(rect);
+            ids.add(placement.id());
+        }
+        schematicLabelRects = List.copyOf(rects);
+        schematicLabelIds = List.copyOf(ids);
     }
 
     private PlayerMarker playerByObjectId(String id) {
@@ -2263,6 +2380,21 @@ public class MapScreen extends Screen {
                 } else {
                     selectedWaypointId = hit.id();
                     selectedObjectId = waypointObjectId(hit);
+                }
+                lastLeftPressNanos = 0L;
+                return true;
+            }
+
+            String schematicHit = hitTestSchematic(event.x(), event.y());
+            if (schematicHit != null) {
+                String objectId = SCHEMATIC_PREFIX + schematicHit;
+                if (objectId.equals(selectedObjectId)) {
+                    closeMapView();
+                    LitematicaPlusBridge.openEditor(schematicHit);
+                } else {
+                    selectedObjectId = objectId;
+                    selectedWaypointId = null;
+                    LitematicaPlusBridge.select(schematicHit);
                 }
                 lastLeftPressNanos = 0L;
                 return true;

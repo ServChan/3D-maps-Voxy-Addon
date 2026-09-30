@@ -104,6 +104,7 @@
   "screen.voxymap.objects.filter.players": "Gracze",
   "screen.voxymap.objects.filter.waypoints": "Punkty",
   "screen.voxymap.objects.filter.territories": "Terytoria",
+  "screen.voxymap.objects.filter.schematics": "Schematy",
   "screen.voxymap.objects.empty": "Nic nie znaleziono",
   "screen.voxymap.objects.select": "Wybierz obiekt",
   "screen.voxymap.objects.center": "Wyśrodkuj",

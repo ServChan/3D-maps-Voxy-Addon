@@ -11,6 +11,9 @@ public final class VoxyMapCameraController {
     private static float cameraYaw;
     private static float cameraPitch;
     private static float fov;
+    private static double centerX;
+    private static double centerY;
+    private static double centerZ;
 
     private VoxyMapCameraController() {
     }
@@ -45,6 +48,9 @@ public final class VoxyMapCameraController {
         cameraX = centerX - forwardX * horizontalRange;
         cameraY = centerY + verticalRange;
         cameraZ = centerZ - forwardZ * horizontalRange;
+        VoxyMapCameraController.centerX = centerX;
+        VoxyMapCameraController.centerY = centerY;
+        VoxyMapCameraController.centerZ = centerZ;
         cameraYaw = yawDegrees;
         cameraPitch = pitchDegrees;
         active = true;
@@ -64,6 +70,18 @@ public final class VoxyMapCameraController {
 
     public static double cameraZ() {
         return cameraZ;
+    }
+
+    public static double centerX() {
+        return centerX;
+    }
+
+    public static double centerY() {
+        return centerY;
+    }
+
+    public static double centerZ() {
+        return centerZ;
     }
 
     public static float cameraYaw() {

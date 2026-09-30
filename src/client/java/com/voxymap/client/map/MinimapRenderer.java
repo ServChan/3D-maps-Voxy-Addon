@@ -1,6 +1,7 @@
 package com.voxymap.client.map;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.voxymap.client.integration.LitematicaPlusBridge;
 import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.gui.PlayerHeadIcon;
 import me.cortex.voxy.commonImpl.WorldIdentifier;
@@ -295,6 +296,30 @@ public final class MinimapRenderer {
                     drawOffscreenWaypoint(g, centerX, centerY, edgeHalf, dx, dz, waypoint.color());
                 }
             }
+        }
+
+        for (LitematicaPlusBridge.Placement placement : LitematicaPlusBridge.placements()) {
+            if (!placement.shown()) {
+                continue;
+            }
+            int color = placement.selected() ? 0xFF00E5FF : 0xCC2FC7FF;
+            double x0 = placement.minX();
+            double z0 = placement.minZ();
+            double x1 = placement.maxX();
+            double z1 = placement.maxZ();
+            double reach = displaySize * 1.5;
+            if (x1 < player.getX() - reach || x0 > player.getX() + reach || z1 < player.getZ() - reach
+                    || z0 > player.getZ() + reach) {
+                continue;
+            }
+            x0 = Math.max(x0, player.getX() - reach);
+            x1 = Math.min(x1, player.getX() + reach);
+            z0 = Math.max(z0, player.getZ() - reach);
+            z1 = Math.min(z1, player.getZ() + reach);
+            drawGridLine(g, player, centerX, centerY, x0, z0, x1, z0, cosA, sinA, color);
+            drawGridLine(g, player, centerX, centerY, x1, z0, x1, z1, cosA, sinA, color);
+            drawGridLine(g, player, centerX, centerY, x1, z1, x0, z1, cosA, sinA, color);
+            drawGridLine(g, player, centerX, centerY, x0, z1, x0, z0, cosA, sinA, color);
         }
 
         if (cosA == 1.0 && sinA == 0.0) {

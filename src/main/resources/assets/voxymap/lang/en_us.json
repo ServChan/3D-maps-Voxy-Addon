@@ -104,6 +104,7 @@
   "screen.voxymap.objects.filter.players": "Players",
   "screen.voxymap.objects.filter.waypoints": "Waypoints",
   "screen.voxymap.objects.filter.territories": "Territories",
+  "screen.voxymap.objects.filter.schematics": "Schematics",
   "screen.voxymap.objects.empty": "Nothing found",
   "screen.voxymap.objects.select": "Select an object for actions",
   "screen.voxymap.objects.center": "Center",
