@@ -16,6 +16,23 @@ public final class VoxyWorldData {
     private VoxyWorldData() {
     }
 
+    static boolean emptyQuarter(long[] voxels, int halfX, int halfY, int halfZ) {
+        int baseX = halfX << 4;
+        int baseY = halfY << 4;
+        int baseZ = halfZ << 4;
+        for (int y = 0; y < 16; y++) {
+            for (int z = 0; z < 16; z++) {
+                int row = ((baseY + y) << 10) | ((baseZ + z) << 5) | baseX;
+                for (int x = 0; x < 16; x++) {
+                    if (!Mapper.isAir(voxels[row + x])) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
     public static BlockState[] chunkSectionPadded(Level level, int sectionX, int sectionY, int sectionZ) {
         if (level == null) {
             return null;
@@ -41,6 +58,9 @@ public final class VoxyWorldData {
                 return null;
             }
             data[centre] = held[centre]._unsafeGetRawDataArray();
+            if (emptyQuarter(data[centre], sectionX & 1, sectionY & 1, sectionZ & 1)) {
+                return null;
+            }
             Mapper mapper = engine.getMapper();
             BlockState air = Blocks.AIR.defaultBlockState();
             BlockState[] states = new BlockState[PADDED_VOLUME];

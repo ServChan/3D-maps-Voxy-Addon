@@ -261,7 +261,7 @@ final class MapObjectPanel {
         }
     }
 
-    private enum Filter {
+    enum Filter {
         ALL("all", null), PLAYERS("players", Kind.PLAYER), WAYPOINTS("waypoints", Kind.WAYPOINT),
         TERRITORIES("territories", Kind.TERRITORY), SCHEMATICS("schematics", Kind.SCHEMATIC);
 
@@ -274,8 +274,14 @@ final class MapObjectPanel {
         }
 
         private Filter next() {
+            return next(com.voxymap.client.integration.LitematicaPlusBridge.isAvailable());
+        }
+
+        Filter next(boolean schematicsInstalled) {
             Filter[] values = values();
-            return values[(ordinal() + 1) % values.length];
+            Filter candidate = values[(ordinal() + 1) % values.length];
+            return candidate == SCHEMATICS && !schematicsInstalled ? values[(candidate.ordinal() + 1) % values.length]
+                    : candidate;
         }
     }
 }
