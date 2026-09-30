@@ -1,5 +1,6 @@
 package com.voxymap.client.map;
 
+import java.util.List;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.voxymap.client.integration.LitematicaPlusBridge;
 import com.voxymap.client.VoxyMapClient;
@@ -298,7 +299,8 @@ public final class MinimapRenderer {
             }
         }
 
-        for (LitematicaPlusBridge.Placement placement : LitematicaPlusBridge.placements()) {
+        for (LitematicaPlusBridge.Placement placement : VoxyMapSettings.schematicsEnabled()
+                ? LitematicaPlusBridge.placements() : List.<LitematicaPlusBridge.Placement>of()) {
             if (!placement.shown()) {
                 continue;
             }

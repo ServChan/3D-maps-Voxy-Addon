@@ -91,6 +91,7 @@
   "screen.voxymap.settings.mobs": "Show mobs",
   "screen.voxymap.settings.minimaprotate": "Rotate minimap",
   "screen.voxymap.settings.chunkgrid": "Chunk grid",
+  "screen.voxymap.settings.schematics": "Schematics (Litematica Plus)",
   "screen.voxymap.settings.deathpoints": "Death points",
   "screen.voxymap.settings.fogsuppression": "Fog suppression",
   "screen.voxymap.waypoint.death_name": "Death point",

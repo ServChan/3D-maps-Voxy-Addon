@@ -47,6 +47,7 @@ public final class SettingsCatalog {
         VANILLASQUAD_PLAYERS(Group.LAYERS, "screen.voxymap.settings.vanillasquad", Availability.EVERYWHERE, true),
         VANILLASQUAD_FLAGS(Group.LAYERS, "screen.voxymap.settings.vanillasquadflags", Availability.EVERYWHERE, true),
         VANILLASQUAD_MAP(Group.LAYERS, "screen.voxymap.settings.vanillasquadmap", Availability.IN_WORLD, true),
+        SCHEMATICS(Group.LAYERS, "screen.voxymap.settings.schematics", Availability.EVERYWHERE, false),
 
         MINIMAP(Group.MINIMAP, "screen.voxymap.settings.minimap", Availability.EVERYWHERE, false),
         MINIMAP_ROTATE(Group.MINIMAP, "screen.voxymap.settings.minimaprotate", Availability.EVERYWHERE, false),
@@ -99,6 +100,11 @@ public final class SettingsCatalog {
 
     public static List<Section> sections(boolean inWorld, boolean inMap, boolean onVanillaSquad,
                                          boolean playerMarkersBuiltIn) {
+        return sections(inWorld, inMap, onVanillaSquad, playerMarkersBuiltIn, true);
+    }
+
+    public static List<Section> sections(boolean inWorld, boolean inMap, boolean onVanillaSquad,
+                                         boolean playerMarkersBuiltIn, boolean schematicsInstalled) {
         List<Section> sections = new ArrayList<>();
         for (Group group : Group.values()) {
             List<Entry> entries = new ArrayList<>();
@@ -106,6 +112,7 @@ public final class SettingsCatalog {
                 if (entry.group != group) continue;
                 if (entry.vanillaSquadOnly && !onVanillaSquad) continue;
                 if (entry == Entry.VANILLASQUAD_PLAYERS && !playerMarkersBuiltIn) continue;
+                if (entry == Entry.SCHEMATICS && !schematicsInstalled) continue;
                 boolean available = switch (entry.availability) {
                     case EVERYWHERE -> true;
                     case IN_WORLD -> inWorld || inMap;

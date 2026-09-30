@@ -13,6 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SettingsCatalogTest {
+    @Test
+    void schematicsRowNeedsLitematicaPlus() {
+        List<SettingsCatalog.Entry> with = new ArrayList<>();
+        List<SettingsCatalog.Entry> without = new ArrayList<>();
+        SettingsCatalog.sections(true, true, true, true, true).forEach(section -> with.addAll(section.entries()));
+        SettingsCatalog.sections(true, true, true, true, false).forEach(section -> without.addAll(section.entries()));
+        assertTrue(with.contains(SettingsCatalog.Entry.SCHEMATICS));
+        assertFalse(without.contains(SettingsCatalog.Entry.SCHEMATICS));
+    }
+
     private static Set<SettingsCatalog.Entry> entries(boolean inWorld, boolean inMap, boolean onVanillaSquad) {
         List<SettingsCatalog.Entry> flat = new ArrayList<>();
         SettingsCatalog.sections(inWorld, inMap, onVanillaSquad).forEach(section -> flat.addAll(section.entries()));

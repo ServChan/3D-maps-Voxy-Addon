@@ -9,67 +9,84 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 public final class VoxyWorldData {
-    public static final int API_VERSION = 1;
-    private static final int CHUNK_SECTION_VOLUME = 4096;
+    public static final int API_VERSION = 2;
+    public static final int PADDED_SIZE = 18;
+    private static final int PADDED_VOLUME = PADDED_SIZE * PADDED_SIZE * PADDED_SIZE;
 
     private VoxyWorldData() {
     }
 
-    public static BlockState[] chunkSection(Level level, int sectionX, int sectionY, int sectionZ) {
+    public static BlockState[] chunkSectionPadded(Level level, int sectionX, int sectionY, int sectionZ) {
         if (level == null) {
             return null;
         }
+        WorldSection[] held = new WorldSection[8];
         try {
             WorldEngine engine = WorldIdentifier.ofEngineNullable(level);
             if (engine == null) {
                 return null;
             }
-            WorldSection section = engine.acquireIfExists(0, sectionX >> 1, sectionY >> 1, sectionZ >> 1);
-            if (section == null) {
+            int startX = (sectionX << 4) - 1;
+            int startY = (sectionY << 4) - 1;
+            int startZ = (sectionZ << 4) - 1;
+            int baseX = startX >> 5;
+            int baseY = startY >> 5;
+            int baseZ = startZ >> 5;
+            long[][] data = new long[8][];
+            boolean[] tried = new boolean[8];
+            int centre = ((sectionX >> 1) - baseX) | ((sectionZ >> 1) - baseZ) << 1 | ((sectionY >> 1) - baseY) << 2;
+            held[centre] = engine.acquireIfExists(0, sectionX >> 1, sectionY >> 1, sectionZ >> 1);
+            tried[centre] = true;
+            if (held[centre] == null) {
                 return null;
             }
-            long[] data;
-            try {
-                data = section.copyData();
-            } finally {
-                section.release();
+            data[centre] = held[centre]._unsafeGetRawDataArray();
+            Mapper mapper = engine.getMapper();
+            BlockState air = Blocks.AIR.defaultBlockState();
+            BlockState[] states = new BlockState[PADDED_VOLUME];
+            int lastId = -1;
+            BlockState lastState = air;
+            int index = 0;
+            for (int dy = 0; dy < PADDED_SIZE; dy++) {
+                int y = startY + dy;
+                for (int dz = 0; dz < PADDED_SIZE; dz++) {
+                    int z = startZ + dz;
+                    for (int dx = 0; dx < PADDED_SIZE; dx++, index++) {
+                        int x = startX + dx;
+                        int slot = ((x >> 5) - baseX) | ((z >> 5) - baseZ) << 1 | ((y >> 5) - baseY) << 2;
+                        if (!tried[slot]) {
+                            tried[slot] = true;
+                            held[slot] = engine.acquireIfExists(0, x >> 5, y >> 5, z >> 5);
+                            data[slot] = held[slot] == null ? null : held[slot]._unsafeGetRawDataArray();
+                        }
+                        long[] voxels = data[slot];
+                        if (voxels == null) {
+                            continue;
+                        }
+                        long voxel = voxels[((y & 31) << 10) | ((z & 31) << 5) | (x & 31)];
+                        if (Mapper.isAir(voxel)) {
+                            states[index] = air;
+                            continue;
+                        }
+                        int id = Mapper.getBlockId(voxel);
+                        if (id != lastId) {
+                            BlockState state = mapper.getBlockStateFromBlockId(id);
+                            lastState = state == null ? air : state;
+                            lastId = id;
+                        }
+                        states[index] = lastState;
+                    }
+                }
             }
-            return extract(data, engine.getMapper(), sectionX & 1, sectionY & 1, sectionZ & 1);
+            return states;
         } catch (RuntimeException | LinkageError exception) {
             return null;
-        }
-    }
-
-    private static BlockState[] extract(long[] data, Mapper mapper, int halfX, int halfY, int halfZ) {
-        BlockState air = Blocks.AIR.defaultBlockState();
-        BlockState[] states = new BlockState[CHUNK_SECTION_VOLUME];
-        int baseX = halfX << 4;
-        int baseY = halfY << 4;
-        int baseZ = halfZ << 4;
-        int lastId = -1;
-        BlockState lastState = air;
-        boolean anything = false;
-        for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 16; z++) {
-                int row = ((baseY + y) << 10) | ((baseZ + z) << 5) | baseX;
-                int target = (y << 8) | (z << 4);
-                for (int x = 0; x < 16; x++) {
-                    long voxel = data[row + x];
-                    if (Mapper.isAir(voxel)) {
-                        states[target + x] = air;
-                        continue;
-                    }
-                    int id = Mapper.getBlockId(voxel);
-                    if (id != lastId) {
-                        BlockState state = mapper.getBlockStateFromBlockId(id);
-                        lastState = state == null ? air : state;
-                        lastId = id;
-                    }
-                    states[target + x] = lastState;
-                    anything = true;
+        } finally {
+            for (WorldSection section : held) {
+                if (section != null) {
+                    section.release();
                 }
             }
         }
-        return anything ? states : null;
     }
 }

@@ -91,6 +91,7 @@
   "screen.voxymap.settings.mobs": "Mostrar criaturas",
   "screen.voxymap.settings.minimaprotate": "Girar minimapa",
   "screen.voxymap.settings.chunkgrid": "Cuadrícula de chunks",
+  "screen.voxymap.settings.schematics": "Esquemas (Litematica Plus)",
   "screen.voxymap.settings.deathpoints": "Puntos de muerte",
   "screen.voxymap.settings.fogsuppression": "Supresión de niebla",
   "screen.voxymap.waypoint.death_name": "Punto de muerte",

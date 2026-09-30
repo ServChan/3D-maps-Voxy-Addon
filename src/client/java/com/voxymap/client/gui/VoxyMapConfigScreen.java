@@ -100,7 +100,8 @@ public final class VoxyMapConfigScreen extends Screen {
 
         int y = 0;
         for (SettingsCatalog.Section section : SettingsCatalog.sections(
-                worldId != null, false, VanillaSquadServer.isConnected(), RemotePlayerMarkers.available())) {
+                worldId != null, false, VanillaSquadServer.isConnected(), RemotePlayerMarkers.available(),
+                com.voxymap.client.integration.LitematicaPlusBridge.isAvailable())) {
             items.add(new Item(Kind.HEADER, y, HEADER_HEIGHT, Component.translatable(section.group().titleKey()), null, null));
             y += HEADER_HEIGHT;
             for (SettingsCatalog.Entry entry : section.entries()) {
@@ -151,6 +152,7 @@ public final class VoxyMapConfigScreen extends Screen {
             case MINIMAP_ROTATE -> toggle(controlWidth, VoxyMapSettings::minimapRotates, VoxyMapSettings::toggleMinimapRotates);
             case MOBS -> toggle(controlWidth, VoxyMapSettings::mobsEnabled, VoxyMapSettings::toggleMobs);
             case CHUNK_GRID -> toggle(controlWidth, VoxyMapSettings::chunkGridEnabled, VoxyMapSettings::toggleChunkGrid);
+            case SCHEMATICS -> toggle(controlWidth, VoxyMapSettings::schematicsEnabled, VoxyMapSettings::toggleSchematics);
             case DIAGNOSTICS -> {
                 Button button = Button.builder(Component.translatable(SettingsValues.diagnosticsKey()), pressed -> {
                 }).bounds(controlX, 0, controlWidth, CONTROL_HEIGHT).build();

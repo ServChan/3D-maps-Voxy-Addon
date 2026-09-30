@@ -572,6 +572,7 @@ public class MapScreen extends Screen {
             case MINIMAP_ROTATE -> VoxyMapSettings.toggleMinimapRotates();
             case MOBS -> VoxyMapSettings.toggleMobs();
             case CHUNK_GRID -> VoxyMapSettings.toggleChunkGrid();
+            case SCHEMATICS -> VoxyMapSettings.toggleSchematics();
             case SYNC_ADDRESS -> {
                 if (worldId != null) beginEditSyncAddress(worldId);
             }
@@ -760,7 +761,8 @@ public class MapScreen extends Screen {
                         territory.centroidX(), viewCenterY, territory.centroidZ(), territory.color(), false, false));
             }
         }
-        for (LitematicaPlusBridge.Placement placement : LitematicaPlusBridge.placements()) {
+        for (LitematicaPlusBridge.Placement placement : VoxyMapSettings.schematicsEnabled()
+                ? LitematicaPlusBridge.placements() : List.<LitematicaPlusBridge.Placement>of()) {
             entries.add(new MapObjectPanel.Entry(schematicObjectId(placement), MapObjectPanel.Kind.SCHEMATIC,
                     placement.name(), schematicDetail(placement), placement.centerX(), placement.maxY(),
                     placement.centerZ(), schematicColor(placement), false, true));
@@ -867,7 +869,8 @@ public class MapScreen extends Screen {
     private void drawSchematicPlacements(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         schematicLabelRects = List.of();
         schematicLabelIds = List.of();
-        if (!VoxyMapCameraController.isActive() || !LitematicaPlusBridge.isAvailable()) {
+        if (!VoxyMapCameraController.isActive() || !LitematicaPlusBridge.isAvailable()
+                || !VoxyMapSettings.schematicsEnabled()) {
             return;
         }
         List<ScreenRect> rects = new ArrayList<>();
@@ -1861,7 +1864,7 @@ public class MapScreen extends Screen {
         String syncErrorDetail = syncStatus == WaypointManager.SyncStatus.ERROR
                 ? WaypointManager.syncErrorDetail(worldId) : null;
         List<SettingsCatalog.Section> sections = SettingsCatalog.sections(true, true, VanillaSquadServer.isConnected(),
-                RemotePlayerMarkers.available());
+                RemotePlayerMarkers.available(), LitematicaPlusBridge.isAvailable());
 
         int naturalPanelH = SETTINGS_TITLE_HEIGHT + SETTINGS_BOTTOM_PADDING
                 + (syncErrorDetail != null ? SETTINGS_ERROR_DETAIL_HEIGHT : 0);
@@ -1962,6 +1965,7 @@ public class MapScreen extends Screen {
             case MINIMAP_ROTATE -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.minimapRotates());
             case MOBS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.mobsEnabled());
             case CHUNK_GRID -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.chunkGridEnabled());
+            case SCHEMATICS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.schematicsEnabled());
             case SYNC_ADDRESS -> drawSettingValue(g, x, y, entry, address != null ? address : notSet, 0xFFFFFFFF);
             case SYNC_PASSWORD -> {
                 String password = worldId != null ? WaypointSyncSettings.password(worldId) : null;

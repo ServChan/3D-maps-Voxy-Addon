@@ -24,7 +24,7 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 - Map screenshot (`F2` with the map open): one frame without panels, HUD and chat, optionally keeping the markers.
 - Optional singleplayer pause and adjustable camera speed.
 - Optional handoff to Xaero's World Map with a return button.
-- With Litematica Plus LTS installed, schematic placements appear on the map as outlined boxes with their name and build progress, in the Objects panel (filter Schematics) and as a footprint on the minimap. Click a label to select the placement, click it again or press Edit to open its editor; Center flies the map camera to it.
+- With Litematica Plus LTS installed, schematic placements appear on the map as outlined boxes with their name and build progress, in the Objects panel (filter Schematics) and as a footprint on the minimap. Click a label to select the placement, click it again or press Edit to open its editor; Center flies the map camera to it. The Schematics (Litematica Plus) layer setting hides all of it, including the ghost blocks Litematica Plus draws on the map. Litematica Plus also reads the blocks Voxy has stored through this mod to verify schematic parts whose chunks are not loaded.
 
 ### Waypoints
 
@@ -179,7 +179,7 @@ Minecraft 26.3, Java 25, Fabric Loader 0.19.5 или новее, Fabric API и V
 - Панель объектов (`O`) ищет игроков, метки и территории VanillaSquad. Объект можно показать, изменить, удалить, а за игроком — следить (`F`).
 - `F2` на открытой карте сохраняет скриншот без панелей, HUD и чата. Метки остаются на снимке, только если в настройках выбрано «С метками».
 - Кнопка перехода в Xaero's World Map, если он установлен, и кнопка возврата обратно.
-- Если установлен Litematica Plus LTS, размещения схем видны на карте рамкой с названием и процентом готовности, в панели «Объекты» (фильтр «Схемы») и контуром на миникарте. Клик по подписи выбирает размещение, повторный клик или «Править» открывает его редактор, «Центр» переносит камеру карты к нему.
+- Если установлен Litematica Plus LTS, размещения схем видны на карте рамкой с названием и процентом готовности, в панели «Объекты» (фильтр «Схемы») и контуром на миникарте. Клик по подписи выбирает размещение, повторный клик или «Править» открывает его редактор, «Центр» переносит камеру карты к нему. Слой «Схемы (Litematica Plus)» в настройках прячет всё это вместе с блоками-призраками, которые Litematica Plus рисует на карте. Litematica Plus также читает через этот мод блоки, сохранённые Voxy, чтобы сверять части схемы в непрогруженных чанках.
 
 ### Управление на карте
 
