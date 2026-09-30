@@ -12,7 +12,10 @@ public final class LitematicaPlusBridge {
     private static final int FIELD_COUNT = 11;
     private static final int MAX_PLACEMENTS = 256;
     private static final Accessor ACCESSOR = resolveAccessor();
+    private static final long CACHE_NANOS = 100_000_000L;
     private static boolean failureLogged;
+    private static long cachedAtNanos = Long.MIN_VALUE / 2;
+    private static List<Placement> cached = List.of();
 
     public record Placement(String id, String name, int minX, int minY, int minZ, int maxX, int maxY, int maxZ,
                             double progress, boolean selected, boolean shown) {
@@ -39,6 +42,16 @@ public final class LitematicaPlusBridge {
         if (ACCESSOR == null) {
             return List.of();
         }
+        long now = System.nanoTime();
+        if (now - cachedAtNanos < CACHE_NANOS) {
+            return cached;
+        }
+        cachedAtNanos = now;
+        cached = query();
+        return cached;
+    }
+
+    private static List<Placement> query() {
         try {
             Object value = ACCESSOR.placements.invoke(null);
             if (!(value instanceof List<?> rows)) {
@@ -91,6 +104,7 @@ public final class LitematicaPlusBridge {
     }
 
     public static boolean select(String id) {
+        cachedAtNanos = Long.MIN_VALUE / 2;
         return call(ACCESSOR == null ? null : ACCESSOR.select, id);
     }
 

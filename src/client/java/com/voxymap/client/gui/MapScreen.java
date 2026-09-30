@@ -2284,8 +2284,26 @@ public class MapScreen extends Screen {
         ScreenPoint p1 = projectToScreen(x1, y1, z1);
         ScreenPoint p2 = projectToScreen(x2, y2, z2);
         if (p1 != null && p2 != null) {
-            drawSolidLine(g, p1.x, p1.y, p2.x, p2.y, color);
+            drawSegment(g, p1.x, p1.y, p2.x, p2.y, color);
         }
+    }
+
+    private void drawSegment(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int color) {
+        double[] clipped = clipLineToViewport(x1, y1, x2, y2);
+        if (clipped == null) {
+            return;
+        }
+        double dx = clipped[2] - clipped[0];
+        double dy = clipped[3] - clipped[1];
+        double length = Math.hypot(dx, dy);
+        if (length < 1.0) {
+            return;
+        }
+        g.pose().pushMatrix();
+        g.pose().translate((float) clipped[0], (float) clipped[1]);
+        g.pose().rotate((float) Math.atan2(dy, dx));
+        g.fill(0, 0, (int) Math.ceil(length) + 1, 1, color);
+        g.pose().popMatrix();
     }
 
     @Override
