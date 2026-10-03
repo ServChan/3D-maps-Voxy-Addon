@@ -32,7 +32,8 @@
   },
   "suggests": {
     "iris": "*",
-    "xaeroworldmap": ">=1.45.0"
+    "xaeroworldmap": ">=1.45.0",
+    "spatial-gui": "*"
   },
   "custom": {
     "modmenu": {

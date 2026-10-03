@@ -18,6 +18,7 @@
     "MDICSectionRendererMixin",
     "MinecraftMixin",
     "ScreenshotMixin",
+    "SpatialGuiClientMixin",
     "WeatherEffectRendererMixin",
     "VoxyClientMixin",
     "VoxyNodeManagerMixin",

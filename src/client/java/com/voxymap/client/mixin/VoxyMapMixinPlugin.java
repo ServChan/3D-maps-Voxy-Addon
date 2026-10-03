@@ -10,6 +10,7 @@ import java.util.Set;
 
 public final class VoxyMapMixinPlugin implements IMixinConfigPlugin {
     private static final String IRIS_MIXIN_PREFIX = "com.voxymap.client.mixin.Iris";
+    private static final String SPATIAL_GUI_MIXIN_PREFIX = "com.voxymap.client.mixin.SpatialGui";
 
     @Override
     public void onLoad(String mixinPackage) {
@@ -22,8 +23,13 @@ public final class VoxyMapMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        return !mixinClassName.startsWith(IRIS_MIXIN_PREFIX)
-                || FabricLoader.getInstance().isModLoaded("iris");
+        if (mixinClassName.startsWith(IRIS_MIXIN_PREFIX)) {
+            return FabricLoader.getInstance().isModLoaded("iris");
+        }
+        if (mixinClassName.startsWith(SPATIAL_GUI_MIXIN_PREFIX)) {
+            return FabricLoader.getInstance().isModLoaded("spatial-gui");
+        }
+        return true;
     }
 
     @Override

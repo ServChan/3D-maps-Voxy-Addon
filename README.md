@@ -57,7 +57,7 @@ English, Russian, Spanish (Spain and Mexico), and Polish translations.
 - Fabric API.
 - Voxy `0.2.20-beta` or newer for Minecraft 26.3. No Voxy for 26.3 is published yet; VoxyMap is compiled against a build of upstream Voxy's `263` branch (`tools/deps/voxy-0.2.20-beta-26.3.jar`). Upstream marks that branch as not release-ready and warns that it can corrupt Voxy worlds saved by older versions, so back up `.minecraft/.voxy` first. It also refuses Minecraft's Vulkan backend, so the game has to run on OpenGL. The Nether roof removal and ore mask shader patches target Voxy's internal shader layout; if a newer Voxy changes it, those two features switch themselves off instead of breaking the game.
 
-Iris, Xaero's World Map, Litematica Plus LTS and Mod Menu are optional integrations. The mod is client-only and does not need to be installed on the server.
+Iris, Xaero's World Map, Litematica Plus LTS, Spatial GUI and Mod Menu are optional integrations (Spatial GUI never turns the map screen into a 3D panel). The mod is client-only and does not need to be installed on the server.
 
 ## Controls
 
@@ -166,7 +166,7 @@ VoxyMap LTS — поддерживаемый клиентский форк 3D Ma
 
 ### Требования
 
-Minecraft 26.3, Java 25, Fabric Loader 0.19.5 или новее, Fabric API и Voxy 0.2.20-beta или новее для Minecraft 26.3. Опубликованного Voxy под 26.3 пока нет: VoxyMap собран против сборки ветки `263` из upstream Voxy (`tools/deps/voxy-0.2.20-beta-26.3.jar`). Автор Voxy помечает её как незаконченную и предупреждает, что она может испортить миры Voxy, сохранённые старыми версиями, поэтому сначала сделайте копию `.minecraft/.voxy`. Эта сборка не запускается на Vulkan-бэкенде, игра должна работать на OpenGL. Iris, Xaero's World Map, Litematica Plus LTS и Mod Menu необязательны.
+Minecraft 26.3, Java 25, Fabric Loader 0.19.5 или новее, Fabric API и Voxy 0.2.20-beta или новее для Minecraft 26.3. Опубликованного Voxy под 26.3 пока нет: VoxyMap собран против сборки ветки `263` из upstream Voxy (`tools/deps/voxy-0.2.20-beta-26.3.jar`). Автор Voxy помечает её как незаконченную и предупреждает, что она может испортить миры Voxy, сохранённые старыми версиями, поэтому сначала сделайте копию `.minecraft/.voxy`. Эта сборка не запускается на Vulkan-бэкенде, игра должна работать на OpenGL. Iris, Xaero's World Map, Litematica Plus LTS, Spatial GUI и Mod Menu необязательны (Spatial GUI не превращает экран карты в 3D-панель).
 
 ### Полноэкранная карта
 

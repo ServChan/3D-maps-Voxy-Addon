@@ -63,7 +63,10 @@ cannot be read.
 ## Mixin gating
 
 `VoxyMapMixinPlugin` applies a mixin whose class name starts with `Iris` only when Iris is loaded, so Iris
-classes are never touched without Iris. A new mixin that targets Iris must use that prefix; any other
+classes are never touched without Iris, and one starting with `SpatialGui` only when Spatial GUI (`spatial-gui`)
+is loaded. `SpatialGuiClientMixin` makes `SpatialGUIClient.shouldHookScreen` return `false` for `MapScreen`:
+Spatial GUI would otherwise (with its "all screens" option or a manual whitelist entry) draw the map as a 3D plane
+and move the camera, fighting `CameraMixin`. Its other hooks are all gated by that method. A new mixin that targets Iris must use that prefix; any other
 optional target (Xaero) uses `@Pseudo` plus `require = 0`, as `XaeroGuiMapMixin` does.
 
 ## Minimap heads
