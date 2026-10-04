@@ -1,5 +1,6 @@
 package com.voxymap.client.mixin;
 
+import com.voxymap.client.gui.WindowMapScreen;
 import com.voxymap.client.gui.MapScreen;
 import net.minecraft.client.gui.screens.Screen;
 import org.spongepowered.asm.mixin.Mixin;
@@ -12,9 +13,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets = "org.tastytrash.spatialGUI.client.SpatialGUIClient", remap = false)
 public abstract class SpatialGuiClientMixin {
     @Inject(method = "shouldHookScreen", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private static void voxymap$keepMapFlat(Screen screen, CallbackInfoReturnable<Boolean> cir) {
+    private static void voxymap$chooseMapScreens(Screen screen, CallbackInfoReturnable<Boolean> cir) {
         if (screen instanceof MapScreen) {
             cir.setReturnValue(false);
+        } else if (screen instanceof WindowMapScreen) {
+            cir.setReturnValue(true);
         }
     }
 }

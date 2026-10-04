@@ -325,9 +325,9 @@
       "dot": "amber",
       "title": "Two jars from one build",
       "items": [
-        "voxy-map-<version>.jar includes the playerMarkers source set",
-        "voxy-map-<version>-no-player-markers.jar leaves it out; RemotePlayerMarkers finds no class and the players row disappears",
-        "Iris mixins apply only when Iris is loaded (VoxyMapMixinPlugin); Xaero is reached by reflection"
+        "voxy-map-<version>.jar is the release build and leaves the playerMarkers source set out; RemotePlayerMarkers finds no class and the players row disappears",
+        "voxy-map-<version>-player-markers.jar (task playerMarkersJar) adds that source set",
+        "Iris and SpatialGui mixins apply only when their mod is loaded (VoxyMapMixinPlugin); Xaero is reached by reflection"
       ]
     }
   ]

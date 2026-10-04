@@ -1,6 +1,8 @@
 package com.voxymap.client;
 
+import com.voxymap.client.gui.WindowMapScreen;
 import com.voxymap.client.gui.MapScreen;
+import com.voxymap.client.integration.SpatialGuiCompat;
 import com.voxymap.client.compat.MinecraftCompat;
 import com.voxymap.client.map.AtomicPropertiesWriter;
 import com.voxymap.client.map.DeathWaypointTracker;
@@ -49,7 +51,7 @@ public class VoxyMapClient implements ClientModInitializer {
                 if (MinecraftCompat.currentScreen(client) != null || client.level == null || client.player == null) {
                     continue;
                 }
-                MinecraftCompat.showScreen(client, new MapScreen());
+                MinecraftCompat.showScreen(client, SpatialGuiCompat.opensFlatMap() ? new WindowMapScreen() : new MapScreen());
             }
 
             MapShareClient.stopIfWorldChanged(client);

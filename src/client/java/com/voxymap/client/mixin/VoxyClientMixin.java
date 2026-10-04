@@ -1,6 +1,7 @@
 package com.voxymap.client.mixin;
 
 import com.voxymap.client.map.VoxyMapCameraController;
+import com.voxymap.client.map.WindowMapRenderer;
 import me.cortex.voxy.client.VoxyClient;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -11,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class VoxyClientMixin {
     @Inject(method = "disableSodiumChunkRender", at = @At("HEAD"), cancellable = true, require = 0)
     private static void voxymap$useCachedLodsForWholeMap(CallbackInfoReturnable<Boolean> cir) {
-        if (VoxyMapCameraController.isActive()) {
+        if (VoxyMapCameraController.isActive() || WindowMapRenderer.rendering()) {
             cir.setReturnValue(true);
         }
     }

@@ -40,6 +40,8 @@ public final class SettingsCatalog {
         TIME_OF_DAY(Group.GENERAL, "screen.voxymap.settings.timeofday", Availability.EVERYWHERE, false),
         FOG_SUPPRESSION(Group.GENERAL, "screen.voxymap.settings.fogsuppression", Availability.EVERYWHERE, false),
         SCREENSHOT(Group.GENERAL, "screen.voxymap.settings.screenshot", Availability.EVERYWHERE, false),
+        SPATIAL_GUI_FLAT_MAP(Group.GENERAL, "screen.voxymap.settings.spatialgui", Availability.EVERYWHERE, false),
+        SPATIAL_GUI_3D(Group.GENERAL, "screen.voxymap.settings.spatialgui3d", Availability.EVERYWHERE, false),
 
         WAYPOINTS(Group.LAYERS, "screen.voxymap.settings.waypoints", Availability.EVERYWHERE, false),
         DEATH_POINTS(Group.LAYERS, "screen.voxymap.settings.deathpoints", Availability.EVERYWHERE, false),
@@ -105,6 +107,12 @@ public final class SettingsCatalog {
 
     public static List<Section> sections(boolean inWorld, boolean inMap, boolean onVanillaSquad,
                                          boolean playerMarkersBuiltIn, boolean schematicsInstalled) {
+        return sections(inWorld, inMap, onVanillaSquad, playerMarkersBuiltIn, schematicsInstalled, true);
+    }
+
+    public static List<Section> sections(boolean inWorld, boolean inMap, boolean onVanillaSquad,
+                                         boolean playerMarkersBuiltIn, boolean schematicsInstalled,
+                                         boolean spatialGuiInstalled) {
         List<Section> sections = new ArrayList<>();
         for (Group group : Group.values()) {
             List<Entry> entries = new ArrayList<>();
@@ -113,6 +121,7 @@ public final class SettingsCatalog {
                 if (entry.vanillaSquadOnly && !onVanillaSquad) continue;
                 if (entry == Entry.VANILLASQUAD_PLAYERS && !playerMarkersBuiltIn) continue;
                 if (entry == Entry.SCHEMATICS && !schematicsInstalled) continue;
+                if ((entry == Entry.SPATIAL_GUI_FLAT_MAP || entry == Entry.SPATIAL_GUI_3D) && !spatialGuiInstalled) continue;
                 boolean available = switch (entry.availability) {
                     case EVERYWHERE -> true;
                     case IN_WORLD -> inWorld || inMap;

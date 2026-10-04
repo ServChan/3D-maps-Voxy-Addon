@@ -64,10 +64,28 @@ cannot be read.
 
 `VoxyMapMixinPlugin` applies a mixin whose class name starts with `Iris` only when Iris is loaded, so Iris
 classes are never touched without Iris, and one starting with `SpatialGui` only when Spatial GUI (`spatial-gui`)
-is loaded. `SpatialGuiClientMixin` makes `SpatialGUIClient.shouldHookScreen` return `false` for `MapScreen`:
-Spatial GUI would otherwise (with its "all screens" option or a manual whitelist entry) draw the map as a 3D plane
-and move the camera, fighting `CameraMixin`. Its other hooks are all gated by that method. A new mixin that targets Iris must use that prefix; any other
-optional target (Xaero) uses `@Pseudo` plus `require = 0`, as `XaeroGuiMapMixin` does.
+is loaded. `SpatialGuiClientMixin` makes `SpatialGUIClient.shouldHookScreen` return `false` for `MapScreen` and
+`true` for `WindowMapScreen`; every other Spatial GUI hook is gated by that method. `MapScreen` moves the game camera
+and Voxy draws it full screen, so it can never be a Spatial GUI panel. With Spatial GUI loaded and
+`SPATIAL_GUI_FLAT_MAP` on (`spatialGuiFlatMap`), M opens `WindowMapScreen`, a plain GUI screen that Spatial GUI renders
+as its 3D panel. It has two views, switched by its own button and `SPATIAL_GUI_3D` (`windowMap3d`); both settings
+rows exist only when Spatial GUI is loaded (`SettingsCatalog.sections(..., spatialGuiInstalled)`). A new mixin that
+targets Iris must use that prefix; any other optional target (Xaero) uses `@Pseudo` plus `require = 0`, as
+`XaeroGuiMapMixin` does.
+
+- Flat view: `FlatMapTerrain` scans loaded chunks with `MinimapTileCache.computeTile` (32 per frame, rescanned every
+  4 s) into 128x128 region textures, at most `MAX_REGIONS`, least recently used evicted; `FlatMapRenderer` draws it.
+- 3D view: `WindowMapRenderer` asks Voxy for a second view into its own `TextureTarget`, the way Voxy serves
+  Vivecraft's second eye. While `WindowMapRenderer.rendering()` is true, `VoxyViewportSelectorMixin` hands Voxy an
+  extra viewport (`ViewportSelector.getOrCreate(VIEWPORT_KEY)`, by reflection) so the player's viewport and its
+  occlusion state stay untouched, `VoxyRenderSystemMixin` skips `RenderDistanceTracker.setCenterAndProcess` so LOD
+  loading stays centred on the player, and `VoxyClientMixin` reports `disableSodiumChunkRender` so LODs fill the near
+  zone. The camera is `VoxyMapCameraController.pose(...)`, the same maths as the full map. The Nether roof cut works there too:
+  `NetherRoofController.isActive()` is also true while `WindowMapRenderer.rendering()`, and the screen feeds
+  `NetherRoofController.tick/updateViewContext` like `MapScreen` does. Any exception turns the 3D
+  view off for the session (`Status.FAILED`) and the screen falls back to the flat view with a footer note; with an
+  Iris shader pack in use it stays flat (`Status.SHADER_PACK`). The colour target is blitted with V flipped (0,1,1,0),
+  like vanilla picture-in-picture. Markers in 3D are projected with the stored view-projection matrix.
 
 ## Minimap heads
 

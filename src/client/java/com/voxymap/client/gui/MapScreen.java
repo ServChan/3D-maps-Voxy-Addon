@@ -5,6 +5,7 @@ import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.integration.LitematicaPlusBridge;
 import com.voxymap.client.integration.VanillaSquadFlagMapBridge;
 import com.voxymap.client.integration.RemotePlayerMarkers;
+import com.voxymap.client.integration.SpatialGuiCompat;
 import com.voxymap.client.integration.VanillaSquadServer;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
@@ -573,6 +574,8 @@ public class MapScreen extends Screen {
             case MOBS -> VoxyMapSettings.toggleMobs();
             case CHUNK_GRID -> VoxyMapSettings.toggleChunkGrid();
             case SCHEMATICS -> VoxyMapSettings.toggleSchematics();
+            case SPATIAL_GUI_FLAT_MAP -> VoxyMapSettings.toggleSpatialGuiFlatMap();
+            case SPATIAL_GUI_3D -> VoxyMapSettings.toggleWindowMap3d();
             case SYNC_ADDRESS -> {
                 if (worldId != null) beginEditSyncAddress(worldId);
             }
@@ -1864,7 +1867,7 @@ public class MapScreen extends Screen {
         String syncErrorDetail = syncStatus == WaypointManager.SyncStatus.ERROR
                 ? WaypointManager.syncErrorDetail(worldId) : null;
         List<SettingsCatalog.Section> sections = SettingsCatalog.sections(true, true, VanillaSquadServer.isConnected(),
-                RemotePlayerMarkers.available(), LitematicaPlusBridge.isAvailable());
+                RemotePlayerMarkers.available(), LitematicaPlusBridge.isAvailable(), SpatialGuiCompat.isAvailable());
 
         int naturalPanelH = SETTINGS_TITLE_HEIGHT + SETTINGS_BOTTOM_PADDING
                 + (syncErrorDetail != null ? SETTINGS_ERROR_DETAIL_HEIGHT : 0);
@@ -1966,6 +1969,8 @@ public class MapScreen extends Screen {
             case MOBS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.mobsEnabled());
             case CHUNK_GRID -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.chunkGridEnabled());
             case SCHEMATICS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.schematicsEnabled());
+            case SPATIAL_GUI_FLAT_MAP -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.spatialGuiFlatMap());
+            case SPATIAL_GUI_3D -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.windowMap3d());
             case SYNC_ADDRESS -> drawSettingValue(g, x, y, entry, address != null ? address : notSet, 0xFFFFFFFF);
             case SYNC_PASSWORD -> {
                 String password = worldId != null ? WaypointSyncSettings.password(worldId) : null;

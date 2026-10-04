@@ -45,7 +45,7 @@ public final class NetherRoofController {
     }
 
     public static boolean isActive() {
-        return VoxyMapCameraController.isActive() && cuttingSomething;
+        return (VoxyMapCameraController.isActive() || WindowMapRenderer.rendering()) && cuttingSomething;
     }
 
     static boolean isHiddenForMapPick(int x, int y, int z) {

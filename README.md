@@ -3,7 +3,7 @@
 [![Minecraft](https://img.shields.io/badge/Minecraft-26.3-62B47A)](https://www.minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Fabric-0.19.5+-DBD0B4)](https://fabricmc.net/)
 [![Java](https://img.shields.io/badge/Java-25-E76F00)](https://adoptium.net/)
-[![Client](https://img.shields.io/badge/side-client-4C8BF5)](#requirements)
+[![Version](https://img.shields.io/badge/version-1.0.11--LTS.01-4C8BF5)](gradle.properties)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://github.com/raben12paste/3D-maps-Voxy-Addon). It opens a full-screen 3D map backed by Voxy LOD data for Minecraft 26.3.
@@ -57,7 +57,7 @@ English, Russian, Spanish (Spain and Mexico), and Polish translations.
 - Fabric API.
 - Voxy `0.2.20-beta` or newer for Minecraft 26.3. No Voxy for 26.3 is published yet; VoxyMap is compiled against a build of upstream Voxy's `263` branch (`tools/deps/voxy-0.2.20-beta-26.3.jar`). Upstream marks that branch as not release-ready and warns that it can corrupt Voxy worlds saved by older versions, so back up `.minecraft/.voxy` first. It also refuses Minecraft's Vulkan backend, so the game has to run on OpenGL. The Nether roof removal and ore mask shader patches target Voxy's internal shader layout; if a newer Voxy changes it, those two features switch themselves off instead of breaking the game.
 
-Iris, Xaero's World Map, Litematica Plus LTS, Spatial GUI and Mod Menu are optional integrations (Spatial GUI never turns the map screen into a 3D panel). The mod is client-only and does not need to be installed on the server.
+Iris, Xaero's World Map, Litematica Plus LTS, Spatial GUI and Mod Menu are optional integrations. With Spatial GUI, M opens a map window that Spatial GUI shows as its 3D panel: an experimental 3D view rendered by Voxy (WASD, drag, right-drag to rotate, wheel to zoom) or a flat top-down view of loaded chunks, plus a button to the full 3D map. Both settings appear only when Spatial GUI is installed. The 3D view does not work with an Iris shader pack and falls back to the flat view. The mod is client-only and does not need to be installed on the server.
 
 ## Controls
 
@@ -91,8 +91,8 @@ Settings are grouped the same way in the map's **Settings** panel and in the Mod
 
 | Group | Contents |
 | --- | --- |
-| General | Pause in singleplayer, camera speed, map lighting (auto, morning, day, evening, night), fog suppression (on, Nether only, off), map screenshot (no interface / with markers) |
-| Map layers | Waypoints, death points, your view direction; VanillaSquad players / flags / map, shown only while connected to the VanillaSquad server |
+| General | Pause in singleplayer, camera speed, map lighting (auto, morning, day, evening, night), fog suppression (on, Nether only, off), map screenshot (no interface / with markers); with Spatial GUI installed: M opens the map window, 3D view in that window |
+| Map layers | Waypoints, death points, your view direction; VanillaSquad players / flags / map, shown only while connected to the VanillaSquad server; schematics, shown only with Litematica Plus LTS installed |
 | Minimap | Minimap, rotation, mobs, chunk grid |
 | Sync and sharing | Sync address, password and status, share map, receive map |
 | Diagnostics | Whether the Voxy shader patches loaded |
@@ -166,7 +166,7 @@ VoxyMap LTS — поддерживаемый клиентский форк 3D Ma
 
 ### Требования
 
-Minecraft 26.3, Java 25, Fabric Loader 0.19.5 или новее, Fabric API и Voxy 0.2.20-beta или новее для Minecraft 26.3. Опубликованного Voxy под 26.3 пока нет: VoxyMap собран против сборки ветки `263` из upstream Voxy (`tools/deps/voxy-0.2.20-beta-26.3.jar`). Автор Voxy помечает её как незаконченную и предупреждает, что она может испортить миры Voxy, сохранённые старыми версиями, поэтому сначала сделайте копию `.minecraft/.voxy`. Эта сборка не запускается на Vulkan-бэкенде, игра должна работать на OpenGL. Iris, Xaero's World Map, Litematica Plus LTS, Spatial GUI и Mod Menu необязательны (Spatial GUI не превращает экран карты в 3D-панель).
+Minecraft 26.3, Java 25, Fabric Loader 0.19.5 или новее, Fabric API и Voxy 0.2.20-beta или новее для Minecraft 26.3. Опубликованного Voxy под 26.3 пока нет: VoxyMap собран против сборки ветки `263` из upstream Voxy (`tools/deps/voxy-0.2.20-beta-26.3.jar`). Автор Voxy помечает её как незаконченную и предупреждает, что она может испортить миры Voxy, сохранённые старыми версиями, поэтому сначала сделайте копию `.minecraft/.voxy`. Эта сборка не запускается на Vulkan-бэкенде, игра должна работать на OpenGL. Iris, Xaero's World Map, Litematica Plus LTS, Spatial GUI и Mod Menu необязательны. Со Spatial GUI клавиша M открывает окно карты, которое Spatial GUI показывает своей 3D-панелью: экспериментальный 3D-вид от Voxy (WASD, перетаскивание, поворот правой кнопкой, колесо — зум) или плоский вид сверху по загруженным чанкам, и кнопка перехода к полной 3D-карте. Обе настройки видны только при установленном Spatial GUI. С шейдерпаком Iris 3D-вид не работает и окно показывает плоский вид.
 
 ### Полноэкранная карта
 
@@ -217,8 +217,8 @@ Minecraft 26.3, Java 25, Fabric Loader 0.19.5 или новее, Fabric API и V
 
 | Группа | Что внутри |
 | --- | --- |
-| Общие | Пауза в одиночной игре, скорость камеры, освещение карты, подавление тумана (вкл., только Нижний мир, выкл.), скриншот карты |
-| Слои карты | Метки, точки смерти, направление взгляда; игроки, флаги и карта VanillaSquad — только при подключении к VanillaSquad |
+| Общие | Пауза в одиночной игре, скорость камеры, освещение карты, подавление тумана (вкл., только Нижний мир, выкл.), скриншот карты; при установленном Spatial GUI: M открывает окно карты, 3D-вид в этом окне |
+| Слои карты | Метки, точки смерти, направление взгляда; игроки, флаги и карта VanillaSquad — только при подключении к VanillaSquad; схемы — только при установленном Litematica Plus LTS |
 | Миникарта | Миникарта, вращение, мобы, сетка чанков |
 | Синхронизация и обмен | Адрес, пароль и статус синхронизации, «Поделиться картой», «Получить карту» |
 | Диагностика | Загрузились ли патчи шейдеров Voxy |

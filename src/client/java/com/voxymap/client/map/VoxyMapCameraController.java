@@ -26,17 +26,36 @@ public final class VoxyMapCameraController {
         }
 
         boolean endDimension = "minecraft:the_end".equals(minecraft.level.dimension().identifier().toString());
+        Pose pose = pose(endDimension, centerX, centerY, centerZ, yawRadians, pitchControl, blocksPerPixel);
+        cameraX = pose.x();
+        cameraY = pose.y();
+        cameraZ = pose.z();
+        fov = pose.fov();
+        VoxyMapCameraController.centerX = centerX;
+        VoxyMapCameraController.centerY = centerY;
+        VoxyMapCameraController.centerZ = centerZ;
+        cameraYaw = pose.yaw();
+        cameraPitch = pose.pitch();
+        active = true;
+    }
+
+    public record Pose(double x, double y, double z, float yaw, float pitch, float fov) {
+    }
+
+    public static Pose pose(boolean endDimension, double centerX, double centerY, double centerZ, double yawRadians,
+                            double pitchControl, double blocksPerPixel) {
         float pitchDegrees = Mth.clamp((float) (18.0 + pitchControl * 42.0), 18.0f, 72.0f);
         float yawDegrees = (float) Math.toDegrees(yawRadians);
         double desiredRange = Mth.clamp(blocksPerPixel * 210.0, 64.0, 8192.0);
         double range;
+        float poseFov;
         if (endDimension) {
             pitchDegrees = Mth.clamp((float) (30.0 + pitchControl * 32.0), 30.0f, 62.0f);
             range = Math.max(512.0, desiredRange);
-            fov = Mth.clamp((float) (70.0 * desiredRange / range), 14.0f, 70.0f);
+            poseFov = Mth.clamp((float) (70.0 * desiredRange / range), 14.0f, 70.0f);
         } else {
             range = Math.max(1024.0, desiredRange);
-            fov = Mth.clamp((float) (70.0 * desiredRange / range), 6.0f, 70.0f);
+            poseFov = Mth.clamp((float) (70.0 * desiredRange / range), 6.0f, 70.0f);
         }
 
         double pitchRadians = Math.toRadians(pitchDegrees);
@@ -44,16 +63,8 @@ public final class VoxyMapCameraController {
         double verticalRange = Math.sin(pitchRadians) * range;
         double forwardX = -Math.sin(yawRadians);
         double forwardZ = Math.cos(yawRadians);
-
-        cameraX = centerX - forwardX * horizontalRange;
-        cameraY = centerY + verticalRange;
-        cameraZ = centerZ - forwardZ * horizontalRange;
-        VoxyMapCameraController.centerX = centerX;
-        VoxyMapCameraController.centerY = centerY;
-        VoxyMapCameraController.centerZ = centerZ;
-        cameraYaw = yawDegrees;
-        cameraPitch = pitchDegrees;
-        active = true;
+        return new Pose(centerX - forwardX * horizontalRange, centerY + verticalRange, centerZ - forwardZ * horizontalRange,
+                yawDegrees, pitchDegrees, poseFov);
     }
 
     public static boolean isActive() {

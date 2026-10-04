@@ -75,7 +75,8 @@ public final class MinimapRenderer {
     public static void extract(GuiGraphicsExtractor g, Minecraft minecraft) {
         hudHookFired = true;
         if (!VoxyMapSettings.minimapEnabled() || minecraft.level == null || minecraft.player == null
-                || VoxyMapCameraController.isActive()) {
+                || VoxyMapCameraController.isActive()
+                || minecraft.gui.screen() instanceof com.voxymap.client.gui.WindowMapScreen) {
             return;
         }
 
@@ -420,7 +421,7 @@ public final class MinimapRenderer {
                 FACE_UV_GRID, FACE_UV_GRID, scaleAlpha(0xFFFFFFFF, alpha));
     }
 
-    private static void drawPlayerMarker(GuiGraphicsExtractor g, Minecraft minecraft, Player other, int px, int py, int alpha,
+    static void drawPlayerMarker(GuiGraphicsExtractor g, Minecraft minecraft, Player other, int px, int py, int alpha,
                                          boolean heads) {
         Identifier skin = heads ? PlayerHeadIcon.resolveSkinTexture(minecraft, other.getUUID()) : null;
         if (skin != null) {
@@ -467,7 +468,7 @@ public final class MinimapRenderer {
     record SquareEdgePoint(int x, int y, double dirX, double dirZ) {
     }
 
-    private static void drawFacingIndicator(GuiGraphicsExtractor g, int centerX, int centerY, float yawDegrees) {
+    static void drawFacingIndicator(GuiGraphicsExtractor g, int centerX, int centerY, float yawDegrees) {
         drawFacingIndicator(g, centerX, centerY,
                 PlayerViewConeGeometry.directionX(yawDegrees), PlayerViewConeGeometry.directionZ(yawDegrees));
     }
@@ -492,7 +493,7 @@ public final class MinimapRenderer {
         drawLine(g, lx, lz, rx, rz, 0x8855E7FF);
     }
 
-    private static void drawLine(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int color) {
+    static void drawLine(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int color) {
         double dx = x2 - x1;
         double dy = y2 - y1;
         double length = Math.hypot(dx, dy);
@@ -508,11 +509,11 @@ public final class MinimapRenderer {
         g.pose().popMatrix();
     }
 
-    private static void drawDot(GuiGraphicsExtractor g, int centerX, int centerY, int radius, int color) {
+    static void drawDot(GuiGraphicsExtractor g, int centerX, int centerY, int radius, int color) {
         g.fill(centerX - radius, centerY - radius, centerX + radius + 1, centerY + radius + 1, color);
     }
 
-    private static String currentWorldId(Minecraft minecraft) {
+    static String currentWorldId(Minecraft minecraft) {
         if (minecraft.level == null) return null;
         WorldIdentifier identifier = WorldIdentifier.of(minecraft.level);
         return identifier == null ? null : identifier.getWorldId();

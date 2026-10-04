@@ -71,6 +71,7 @@ dependencies {
         compileOnly("maven.modrinth:voxy:${project.voxy_version}") { transitive = false }
     }
     compileOnly("maven.modrinth:iris:${project.iris_version}") { transitive = false }
+    compileOnly("maven.modrinth:sodium:${project.sodium_version}") { transitive = false }
     if (localModMenu.isFile()) {
         compileOnly files(localModMenu)
     } else {

@@ -42,6 +42,8 @@ public final class VoxyMapSettings {
     private static boolean minimapRotates = false;
     private static boolean chunkGridEnabled = false;
     private static boolean schematicsEnabled = true;
+    private static boolean spatialGuiFlatMap = true;
+    private static boolean windowMap3d = true;
     private static boolean deathPointsEnabled = true;
     private static boolean viewDirectionEnabled = true;
     private static ScreenshotContent screenshotContent = ScreenshotContent.NO_INTERFACE;
@@ -83,6 +85,8 @@ public final class VoxyMapSettings {
         minimapRotates = readBoolean(properties.getProperty("minimapRotates"), minimapRotates);
         chunkGridEnabled = readBoolean(properties.getProperty("chunkGridEnabled"), chunkGridEnabled);
         schematicsEnabled = readBoolean(properties.getProperty("schematicsEnabled"), schematicsEnabled);
+        spatialGuiFlatMap = readBoolean(properties.getProperty("spatialGuiFlatMap"), spatialGuiFlatMap);
+        windowMap3d = readBoolean(properties.getProperty("windowMap3d"), windowMap3d);
         deathPointsEnabled = readBoolean(properties.getProperty("deathPointsEnabled"), deathPointsEnabled);
         viewDirectionEnabled = readBoolean(properties.getProperty("viewDirectionEnabled"), viewDirectionEnabled);
         screenshotContent = ScreenshotContent.parse(properties.getProperty("screenshotContent"));
@@ -105,6 +109,8 @@ public final class VoxyMapSettings {
         properties.setProperty("minimapRotates", Boolean.toString(minimapRotates));
         properties.setProperty("chunkGridEnabled", Boolean.toString(chunkGridEnabled));
         properties.setProperty("schematicsEnabled", Boolean.toString(schematicsEnabled));
+        properties.setProperty("spatialGuiFlatMap", Boolean.toString(spatialGuiFlatMap));
+        properties.setProperty("windowMap3d", Boolean.toString(windowMap3d));
         properties.setProperty("deathPointsEnabled", Boolean.toString(deathPointsEnabled));
         properties.setProperty("viewDirectionEnabled", Boolean.toString(viewDirectionEnabled));
         properties.setProperty("screenshotContent", screenshotContent.name().toLowerCase(Locale.ROOT));
@@ -251,6 +257,28 @@ public final class VoxyMapSettings {
     public static void toggleSchematics() {
         load();
         schematicsEnabled = !schematicsEnabled;
+        save();
+    }
+
+    public static boolean spatialGuiFlatMap() {
+        load();
+        return spatialGuiFlatMap;
+    }
+
+    public static void toggleSpatialGuiFlatMap() {
+        load();
+        spatialGuiFlatMap = !spatialGuiFlatMap;
+        save();
+    }
+
+    public static boolean windowMap3d() {
+        load();
+        return windowMap3d;
+    }
+
+    public static void toggleWindowMap3d() {
+        load();
+        windowMap3d = !windowMap3d;
         save();
     }
 

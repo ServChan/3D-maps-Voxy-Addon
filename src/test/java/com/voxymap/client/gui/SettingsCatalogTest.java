@@ -23,6 +23,18 @@ class SettingsCatalogTest {
         assertFalse(without.contains(SettingsCatalog.Entry.SCHEMATICS));
     }
 
+    @Test
+    void spatialGuiRowNeedsSpatialGui() {
+        List<SettingsCatalog.Entry> with = new ArrayList<>();
+        List<SettingsCatalog.Entry> without = new ArrayList<>();
+        SettingsCatalog.sections(true, true, true, true, true, true).forEach(section -> with.addAll(section.entries()));
+        SettingsCatalog.sections(false, false, false, true, true, false).forEach(section -> without.addAll(section.entries()));
+        assertTrue(with.contains(SettingsCatalog.Entry.SPATIAL_GUI_FLAT_MAP));
+        assertTrue(with.contains(SettingsCatalog.Entry.SPATIAL_GUI_3D));
+        assertFalse(without.contains(SettingsCatalog.Entry.SPATIAL_GUI_FLAT_MAP));
+        assertFalse(without.contains(SettingsCatalog.Entry.SPATIAL_GUI_3D));
+    }
+
     private static Set<SettingsCatalog.Entry> entries(boolean inWorld, boolean inMap, boolean onVanillaSquad) {
         List<SettingsCatalog.Entry> flat = new ArrayList<>();
         SettingsCatalog.sections(inWorld, inMap, onVanillaSquad).forEach(section -> flat.addAll(section.entries()));

@@ -77,7 +77,7 @@ final class MinimapTileCache {
         return (int) key;
     }
 
-    private static int[] computeTile(Level level, ChunkAccess chunk, int chunkX, int chunkZ, ScanMode mode, int playerY) {
+    static int[] computeTile(Level level, ChunkAccess chunk, int chunkX, int chunkZ, ScanMode mode, int playerY) {
         int baseX = chunkX << 4;
         int baseZ = chunkZ << 4;
         int minY = level.getMinY();
