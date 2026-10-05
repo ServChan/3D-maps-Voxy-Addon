@@ -25,6 +25,15 @@ class WaypointLabelsTest {
     }
 
     @Test
+    void waypointsFadeOutOverTheLastPartOfTheRange() {
+        assertEquals(1.0f, WaypointLabels.fade(100_000.0, 0));
+        assertEquals(1.0f, WaypointLabels.fade(800.0, 1000));
+        assertEquals(0.5f, WaypointLabels.fade(900.0, 1000), 1e-6f);
+        assertEquals(0.0f, WaypointLabels.fade(1000.0, 1000));
+        assertEquals(0.0f, WaypointLabels.fade(5000.0, 1000));
+    }
+
+    @Test
     void overlappingLabelsAreLiftedOrDropped() {
         WaypointLabels.Box first = new WaypointLabels.Box(0, 100, 50, 122);
         assertEquals(0, WaypointLabels.liftToFit(List.of(), first, 24, 3));

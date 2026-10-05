@@ -128,6 +128,10 @@ In-world icons and labels (`WaypointLabels`) are HUD elements drawn at the head 
 the hotbar and minimap stay on top. They project with `Camera.getViewRotationProjectionMatrix`, which follows
 dynamic FOV and view bobbing; far points are scaled to 1000 blocks before projecting to keep float precision
 (the matrix has no translation, so x/w and y/w do not change). Beacon beams are a separate toggle (`waypointBeams`).
+The "Waypoint look" settings group drives their appearance: icon shape (`WaypointIcons.rowSpan`, applied to every
+waypoint icon, including the minimap and big map), in-world icon size, label background, label scale (drawn through
+`g.pose()`), the distance line, and a range that fades icons and labels over its last 20% (`WaypointLabels.fade`) and
+also caps beam distance.
 
 Overworld waypoints show in the Nether (and Nether ones in the Overworld) at x/8 or x*8, faded, through
 `DimensionLinks.foreignWaypoints`. Waypoints are stored per Voxy world id, which is SHA-256 of biome seed + level key,

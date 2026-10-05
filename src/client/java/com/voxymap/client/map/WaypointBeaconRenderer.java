@@ -57,12 +57,15 @@ public final class WaypointBeaconRenderer {
         PoseStack poseStack = context.poseStack();
         SubmitNodeCollector collector = context.submitNodeCollector();
         float animationTime = (float) minecraft.level.getGameTime();
+        VoxyMapSettings.WaypointRange range = VoxyMapSettings.waypointRange();
+        double maxDistanceSq = range.unlimited() ? MAX_RENDER_DISTANCE_SQ
+                : Math.min(MAX_RENDER_DISTANCE_SQ, (double) range.blocks() * range.blocks());
 
         for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId)) {
             double dx = waypoint.x() - cameraPos.x;
             double dy = waypoint.y() - cameraPos.y;
             double dz = waypoint.z() - cameraPos.z;
-            if (dx * dx + dy * dy + dz * dz > MAX_RENDER_DISTANCE_SQ) {
+            if (dx * dx + dy * dy + dz * dz > maxDistanceSq) {
                 continue;
             }
 

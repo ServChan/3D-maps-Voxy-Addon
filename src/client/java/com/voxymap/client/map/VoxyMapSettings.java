@@ -46,6 +46,12 @@ public final class VoxyMapSettings {
     private static boolean waypointsEnabled = true;
     private static WaypointLabelMode waypointLabelMode = WaypointLabelMode.AIMING;
     private static boolean waypointBeams = true;
+    private static WaypointIconShape waypointIconShape = WaypointIconShape.SQUARE;
+    private static WaypointIconSize waypointIconSize = WaypointIconSize.MEDIUM;
+    private static WaypointLabelStyle waypointLabelStyle = WaypointLabelStyle.BOX;
+    private static WaypointLabelScale waypointLabelScale = WaypointLabelScale.NORMAL;
+    private static boolean waypointDistanceShown = true;
+    private static WaypointRange waypointRange = WaypointRange.UNLIMITED;
     private static boolean minimapEnabled = true;
     private static TimeOfDay timeOfDayMode = TimeOfDay.AUTO;
     private static final EnumSet<RadarCategory> radarCategories = EnumSet.copyOf(RadarCategory.defaults());
@@ -110,6 +116,16 @@ public final class VoxyMapSettings {
         waypointLabelMode = parseEnum(WaypointLabelMode.class, properties.getProperty("waypointLabelMode"),
                 WaypointLabelMode.AIMING);
         waypointBeams = readBoolean(properties.getProperty("waypointBeams"), waypointBeams);
+        waypointIconShape = parseEnum(WaypointIconShape.class, properties.getProperty("waypointIconShape"),
+                WaypointIconShape.SQUARE);
+        waypointIconSize = parseEnum(WaypointIconSize.class, properties.getProperty("waypointIconSize"),
+                WaypointIconSize.MEDIUM);
+        waypointLabelStyle = parseEnum(WaypointLabelStyle.class, properties.getProperty("waypointLabelStyle"),
+                WaypointLabelStyle.BOX);
+        waypointLabelScale = parseEnum(WaypointLabelScale.class, properties.getProperty("waypointLabelScale"),
+                WaypointLabelScale.NORMAL);
+        waypointDistanceShown = readBoolean(properties.getProperty("waypointDistanceShown"), waypointDistanceShown);
+        waypointRange = parseEnum(WaypointRange.class, properties.getProperty("waypointRange"), WaypointRange.UNLIMITED);
         minimapEnabled = readBoolean(properties.getProperty("minimapEnabled"), minimapEnabled);
         timeOfDayMode = TimeOfDay.parse(properties.getProperty("timeOfDayMode"));
         radarCategories.clear();
@@ -188,6 +204,12 @@ public final class VoxyMapSettings {
         properties.setProperty("waypointsEnabled", Boolean.toString(waypointsEnabled));
         properties.setProperty("waypointLabelMode", waypointLabelMode.name().toLowerCase(Locale.ROOT));
         properties.setProperty("waypointBeams", Boolean.toString(waypointBeams));
+        properties.setProperty("waypointIconShape", waypointIconShape.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("waypointIconSize", waypointIconSize.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("waypointLabelStyle", waypointLabelStyle.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("waypointLabelScale", waypointLabelScale.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("waypointDistanceShown", Boolean.toString(waypointDistanceShown));
+        properties.setProperty("waypointRange", waypointRange.name().toLowerCase(Locale.ROOT));
         properties.setProperty("minimapEnabled", Boolean.toString(minimapEnabled));
         properties.setProperty("timeOfDayMode", timeOfDayMode.name().toLowerCase(Locale.ROOT));
         properties.setProperty("radarCategories", EnumFlags.format(radarCategories));
@@ -315,6 +337,72 @@ public final class VoxyMapSettings {
     public static void toggleWaypointBeams() {
         load();
         waypointBeams = !waypointBeams;
+        save();
+    }
+
+    public static WaypointIconShape waypointIconShape() {
+        load();
+        return waypointIconShape;
+    }
+
+    public static void cycleWaypointIconShape() {
+        load();
+        waypointIconShape = next(waypointIconShape);
+        save();
+    }
+
+    public static WaypointIconSize waypointIconSize() {
+        load();
+        return waypointIconSize;
+    }
+
+    public static void cycleWaypointIconSize() {
+        load();
+        waypointIconSize = next(waypointIconSize);
+        save();
+    }
+
+    public static WaypointLabelStyle waypointLabelStyle() {
+        load();
+        return waypointLabelStyle;
+    }
+
+    public static void cycleWaypointLabelStyle() {
+        load();
+        waypointLabelStyle = next(waypointLabelStyle);
+        save();
+    }
+
+    public static WaypointLabelScale waypointLabelScale() {
+        load();
+        return waypointLabelScale;
+    }
+
+    public static void cycleWaypointLabelScale() {
+        load();
+        waypointLabelScale = next(waypointLabelScale);
+        save();
+    }
+
+    public static boolean waypointDistanceShown() {
+        load();
+        return waypointDistanceShown;
+    }
+
+    public static void toggleWaypointDistanceShown() {
+        load();
+        waypointDistanceShown = !waypointDistanceShown;
+        save();
+    }
+
+    public static WaypointRange waypointRange() {
+        load();
+        return waypointRange;
+    }
+
+    public static void cycleWaypointRange() {
+        load();
+        waypointRange = next(waypointRange);
         save();
     }
 
@@ -878,6 +966,113 @@ public final class VoxyMapSettings {
 
         public String translationKey() {
             return translationKey;
+        }
+    }
+
+    public enum WaypointIconShape {
+        SQUARE("screen.voxymap.settings.waypointshape.square"),
+        CIRCLE("screen.voxymap.settings.waypointshape.circle"),
+        DIAMOND("screen.voxymap.settings.waypointshape.diamond");
+
+        private final String translationKey;
+
+        WaypointIconShape(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+    }
+
+    public enum WaypointIconSize {
+        SMALL("screen.voxymap.settings.waypointsize.small", 9),
+        MEDIUM("screen.voxymap.settings.waypointsize.medium", 11),
+        LARGE("screen.voxymap.settings.waypointsize.large", 15),
+        HUGE("screen.voxymap.settings.waypointsize.huge", 19);
+
+        private final String translationKey;
+        private final int pixels;
+
+        WaypointIconSize(String translationKey, int pixels) {
+            this.translationKey = translationKey;
+            this.pixels = pixels;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        public int pixels() {
+            return pixels;
+        }
+    }
+
+    public enum WaypointLabelStyle {
+        BOX("screen.voxymap.settings.waypointlabelstyle.box", 0xC0),
+        CLEAR("screen.voxymap.settings.waypointlabelstyle.clear", 0x60),
+        TEXT("screen.voxymap.settings.waypointlabelstyle.text", 0);
+
+        private final String translationKey;
+        private final int backgroundAlpha;
+
+        WaypointLabelStyle(String translationKey, int backgroundAlpha) {
+            this.translationKey = translationKey;
+            this.backgroundAlpha = backgroundAlpha;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        public int backgroundAlpha() {
+            return backgroundAlpha;
+        }
+    }
+
+    public enum WaypointLabelScale {
+        SMALL("75%", 0.75f),
+        NORMAL("100%", 1.0f),
+        LARGE("150%", 1.5f),
+        HUGE("200%", 2.0f);
+
+        private final String label;
+        private final float scale;
+
+        WaypointLabelScale(String label, float scale) {
+            this.label = label;
+            this.scale = scale;
+        }
+
+        public String label() {
+            return label;
+        }
+
+        public float scale() {
+            return scale;
+        }
+    }
+
+    public enum WaypointRange {
+        UNLIMITED(0),
+        BLOCKS_250(250),
+        BLOCKS_500(500),
+        BLOCKS_1000(1000),
+        BLOCKS_2500(2500),
+        BLOCKS_5000(5000);
+
+        private final int blocks;
+
+        WaypointRange(int blocks) {
+            this.blocks = blocks;
+        }
+
+        public int blocks() {
+            return blocks;
+        }
+
+        public boolean unlimited() {
+            return blocks <= 0;
         }
     }
 

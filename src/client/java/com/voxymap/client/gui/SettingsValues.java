@@ -6,6 +6,7 @@ import com.voxymap.client.map.OreMaskController;
 import com.voxymap.client.map.VoxyMapSettings;
 import com.voxymap.client.map.VoxyShaderPatcher;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 
 final class SettingsValues {
     private SettingsValues() {
@@ -19,6 +20,13 @@ final class SettingsValues {
     static String minimapZoomLabel() {
         double zoom = VoxyMapSettings.minimapPixelsPerBlock();
         return zoom == Math.rint(zoom) ? "x" + (int) zoom : "x" + zoom;
+    }
+
+    static String waypointRangeLabel() {
+        VoxyMapSettings.WaypointRange range = VoxyMapSettings.waypointRange();
+        return range.unlimited()
+                ? Component.translatable("screen.voxymap.settings.waypointrange.unlimited").getString()
+                : Component.translatable("screen.voxymap.waypoints.distance", range.blocks()).getString();
     }
 
     static String diagnosticsKey() {

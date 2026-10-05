@@ -584,6 +584,12 @@ public class MapScreen extends Screen {
             case WAYPOINT_LABELS -> VoxyMapSettings.cycleWaypointLabelMode();
             case WAYPOINTS_OTHER_DIMENSION -> VoxyMapSettings.toggleOtherDimensionWaypoints();
             case WAYPOINT_BEAMS -> VoxyMapSettings.toggleWaypointBeams();
+            case WAYPOINT_SHAPE -> VoxyMapSettings.cycleWaypointIconShape();
+            case WAYPOINT_SIZE -> VoxyMapSettings.cycleWaypointIconSize();
+            case WAYPOINT_LABEL_STYLE -> VoxyMapSettings.cycleWaypointLabelStyle();
+            case WAYPOINT_LABEL_SCALE -> VoxyMapSettings.cycleWaypointLabelScale();
+            case WAYPOINT_DISTANCE -> VoxyMapSettings.toggleWaypointDistanceShown();
+            case WAYPOINT_RANGE -> VoxyMapSettings.cycleWaypointRange();
             case DEATH_POINTS -> VoxyMapSettings.toggleDeathPoints();
             case VANILLASQUAD_PLAYERS -> VoxyMapSettings.toggleVanillaSquadPlayers();
             case VANILLASQUAD_FLAGS -> VoxyMapSettings.toggleVanillaSquadFlags();
@@ -2141,6 +2147,16 @@ public class MapScreen extends Screen {
             case WAYPOINT_LABELS -> drawSettingValue(g, x, y, entry,
                     Component.translatable(VoxyMapSettings.waypointLabelMode().translationKey()).getString(), 0xFFFFFFFF);
             case WAYPOINT_BEAMS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.waypointBeams());
+            case WAYPOINT_SHAPE -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.waypointIconShape().translationKey()).getString(), 0xFFFFFFFF);
+            case WAYPOINT_SIZE -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.waypointIconSize().translationKey()).getString(), 0xFFFFFFFF);
+            case WAYPOINT_LABEL_STYLE -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.waypointLabelStyle().translationKey()).getString(), 0xFFFFFFFF);
+            case WAYPOINT_LABEL_SCALE -> drawSettingValue(g, x, y, entry,
+                    VoxyMapSettings.waypointLabelScale().label(), 0xFFFFFFFF);
+            case WAYPOINT_DISTANCE -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.waypointDistanceShown());
+            case WAYPOINT_RANGE -> drawSettingValue(g, x, y, entry, SettingsValues.waypointRangeLabel(), 0xFFFFFFFF);
             case WAYPOINTS_OTHER_DIMENSION -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.otherDimensionWaypoints());
             case DEATH_POINTS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.deathPointsEnabled());
             case VANILLASQUAD_PLAYERS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.vanillaSquadPlayersEnabled());

@@ -1,5 +1,6 @@
 package com.voxymap.client.gui;
 
+import com.voxymap.client.map.VoxyMapSettings;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
@@ -18,8 +19,9 @@ public final class WaypointIcons {
 
     public static void draw(GuiGraphicsExtractor graphics, Font font, int x, int y, int size, int color, String initial,
                             int alpha) {
-        graphics.fill(x - 1, y - 1, x + size + 1, y + size + 1, withAlpha(OUTLINE, alpha));
-        graphics.fill(x, y, x + size, y + size, withAlpha(0xFF000000 | color, alpha));
+        VoxyMapSettings.WaypointIconShape shape = VoxyMapSettings.waypointIconShape();
+        fillShape(graphics, shape, x - 1, y - 1, size + 2, withAlpha(OUTLINE, alpha));
+        fillShape(graphics, shape, x, y, size, withAlpha(0xFF000000 | color, alpha));
         int textWidth = font.width(initial);
         int textX = x + (size - textWidth) / 2 + 1;
         int textY = y + (size - 8) / 2 + 1;
@@ -34,6 +36,30 @@ public final class WaypointIcons {
     public static void drawCentered(GuiGraphicsExtractor graphics, Font font, int centerX, int centerY, int size,
                                     int color, String initial, int alpha) {
         draw(graphics, font, centerX - size / 2, centerY - size / 2, size, color, initial, alpha);
+    }
+
+    private static void fillShape(GuiGraphicsExtractor graphics, VoxyMapSettings.WaypointIconShape shape,
+                                  int x, int y, int size, int argb) {
+        if (shape == VoxyMapSettings.WaypointIconShape.SQUARE) {
+            graphics.fill(x, y, x + size, y + size, argb);
+            return;
+        }
+        for (int row = 0; row < size; row++) {
+            int[] span = rowSpan(shape, size, row);
+            graphics.fill(x + span[0], y + row, x + span[1], y + row + 1, argb);
+        }
+    }
+
+    static int[] rowSpan(VoxyMapSettings.WaypointIconShape shape, int size, int row) {
+        double center = size / 2.0;
+        double offset = Math.abs(row + 0.5 - center);
+        double half = switch (shape) {
+            case SQUARE -> center;
+            case CIRCLE -> Math.sqrt(Math.max(0.0, center * center - offset * offset));
+            case DIAMOND -> center - offset + 0.5;
+        };
+        int left = Math.max(0, Math.min((size - 1) / 2, (int) Math.round(center - half)));
+        return new int[]{left, size - left};
     }
 
     static int withAlpha(int argb, int alpha) {

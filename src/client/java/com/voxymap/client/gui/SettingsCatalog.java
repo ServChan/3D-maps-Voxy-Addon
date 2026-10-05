@@ -14,6 +14,7 @@ public final class SettingsCatalog {
     public enum Group {
         GENERAL("screen.voxymap.settings.group.general"),
         LAYERS("screen.voxymap.settings.group.layers"),
+        WAYPOINT_LOOK("screen.voxymap.settings.group.waypointlook"),
         MINIMAP("screen.voxymap.settings.group.minimap"),
         INFO("screen.voxymap.settings.group.info"),
         RADAR("screen.voxymap.settings.group.radar"),
@@ -52,14 +53,21 @@ public final class SettingsCatalog {
 
         WAYPOINTS(Group.LAYERS, "screen.voxymap.settings.waypoints", Availability.EVERYWHERE, false),
         WAYPOINTS_OTHER_DIMENSION(Group.LAYERS, "screen.voxymap.settings.otherdimension", Availability.EVERYWHERE, false),
-        WAYPOINT_LABELS(Group.LAYERS, "screen.voxymap.settings.waypointlabels", Availability.EVERYWHERE, false),
-        WAYPOINT_BEAMS(Group.LAYERS, "screen.voxymap.settings.waypointbeams", Availability.EVERYWHERE, false),
         DEATH_POINTS(Group.LAYERS, "screen.voxymap.settings.deathpoints", Availability.EVERYWHERE, false),
         VIEW_DIRECTION(Group.LAYERS, "screen.voxymap.settings.viewdirection", Availability.EVERYWHERE, false),
         VANILLASQUAD_PLAYERS(Group.LAYERS, "screen.voxymap.settings.vanillasquad", Availability.EVERYWHERE, true),
         VANILLASQUAD_FLAGS(Group.LAYERS, "screen.voxymap.settings.vanillasquadflags", Availability.EVERYWHERE, true),
         VANILLASQUAD_MAP(Group.LAYERS, "screen.voxymap.settings.vanillasquadmap", Availability.IN_WORLD, true),
         SCHEMATICS(Group.LAYERS, "screen.voxymap.settings.schematics", Availability.EVERYWHERE, false),
+
+        WAYPOINT_SHAPE(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointshape", Availability.EVERYWHERE, false),
+        WAYPOINT_SIZE(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointsize", Availability.EVERYWHERE, false),
+        WAYPOINT_LABELS(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointlabels", Availability.EVERYWHERE, false),
+        WAYPOINT_LABEL_STYLE(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointlabelstyle", Availability.EVERYWHERE, false),
+        WAYPOINT_LABEL_SCALE(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointlabelscale", Availability.EVERYWHERE, false),
+        WAYPOINT_DISTANCE(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointdistance", Availability.EVERYWHERE, false),
+        WAYPOINT_RANGE(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointrange", Availability.EVERYWHERE, false),
+        WAYPOINT_BEAMS(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointbeams", Availability.EVERYWHERE, false),
 
         MINIMAP(Group.MINIMAP, "screen.voxymap.settings.minimap", Availability.EVERYWHERE, false),
         MINIMAP_ROTATE(Group.MINIMAP, "screen.voxymap.settings.minimaprotate", Availability.EVERYWHERE, false),

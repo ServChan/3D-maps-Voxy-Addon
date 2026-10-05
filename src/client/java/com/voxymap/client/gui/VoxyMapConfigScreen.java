@@ -151,6 +151,23 @@ public final class VoxyMapConfigScreen extends Screen {
                     () -> Component.translatable(VoxyMapSettings.waypointLabelMode().translationKey()),
                     VoxyMapSettings::cycleWaypointLabelMode);
             case WAYPOINT_BEAMS -> toggle(controlWidth, VoxyMapSettings::waypointBeams, VoxyMapSettings::toggleWaypointBeams);
+            case WAYPOINT_SHAPE -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.waypointIconShape().translationKey()),
+                    VoxyMapSettings::cycleWaypointIconShape);
+            case WAYPOINT_SIZE -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.waypointIconSize().translationKey()),
+                    VoxyMapSettings::cycleWaypointIconSize);
+            case WAYPOINT_LABEL_STYLE -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.waypointLabelStyle().translationKey()),
+                    VoxyMapSettings::cycleWaypointLabelStyle);
+            case WAYPOINT_LABEL_SCALE -> cycle(controlWidth,
+                    () -> Component.literal(VoxyMapSettings.waypointLabelScale().label()),
+                    VoxyMapSettings::cycleWaypointLabelScale);
+            case WAYPOINT_DISTANCE -> toggle(controlWidth, VoxyMapSettings::waypointDistanceShown,
+                    VoxyMapSettings::toggleWaypointDistanceShown);
+            case WAYPOINT_RANGE -> cycle(controlWidth,
+                    () -> Component.literal(SettingsValues.waypointRangeLabel()),
+                    VoxyMapSettings::cycleWaypointRange);
             case WAYPOINTS_OTHER_DIMENSION -> toggle(controlWidth, VoxyMapSettings::otherDimensionWaypoints,
                     VoxyMapSettings::toggleOtherDimensionWaypoints);
             case DEATH_POINTS -> toggle(controlWidth, VoxyMapSettings::deathPointsEnabled, VoxyMapSettings::toggleDeathPoints);
