@@ -87,7 +87,10 @@ public final class MobHeadIcons {
         if (minecraft == null) {
             return;
         }
-        BlockStateModelSet models = minecraft.getModelManager().getBlockStateModelSet();
+        BlockStateModelSet models = MinimapBlockColors.loadedModels(minecraft);
+        if (models == null) {
+            return;
+        }
         if (models != loadedModels) {
             loadedModels = models;
             clear(minecraft);

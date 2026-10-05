@@ -72,8 +72,19 @@ final class MinimapBlockColors {
         }
     }
 
+    static BlockStateModelSet loadedModels(Minecraft minecraft) {
+        try {
+            return minecraft.getModelManager().getBlockStateModelSet();
+        } catch (NullPointerException notLoadedYet) {
+            return null;
+        }
+    }
+
     private static Sample sample(BlockState state) {
-        BlockStateModelSet models = Minecraft.getInstance().getModelManager().getBlockStateModelSet();
+        BlockStateModelSet models = loadedModels(Minecraft.getInstance());
+        if (models == null) {
+            return Sample.NONE;
+        }
         if (models != sampledModels) {
             SAMPLES.clear();
             sampledModels = models;
