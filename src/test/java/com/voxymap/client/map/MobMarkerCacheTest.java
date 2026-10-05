@@ -11,8 +11,8 @@ class MobMarkerCacheTest {
     @Test
     void mobsBeyondRangeAreExcluded() {
         List<MobMarkerCache.MobSnapshot> candidates = List.of(
-                new MobMarkerCache.MobSnapshot(10, 64, 0, false),
-                new MobMarkerCache.MobSnapshot(200, 64, 0, false));
+                new MobMarkerCache.MobSnapshot(10, 64, 0, RadarCategory.PASSIVE),
+                new MobMarkerCache.MobSnapshot(200, 64, 0, RadarCategory.PASSIVE));
 
         List<MobMarkerCache.MobSnapshot> result = MobMarkerCache.filterAndCap(candidates, 0, 0, 128.0, 150);
 
@@ -23,7 +23,7 @@ class MobMarkerCacheTest {
     @Test
     void mobExactlyAtRangeIsIncluded() {
         List<MobMarkerCache.MobSnapshot> candidates = List.of(
-                new MobMarkerCache.MobSnapshot(128, 64, 0, false));
+                new MobMarkerCache.MobSnapshot(128, 64, 0, RadarCategory.PASSIVE));
 
         List<MobMarkerCache.MobSnapshot> result = MobMarkerCache.filterAndCap(candidates, 0, 0, 128.0, 150);
 
@@ -33,9 +33,9 @@ class MobMarkerCacheTest {
     @Test
     void overflowKeepsOnlyTheNearestUpToTheCap() {
         List<MobMarkerCache.MobSnapshot> candidates = List.of(
-                new MobMarkerCache.MobSnapshot(30, 64, 0, false),
-                new MobMarkerCache.MobSnapshot(10, 64, 0, false),
-                new MobMarkerCache.MobSnapshot(20, 64, 0, false));
+                new MobMarkerCache.MobSnapshot(30, 64, 0, RadarCategory.PASSIVE),
+                new MobMarkerCache.MobSnapshot(10, 64, 0, RadarCategory.PASSIVE),
+                new MobMarkerCache.MobSnapshot(20, 64, 0, RadarCategory.PASSIVE));
 
         List<MobMarkerCache.MobSnapshot> result = MobMarkerCache.filterAndCap(candidates, 0, 0, 128.0, 2);
 
@@ -47,8 +47,8 @@ class MobMarkerCacheTest {
     @Test
     void atOrBelowTheCapKeepsEveryCandidateUnsorted() {
         List<MobMarkerCache.MobSnapshot> candidates = List.of(
-                new MobMarkerCache.MobSnapshot(30, 64, 0, true),
-                new MobMarkerCache.MobSnapshot(10, 64, 0, false));
+                new MobMarkerCache.MobSnapshot(30, 64, 0, RadarCategory.HOSTILE),
+                new MobMarkerCache.MobSnapshot(10, 64, 0, RadarCategory.PASSIVE));
 
         List<MobMarkerCache.MobSnapshot> result = MobMarkerCache.filterAndCap(candidates, 0, 0, 128.0, 150);
 

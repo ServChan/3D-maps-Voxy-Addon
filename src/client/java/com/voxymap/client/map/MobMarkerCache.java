@@ -3,6 +3,9 @@ package com.voxymap.client.map;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.NeutralMob;
+import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Enemy;
 
 import java.util.ArrayList;
@@ -10,14 +13,15 @@ import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class MobMarkerCache {
     private static final int MAX_MARKERS = 150;
     private static final double MAX_RANGE_BLOCKS = 128.0;
 
-    public record MobSnapshot(double x, double y, double z, boolean hostile, MobHeadIcons.Face face) {
-        public MobSnapshot(double x, double y, double z, boolean hostile) {
-            this(x, y, z, hostile, null);
+    public record MobSnapshot(double x, double y, double z, RadarCategory category, MobHeadIcons.Face face) {
+        public MobSnapshot(double x, double y, double z, RadarCategory category) {
+            this(x, y, z, category, null);
         }
     }
 
@@ -28,9 +32,13 @@ public final class MobMarkerCache {
 
     public static void tick(Minecraft minecraft) {
         if (minecraft == null || minecraft.level == null || minecraft.player == null
-                || !VoxyMapSettings.mobsEnabled()
-
                 || !VoxyMapSettings.minimapEnabled() || VoxyMapCameraController.isActive()) {
+            snapshot = List.of();
+            return;
+        }
+
+        Set<RadarCategory> shown = VoxyMapSettings.radarCategories();
+        if (!shown.contains(RadarCategory.ITEMS) && !VoxyMapSettings.mobsEnabled()) {
             snapshot = List.of();
             return;
         }
@@ -41,12 +49,15 @@ public final class MobMarkerCache {
         List<MobSnapshot> candidates = new ArrayList<>();
         Map<MobSnapshot, Mob> sources = new IdentityHashMap<>();
         for (Entity entity : minecraft.level.entitiesForRendering()) {
-            if (!(entity instanceof Mob mob)) {
+            RadarCategory category = categoryOf(entity);
+            if (category == null || !shown.contains(category)) {
                 continue;
             }
-            MobSnapshot candidate = new MobSnapshot(mob.getX(), mob.getY(), mob.getZ(), mob instanceof Enemy);
+            MobSnapshot candidate = new MobSnapshot(entity.getX(), entity.getY(), entity.getZ(), category);
             candidates.add(candidate);
-            sources.put(candidate, mob);
+            if (entity instanceof Mob mob) {
+                sources.put(candidate, mob);
+            }
         }
         List<MobSnapshot> kept = filterAndCap(candidates, px, pz, MAX_RANGE_BLOCKS, MAX_MARKERS);
         snapshot = MinimapHeads.shown(minecraft) ? withFaces(minecraft, kept, sources) : kept;
@@ -57,9 +68,28 @@ public final class MobMarkerCache {
         for (MobSnapshot mob : mobs) {
             Mob source = sources.get(mob);
             MobHeadIcons.Face face = source == null ? null : MobHeadIcons.faceOf(minecraft, source);
-            result.add(new MobSnapshot(mob.x(), mob.y(), mob.z(), mob.hostile(), face));
+            result.add(new MobSnapshot(mob.x(), mob.y(), mob.z(), mob.category(), face));
         }
         return List.copyOf(result);
+    }
+
+    static RadarCategory categoryOf(Entity entity) {
+        if (entity instanceof ItemEntity) {
+            return RadarCategory.ITEMS;
+        }
+        if (!(entity instanceof Mob)) {
+            return null;
+        }
+        if (entity instanceof TamableAnimal tamable && tamable.isTame()) {
+            return RadarCategory.PASSIVE;
+        }
+        if (entity instanceof NeutralMob) {
+            return RadarCategory.NEUTRAL;
+        }
+        if (entity instanceof Enemy) {
+            return RadarCategory.HOSTILE;
+        }
+        return RadarCategory.PASSIVE;
     }
 
     static List<MobSnapshot> filterAndCap(List<MobSnapshot> candidates, double px, double pz,

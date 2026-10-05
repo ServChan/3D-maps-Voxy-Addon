@@ -1,5 +1,9 @@
 package com.voxymap.client.gui;
 
+import com.voxymap.client.map.MapOverlay;
+import com.voxymap.client.map.MinimapInfoLine;
+import com.voxymap.client.map.RadarCategory;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,6 +15,9 @@ public final class SettingsCatalog {
         GENERAL("screen.voxymap.settings.group.general"),
         LAYERS("screen.voxymap.settings.group.layers"),
         MINIMAP("screen.voxymap.settings.group.minimap"),
+        INFO("screen.voxymap.settings.group.info"),
+        RADAR("screen.voxymap.settings.group.radar"),
+        OVERLAYS("screen.voxymap.settings.group.overlays"),
         SYNC("screen.voxymap.settings.group.sync"),
         DIAGNOSTICS("screen.voxymap.settings.group.diagnostics");
 
@@ -44,6 +51,9 @@ public final class SettingsCatalog {
         SPATIAL_GUI_3D(Group.GENERAL, "screen.voxymap.settings.spatialgui3d", Availability.EVERYWHERE, false),
 
         WAYPOINTS(Group.LAYERS, "screen.voxymap.settings.waypoints", Availability.EVERYWHERE, false),
+        WAYPOINTS_OTHER_DIMENSION(Group.LAYERS, "screen.voxymap.settings.otherdimension", Availability.EVERYWHERE, false),
+        WAYPOINT_LABELS(Group.LAYERS, "screen.voxymap.settings.waypointlabels", Availability.EVERYWHERE, false),
+        WAYPOINT_BEAMS(Group.LAYERS, "screen.voxymap.settings.waypointbeams", Availability.EVERYWHERE, false),
         DEATH_POINTS(Group.LAYERS, "screen.voxymap.settings.deathpoints", Availability.EVERYWHERE, false),
         VIEW_DIRECTION(Group.LAYERS, "screen.voxymap.settings.viewdirection", Availability.EVERYWHERE, false),
         VANILLASQUAD_PLAYERS(Group.LAYERS, "screen.voxymap.settings.vanillasquad", Availability.EVERYWHERE, true),
@@ -53,8 +63,36 @@ public final class SettingsCatalog {
 
         MINIMAP(Group.MINIMAP, "screen.voxymap.settings.minimap", Availability.EVERYWHERE, false),
         MINIMAP_ROTATE(Group.MINIMAP, "screen.voxymap.settings.minimaprotate", Availability.EVERYWHERE, false),
-        MOBS(Group.MINIMAP, "screen.voxymap.settings.mobs", Availability.EVERYWHERE, false),
+        MINIMAP_COLORS(Group.MINIMAP, "screen.voxymap.settings.minimapcolors", Availability.EVERYWHERE, false),
+        MINIMAP_SHAPE(Group.MINIMAP, "screen.voxymap.settings.minimapshape", Availability.EVERYWHERE, false),
+        MINIMAP_SIZE(Group.MINIMAP, "screen.voxymap.settings.minimapsize", Availability.EVERYWHERE, false),
+        MINIMAP_CORNER(Group.MINIMAP, "screen.voxymap.settings.minimapcorner", Availability.EVERYWHERE, false),
+        MINIMAP_ZOOM(Group.MINIMAP, "screen.voxymap.settings.minimapzoom", Availability.EVERYWHERE, false),
+        MINIMAP_MOVE(Group.MINIMAP, "screen.voxymap.settings.minimapmove", Availability.IN_WORLD, false),
+        MINIMAP_OPACITY(Group.MINIMAP, "screen.voxymap.settings.minimapopacity", Availability.EVERYWHERE, false),
+        MINIMAP_NIGHT(Group.MINIMAP, "screen.voxymap.settings.minimapnight", Availability.EVERYWHERE, false),
+        MINIMAP_CAVE(Group.MINIMAP, "screen.voxymap.settings.cavemode", Availability.EVERYWHERE, false),
+        MINIMAP_SCREENS(Group.MINIMAP, "screen.voxymap.settings.minimapscreens", Availability.EVERYWHERE, false),
         CHUNK_GRID(Group.MINIMAP, "screen.voxymap.settings.chunkgrid", Availability.EVERYWHERE, false),
+
+        INFO_COORDINATES(Group.INFO, "screen.voxymap.settings.info.coordinates", MinimapInfoLine.COORDINATES),
+        INFO_NETHER_COORDINATES(Group.INFO, "screen.voxymap.settings.info.nether_coordinates", MinimapInfoLine.NETHER_COORDINATES),
+        INFO_BIOME(Group.INFO, "screen.voxymap.settings.info.biome", MinimapInfoLine.BIOME),
+        INFO_LIGHT(Group.INFO, "screen.voxymap.settings.info.light", MinimapInfoLine.LIGHT),
+        INFO_TIME(Group.INFO, "screen.voxymap.settings.info.time", MinimapInfoLine.TIME),
+        INFO_CHUNK(Group.INFO, "screen.voxymap.settings.info.chunk", MinimapInfoLine.CHUNK),
+        INFO_FACING(Group.INFO, "screen.voxymap.settings.info.facing", MinimapInfoLine.FACING),
+
+        RADAR_HOSTILE(Group.RADAR, "screen.voxymap.settings.radar.hostile", RadarCategory.HOSTILE),
+        RADAR_NEUTRAL(Group.RADAR, "screen.voxymap.settings.radar.neutral", RadarCategory.NEUTRAL),
+        RADAR_PASSIVE(Group.RADAR, "screen.voxymap.settings.radar.passive", RadarCategory.PASSIVE),
+        RADAR_ITEMS(Group.RADAR, "screen.voxymap.settings.radar.items", RadarCategory.ITEMS),
+        RADAR_PLAYERS(Group.RADAR, "screen.voxymap.settings.radar.players", RadarCategory.PLAYERS),
+        RADAR_ICONS(Group.RADAR, "screen.voxymap.settings.radaricons", Availability.EVERYWHERE, false),
+
+        OVERLAY_SLIME(Group.OVERLAYS, "screen.voxymap.settings.overlay.slime", MapOverlay.SLIME_CHUNKS),
+        OVERLAY_LIGHT(Group.OVERLAYS, "screen.voxymap.settings.overlay.light", MapOverlay.SPAWN_LIGHT),
+        OVERLAY_BIOMES(Group.OVERLAYS, "screen.voxymap.settings.overlay.biomes", MapOverlay.BIOMES),
 
         SYNC_ADDRESS(Group.SYNC, "screen.voxymap.settings.sync_address", Availability.IN_WORLD, false),
         SYNC_PASSWORD(Group.SYNC, "screen.voxymap.settings.sync_password", Availability.IN_WORLD, false),
@@ -68,12 +106,40 @@ public final class SettingsCatalog {
         private final String labelKey;
         private final Availability availability;
         private final boolean vanillaSquadOnly;
+        private final MinimapInfoLine infoLine;
+        private final RadarCategory radarCategory;
+        private final MapOverlay mapOverlay;
 
         Entry(Group group, String labelKey, Availability availability, boolean vanillaSquadOnly) {
+            this(group, labelKey, availability, vanillaSquadOnly, null, null);
+        }
+
+        Entry(Group group, String labelKey, MapOverlay mapOverlay) {
+            this(group, labelKey, Availability.EVERYWHERE, false, null, null, mapOverlay);
+        }
+
+        Entry(Group group, String labelKey, MinimapInfoLine infoLine) {
+            this(group, labelKey, Availability.EVERYWHERE, false, infoLine, null);
+        }
+
+        Entry(Group group, String labelKey, RadarCategory radarCategory) {
+            this(group, labelKey, Availability.EVERYWHERE, false, null, radarCategory);
+        }
+
+        Entry(Group group, String labelKey, Availability availability, boolean vanillaSquadOnly,
+              MinimapInfoLine infoLine, RadarCategory radarCategory) {
+            this(group, labelKey, availability, vanillaSquadOnly, infoLine, radarCategory, null);
+        }
+
+        Entry(Group group, String labelKey, Availability availability, boolean vanillaSquadOnly,
+              MinimapInfoLine infoLine, RadarCategory radarCategory, MapOverlay mapOverlay) {
+            this.mapOverlay = mapOverlay;
             this.group = group;
             this.labelKey = labelKey;
             this.availability = availability;
             this.vanillaSquadOnly = vanillaSquadOnly;
+            this.infoLine = infoLine;
+            this.radarCategory = radarCategory;
         }
 
         public Group group() {
@@ -90,6 +156,18 @@ public final class SettingsCatalog {
 
         public boolean vanillaSquadOnly() {
             return vanillaSquadOnly;
+        }
+
+        public MinimapInfoLine infoLine() {
+            return infoLine;
+        }
+
+        public RadarCategory radarCategory() {
+            return radarCategory;
+        }
+
+        public MapOverlay mapOverlay() {
+            return mapOverlay;
         }
     }
 

@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -24,6 +25,10 @@ public final class WaypointManager {
 
     private static boolean loaded = false;
     private static final Map<String, List<Waypoint>> byWorld = new ConcurrentHashMap<>();
+    private static final Map<String, List<Waypoint>> temporaryByWorld = new ConcurrentHashMap<>();
+    private static final String TEMPORARY_PREFIX = "temp-";
+    private static final double ARRIVAL_RADIUS_BLOCKS = 6.0;
+    private static final Set<String> armedTemporaryIds = ConcurrentHashMap.newKeySet();
 
     private static volatile int localVersion = 0;
     private static final Map<String, MergedCacheEntry> mergedCache = new ConcurrentHashMap<>();
@@ -32,6 +37,13 @@ public final class WaypointManager {
     }
 
     public record Waypoint(String id, String name, double x, double y, double z, int color, boolean shared) {
+        public boolean temporary() {
+            return id.startsWith(TEMPORARY_PREFIX);
+        }
+
+        public String initial() {
+            return WaypointPrefs.symbol(id, name);
+        }
     }
 
     public enum SyncStatus { DISABLED, READ_ONLY, SYNCING, OK, ERROR }
@@ -53,14 +65,27 @@ public final class WaypointManager {
         }
 
         List<Waypoint> local = byWorld.getOrDefault(worldId, List.of());
-        List<Waypoint> result = new ArrayList<>(local.size() + remote.size());
+        List<Waypoint> temporary = temporaryByWorld.getOrDefault(worldId, List.of());
+        List<Waypoint> result = new ArrayList<>(local.size() + temporary.size() + remote.size());
         result.addAll(local);
+        result.addAll(temporary);
         for (Waypoint entry : remote) {
             result.add(entry.shared() ? entry : new Waypoint(entry.id(), entry.name(), entry.x(), entry.y(), entry.z(), entry.color(), true));
         }
         List<Waypoint> merged = List.copyOf(result);
         mergedCache.put(worldId, new MergedCacheEntry(version, remote, merged));
         return merged;
+    }
+
+    public static List<Waypoint> visibleForWorld(String worldId) {
+        List<Waypoint> all = forWorld(worldId);
+        List<Waypoint> visible = new ArrayList<>(all.size());
+        for (Waypoint waypoint : all) {
+            if (!WaypointPrefs.hidden(waypoint.id())) {
+                visible.add(waypoint);
+            }
+        }
+        return visible;
     }
 
     public static boolean canShare(String worldId) {
@@ -108,6 +133,71 @@ public final class WaypointManager {
         return waypoint;
     }
 
+    public static Waypoint addTemporary(String worldId, String name, double x, double y, double z, int color) {
+        load();
+        if (!WaypointCodec.validWorldId(worldId) || name == null || name.isBlank()) return null;
+        Waypoint waypoint = new Waypoint(TEMPORARY_PREFIX + UUID.randomUUID(), name.trim(), x, y, z, color, false);
+        temporaryByWorld.computeIfAbsent(worldId, key -> new CopyOnWriteArrayList<>()).add(waypoint);
+        localVersion++;
+        return waypoint;
+    }
+
+    public static List<Waypoint> removeArrived(String worldId, double x, double z) {
+        List<Waypoint> temporary = temporaryByWorld.get(worldId);
+        if (temporary == null || temporary.isEmpty()) return List.of();
+        List<Waypoint> arrived = new ArrayList<>();
+        for (Waypoint waypoint : temporary) {
+            double distance = Math.hypot(waypoint.x() - x, waypoint.z() - z);
+            if (distance > ARRIVAL_RADIUS_BLOCKS * 2) {
+                armedTemporaryIds.add(waypoint.id());
+            } else if (distance <= ARRIVAL_RADIUS_BLOCKS && armedTemporaryIds.contains(waypoint.id())) {
+                arrived.add(waypoint);
+            }
+        }
+        if (!arrived.isEmpty()) {
+            temporary.removeAll(arrived);
+            arrived.forEach(waypoint -> armedTemporaryIds.remove(waypoint.id()));
+            localVersion++;
+        }
+        return arrived;
+    }
+
+    public static boolean editable(String worldId, Waypoint waypoint) {
+        return waypoint != null && (!waypoint.shared() || canShare(worldId));
+    }
+
+    public static void update(String worldId, String id, String name, double x, double y, double z, int color) {
+        load();
+        if (!WaypointCodec.validWorldId(worldId) || id == null || name == null || name.isBlank()) return;
+
+        for (Map<String, List<Waypoint>> store : List.of(byWorld, temporaryByWorld)) {
+            List<Waypoint> list = store.get(worldId);
+            if (list == null) continue;
+            for (int i = 0; i < list.size(); i++) {
+                Waypoint current = list.get(i);
+                if (current.id().equals(id)) {
+                    list.set(i, new Waypoint(current.id(), name.trim(), x, y, z, color, false));
+                    localVersion++;
+                    if (store == byWorld) {
+                        save();
+                    }
+                    return;
+                }
+            }
+        }
+
+        String address = WaypointSyncSettings.address(worldId);
+        if (address == null) return;
+        String password = WaypointSyncSettings.password(worldId);
+        if (password == null) return;
+        for (Waypoint current : WaypointSyncClient.cached(worldId, address)) {
+            if (current.id().equals(id)) {
+                WaypointSyncClient.add(worldId, address, password, new Waypoint(current.id(), name.trim(), x, y, z, color, true));
+                return;
+            }
+        }
+    }
+
     public static int suggestedColor(String worldId) {
         load();
         int count = forWorld(worldId).size();
@@ -121,6 +211,18 @@ public final class WaypointManager {
     public static void rename(String worldId, String id, String newName) {
         load();
         if (!WaypointCodec.validWorldId(worldId) || id == null || newName == null || newName.isBlank()) return;
+
+        List<Waypoint> temporary = temporaryByWorld.get(worldId);
+        if (temporary != null) {
+            for (int i = 0; i < temporary.size(); i++) {
+                Waypoint current = temporary.get(i);
+                if (current.id().equals(id)) {
+                    temporary.set(i, new Waypoint(current.id(), newName.trim(), current.x(), current.y(), current.z(), current.color(), false));
+                    localVersion++;
+                    return;
+                }
+            }
+        }
 
         List<Waypoint> list = byWorld.get(worldId);
         if (list != null) {
@@ -151,6 +253,13 @@ public final class WaypointManager {
     public static void remove(String worldId, String id) {
         load();
         if (!WaypointCodec.validWorldId(worldId) || id == null) return;
+        WaypointPrefs.forget(id);
+
+        List<Waypoint> temporary = temporaryByWorld.get(worldId);
+        if (temporary != null && temporary.removeIf(w -> w.id().equals(id))) {
+            localVersion++;
+            return;
+        }
 
         List<Waypoint> list = byWorld.get(worldId);
         if (list != null && list.removeIf(w -> w.id().equals(id))) {
@@ -175,6 +284,11 @@ public final class WaypointManager {
             String password = address != null ? WaypointSyncSettings.password(worldId) : null;
             if (password == null) return false;
             WaypointSyncClient.add(worldId, address, password, waypoint);
+            return true;
+        }
+        if (waypoint.temporary()) {
+            temporaryByWorld.computeIfAbsent(worldId, key -> new CopyOnWriteArrayList<>()).add(waypoint);
+            localVersion++;
             return true;
         }
         byWorld.computeIfAbsent(worldId, key -> new CopyOnWriteArrayList<>()).add(waypoint);

@@ -41,6 +41,7 @@ public final class WaypointBeaconRenderer {
     private static void renderBeams(LevelRenderContext context) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null || !VoxyMapSettings.waypointsEnabled()
+                || !VoxyMapSettings.waypointBeams()
                 || VoxyMapCameraController.isActive()) {
             return;
         }
@@ -57,7 +58,7 @@ public final class WaypointBeaconRenderer {
         SubmitNodeCollector collector = context.submitNodeCollector();
         float animationTime = (float) minecraft.level.getGameTime();
 
-        for (WaypointManager.Waypoint waypoint : WaypointManager.forWorld(worldId)) {
+        for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId)) {
             double dx = waypoint.x() - cameraPos.x;
             double dy = waypoint.y() - cameraPos.y;
             double dz = waypoint.z() - cameraPos.z;

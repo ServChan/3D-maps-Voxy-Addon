@@ -85,4 +85,54 @@ class MinimapRendererTest {
     void scaleAlphaAtFullStrengthIsUnchanged() {
         assertEquals(0xFF112233, MinimapRenderer.scaleAlpha(0xFF112233, 0xFF));
     }
+
+    @Test
+    void segmentsAreClippedToTheCircle() {
+        double[] clipped = MinimapRenderer.clipToCircle(-100, 0, 100, 0, 0, 0, 10);
+        assertEquals(-10.0, clipped[0], 1e-9);
+        assertEquals(10.0, clipped[2], 1e-9);
+        assertEquals(0.0, clipped[1], 1e-9);
+    }
+
+    @Test
+    void segmentsInsideTheCircleAreKeptAndOnesOutsideAreDropped() {
+        double[] inside = MinimapRenderer.clipToCircle(-2, 1, 3, 1, 0, 0, 10);
+        assertEquals(-2.0, inside[0], 1e-9);
+        assertEquals(3.0, inside[2], 1e-9);
+        assertEquals(null, MinimapRenderer.clipToCircle(-100, 20, 100, 20, 0, 0, 10));
+        assertEquals(null, MinimapRenderer.clipToCircle(20, 0, 30, 0, 0, 0, 10));
+    }
+
+    @Test
+    void tilesAreLoadedFromThePlayerOutwards() {
+        int[] order = MinimapRenderer.centerOutOrder(5);
+        assertEquals(25, order.length);
+        assertEquals(12, order[0]);
+        java.util.Set<Integer> neighbours = java.util.Set.of(7, 11, 13, 17);
+        for (int i = 1; i <= 4; i++) {
+            assertTrue(neighbours.contains(order[i]));
+        }
+        assertEquals(25, java.util.Arrays.stream(order).distinct().count());
+    }
+
+    @Test
+    void theMinimapShrinksToFitSmallWindowsButNotBelowTheMinimum() {
+        assertEquals(128, MinimapRenderer.fitSize(128, 400, 300));
+        assertEquals(90, MinimapRenderer.fitSize(128, 400, 90));
+        assertEquals(64, MinimapRenderer.fitSize(128, 400, 20));
+    }
+
+    @Test
+    void halfChordIsZeroOutsideTheCircle() {
+        assertEquals(10.0, MinimapRenderer.halfChord(10.0, 0.0), 1e-9);
+        assertEquals(0.0, MinimapRenderer.halfChord(10.0, 11.0));
+    }
+
+    @Test
+    void heightArrowsAppearOnlyBeyondThreeBlocks() {
+        assertEquals(0, MinimapRenderer.heightHint(3.0));
+        assertEquals(1, MinimapRenderer.heightHint(3.5));
+        assertEquals(-1, MinimapRenderer.heightHint(-10.0));
+        assertEquals(0, MinimapRenderer.heightHint(-2.0));
+    }
 }

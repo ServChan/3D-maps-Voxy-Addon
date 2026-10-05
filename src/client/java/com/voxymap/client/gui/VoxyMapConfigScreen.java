@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 public final class VoxyMapConfigScreen extends Screen {
     private static final int TITLE_BAR_HEIGHT = 28;
@@ -146,13 +147,62 @@ public final class VoxyMapConfigScreen extends Screen {
             }).bounds(controlX, 0, controlWidth, CONTROL_HEIGHT).build();
             case VIEW_DIRECTION -> toggle(controlWidth, VoxyMapSettings::viewDirectionEnabled, VoxyMapSettings::toggleViewDirection);
             case WAYPOINTS -> toggle(controlWidth, VoxyMapSettings::waypointsEnabled, VoxyMapSettings::toggleWaypointsVisible);
+            case WAYPOINT_LABELS -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.waypointLabelMode().translationKey()),
+                    VoxyMapSettings::cycleWaypointLabelMode);
+            case WAYPOINT_BEAMS -> toggle(controlWidth, VoxyMapSettings::waypointBeams, VoxyMapSettings::toggleWaypointBeams);
+            case WAYPOINTS_OTHER_DIMENSION -> toggle(controlWidth, VoxyMapSettings::otherDimensionWaypoints,
+                    VoxyMapSettings::toggleOtherDimensionWaypoints);
             case DEATH_POINTS -> toggle(controlWidth, VoxyMapSettings::deathPointsEnabled, VoxyMapSettings::toggleDeathPoints);
             case VANILLASQUAD_PLAYERS -> toggle(controlWidth, VoxyMapSettings::vanillaSquadPlayersEnabled, VoxyMapSettings::toggleVanillaSquadPlayers);
             case VANILLASQUAD_FLAGS -> toggle(controlWidth, VoxyMapSettings::vanillaSquadFlagsEnabled, VoxyMapSettings::toggleVanillaSquadFlags);
             case MINIMAP -> toggle(controlWidth, VoxyMapSettings::minimapEnabled, VoxyMapSettings::toggleMinimap);
             case MINIMAP_ROTATE -> toggle(controlWidth, VoxyMapSettings::minimapRotates, VoxyMapSettings::toggleMinimapRotates);
-            case MOBS -> toggle(controlWidth, VoxyMapSettings::mobsEnabled, VoxyMapSettings::toggleMobs);
+            case MINIMAP_COLORS -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.minimapColors().translationKey()),
+                    VoxyMapSettings::cycleMinimapColors);
+            case MINIMAP_SHAPE -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.minimapShape().translationKey()),
+                    VoxyMapSettings::cycleMinimapShape);
+            case MINIMAP_SIZE -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.minimapSize().translationKey()),
+                    VoxyMapSettings::cycleMinimapSize);
+            case MINIMAP_CORNER -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.minimapCorner().translationKey()),
+                    VoxyMapSettings::cycleMinimapCorner);
+            case MINIMAP_MOVE -> Button.builder(Component.translatable("screen.voxymap.settings.minimapmove.open"),
+                    pressed -> {
+                        if (minecraft != null) {
+                            minecraft.setScreenAndShow(new MinimapLayoutScreen(this));
+                        }
+                    }).bounds(controlX, 0, controlWidth, CONTROL_HEIGHT).build();
+            case MINIMAP_OPACITY -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.minimapOpacity().translationKey()),
+                    VoxyMapSettings::cycleMinimapOpacity);
+            case MINIMAP_NIGHT -> toggle(controlWidth, VoxyMapSettings::minimapNightShading,
+                    VoxyMapSettings::toggleMinimapNightShading);
+            case MINIMAP_CAVE -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.caveMode().translationKey()),
+                    VoxyMapSettings::cycleCaveMode);
+            case MINIMAP_SCREENS -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.minimapScreenVisibility().translationKey()),
+                    VoxyMapSettings::cycleMinimapScreenVisibility);
+            case MINIMAP_ZOOM -> cycle(controlWidth,
+                    () -> Component.literal(SettingsValues.minimapZoomLabel()),
+                    VoxyMapSettings::cycleMinimapZoom);
+            case INFO_COORDINATES, INFO_NETHER_COORDINATES, INFO_BIOME, INFO_LIGHT, INFO_TIME, INFO_CHUNK, INFO_FACING -> toggle(controlWidth,
+                    () -> VoxyMapSettings.infoLineShown(entry.infoLine()),
+                    () -> VoxyMapSettings.toggleInfoLine(entry.infoLine()));
+            case RADAR_HOSTILE, RADAR_NEUTRAL, RADAR_PASSIVE, RADAR_ITEMS, RADAR_PLAYERS -> toggle(controlWidth,
+                    () -> VoxyMapSettings.radarShows(entry.radarCategory()),
+                    () -> VoxyMapSettings.toggleRadarCategory(entry.radarCategory()));
             case CHUNK_GRID -> toggle(controlWidth, VoxyMapSettings::chunkGridEnabled, VoxyMapSettings::toggleChunkGrid);
+            case RADAR_ICONS -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.radarIcons().translationKey()),
+                    VoxyMapSettings::cycleRadarIcons);
+            case OVERLAY_SLIME, OVERLAY_LIGHT, OVERLAY_BIOMES -> toggle(controlWidth,
+                    () -> VoxyMapSettings.overlayShown(entry.mapOverlay()),
+                    () -> VoxyMapSettings.toggleOverlay(entry.mapOverlay()));
             case SCHEMATICS -> toggle(controlWidth, VoxyMapSettings::schematicsEnabled, VoxyMapSettings::toggleSchematics);
             case SPATIAL_GUI_FLAT_MAP -> toggle(controlWidth, VoxyMapSettings::spatialGuiFlatMap, VoxyMapSettings::toggleSpatialGuiFlatMap);
             case SPATIAL_GUI_3D -> toggle(controlWidth, VoxyMapSettings::windowMap3d, VoxyMapSettings::toggleWindowMap3d);
@@ -266,6 +316,13 @@ public final class VoxyMapConfigScreen extends Screen {
     public void removed() {
         commitSyncFields();
         super.removed();
+    }
+
+    private Button cycle(int controlWidth, Supplier<Component> label, Runnable advance) {
+        return Button.builder(label.get(), pressed -> {
+            advance.run();
+            pressed.setMessage(label.get());
+        }).bounds(controlX, 0, controlWidth, CONTROL_HEIGHT).build();
     }
 
     private Button toggle(int controlWidth, BooleanSupplier getter, Runnable flip) {

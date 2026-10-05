@@ -1,6 +1,7 @@
 package com.voxymap.client.map;
 
 import com.voxymap.client.integration.LitematicaPlusBridge;
+import com.voxymap.client.gui.WaypointIcons;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -120,7 +121,7 @@ public final class FlatMapRenderer {
         if (worldId == null || !VoxyMapSettings.waypointsEnabled()) {
             return;
         }
-        for (WaypointManager.Waypoint waypoint : WaypointManager.forWorld(worldId)) {
+        for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId)) {
             double sx = view.screenX(waypoint.x());
             double sy = view.screenY(waypoint.z());
             if (!view.contains(sx, sy)) {
@@ -128,11 +129,11 @@ public final class FlatMapRenderer {
             }
             int px = (int) Math.round(sx);
             int py = (int) Math.round(sy);
-            MinimapRenderer.drawDot(g, px, py, 3, 0xEE0A0A12);
-            MinimapRenderer.drawDot(g, px, py, 2, waypoint.color());
+            WaypointIcons.drawCentered(g, minecraft.font, px, py, 9, waypoint.color(),
+                    waypoint.initial());
             int nameWidth = minecraft.font.width(waypoint.name());
             int nameX = px - nameWidth / 2;
-            int nameY = py + 5;
+            int nameY = py + 7;
             g.fill(nameX - 2, nameY - 1, nameX + nameWidth + 2, nameY + 8, 0x99030914);
             g.text(minecraft.font, waypoint.name(), nameX, nameY, 0xFFFFFFFF);
         }

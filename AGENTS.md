@@ -89,12 +89,72 @@ targets Iris must use that prefix; any other optional target (Xaero) uses `@Pseu
 
 ## Minimap heads
 
-Holding the player-list key swaps minimap dots for heads (`MinimapHeads`). Mob faces are not hardcoded:
+`MinimapHeads` decides whether the minimap draws heads or dots from `VoxyMapSettings.radarIcons()`: always heads (the
+default), heads only while the player-list key is held, or dots. Mobs and players more than 3 blocks above or below
+the player get a small up or down arrow. Mob faces are not hardcoded:
 while the minimap and its mobs are on, `LivingEntityRendererMixin` hands each rendered mob to
 `MobHeadIcons`, which stores the `head` part's face rectangle per texture (at most 4096, then the cache
 resets). Renderers with a single model get their face without being seen first; for the rest, a texture
 variant never rendered this session keeps its dot. All of it catches `RuntimeException | LinkageError`
 and falls back to the dot.
+
+## Minimap colours
+
+`MinimapTileCache.computeTile` colours each column from the block model's top quad: `MinimapBlockColors` averages
+the sprite's first frame (`SpriteContentsAccessor.originalImage`), caches it per `BlockState` until the
+`BlockStateModelSet` instance changes (resource reload), and multiplies biome tint through `BlockColors.getTintSource`.
+Water is blended over the floor by depth, and slopes are lit from the north-west (`MapColorMath`). Any failure
+switches texture colours off for the session and falls back to `MapColor`; `MinimapColors.CLASSIC` keeps the old
+vanilla-map look. The minimap texture covers 33x33 chunks and computes at most `TILE_COMPUTE_BUDGET` new tiles
+per frame, nearest first.
+
+## Waypoints outside the map screen
+
+B opens `WaypointEditScreen`, U opens `WaypointListScreen`. Temporary waypoints live only in memory
+(`WaypointManager.temporaryByWorld`, ids start with `temp-`), are never synced, and are removed once the player
+has been more than 12 blocks away and comes back within 6. Chat sharing uses Xaero's `xaero-waypoint:` format
+(`WaypointText`) so Xaero users can import ours and we import theirs; `WaypointChatShare` answers a shared
+waypoint with a client-side `[Add]` link that runs `/voxymap waypoint add <dimension> <x> <y> <z> <color> <name>`
+and converts Nether/Overworld coordinates at click time. Keep the name as the last (greedy) argument.
+In-world icons and labels (`WaypointLabels`) are HUD elements drawn at the head of `Hud.extractRenderState`, so
+the hotbar and minimap stay on top. They project with `Camera.getViewRotationProjectionMatrix`, which follows
+dynamic FOV and view bobbing; far points are scaled to 1000 blocks before projecting to keep float precision
+(the matrix has no translation, so x/w and y/w do not change). Beacon beams are a separate toggle (`waypointBeams`).
+
+Overworld waypoints show in the Nether (and Nether ones in the Overworld) at x/8 or x*8, faded, through
+`DimensionLinks.foreignWaypoints`. Waypoints are stored per Voxy world id, which is SHA-256 of biome seed + level key,
+so the paired id is first taken from a link learned when the player crosses between the two dimensions on one
+connection (`VoxyMapSettings.netherLinks`, persisted), and only then computed from the current biome seed. Servers
+with a different seed per world rely on the learned link. Editing, deleting or sharing a foreign waypoint acts on
+its source world id and dimension.
+
+## Map overlays
+
+Slime chunks, spawn light and biome colours are baked into minimap tiles in `MinimapTileCache.applyOverlays`, so
+the minimap clears its tile cache whenever the colour mode, the overlay set or the slime seed changes
+(`MinimapRenderer.TileLook`). Slime chunks use `WorldgenRandom.seedSlimeChunk` with salt `987234911` (pinned against
+the published formula in `MinimapOverlaysTest`); the seed comes from the integrated server in singleplayer and from
+`/voxymap seed <seed>` (stored per Overworld world id) on servers. Spawn light marks floors that are a valid zombie
+spawn with block light 0 above them.
+
+## Minimap placement and visibility
+
+`MinimapPlacement.place` is the only place that turns the corner preset or the dragged fractions
+(`minimapX`/`minimapY`, share of the free space) into a screen position; `MinimapLayoutScreen` drags the live minimap
+and saves only on release. The minimap and the in-world waypoint icons hide on F1 (`Hud.isHidden()`) and, by the
+`minimapScreenVisibility` setting, behind inventories or any screen except chat (`MinimapRenderer.hiddenByScreen`).
+
+## Waypoint display settings and import
+
+Hiding a single waypoint and its 1-2 letter symbol are local preferences keyed by waypoint id
+(`WaypointPrefs`, `config/voxymap-waypoint-prefs.properties`), so the waypoint format and the sync protocol stay
+unchanged and shared waypoints can be hidden too. Every renderer reads `WaypointManager.visibleForWorld`; only the
+list screen and the object panel see hidden ones. `WaypointImport` scans `xaero/minimap`, `XaeroWaypoints` and
+`journeymap/data` off the main thread and imports into the current world as local waypoints, skipping ones with the
+same name and block, keeping Xaero symbols and disabled flags and skipping deathpoints.
+
+The big map (M) draws the chunk grid and slime chunk outlines with `draw3DLine` at the camera focus height and
+limits both to what is on screen (`visibleGroundBounds`); G opens the go-to-coordinates input.
 
 ## Shader-pack fog patches (`ShaderPackFogPatcher`)
 

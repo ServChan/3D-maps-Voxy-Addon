@@ -7,6 +7,10 @@ public final class MinimapHeads {
     }
 
     public static boolean shown(Minecraft minecraft) {
-        return minecraft != null && minecraft.options != null && minecraft.options.keyPlayerList.isDown();
+        return switch (VoxyMapSettings.radarIcons()) {
+            case HEADS -> true;
+            case DOTS -> false;
+            case HEADS_ON_TAB -> minecraft != null && minecraft.options != null && minecraft.options.keyPlayerList.isDown();
+        };
     }
 }

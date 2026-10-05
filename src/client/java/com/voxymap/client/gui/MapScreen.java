@@ -9,6 +9,8 @@ import com.voxymap.client.integration.SpatialGuiCompat;
 import com.voxymap.client.integration.VanillaSquadServer;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
+import com.voxymap.client.map.MapOverlay;
+import com.voxymap.client.map.MinimapOverlays;
 import com.voxymap.client.map.MapScreenshot;
 import com.voxymap.client.map.MapShareBounds;
 import com.voxymap.client.map.PlayerViewConeGeometry;
@@ -67,7 +69,7 @@ public class MapScreen extends Screen {
     private static final double WAYPOINT_HOVER_DISTANCE = 10.0;
     private static final int WAYPOINT_NAME_MAX_LENGTH = 48;
     private static final int WAYPOINT_SWATCH_SIZE = 16;
-    private static final int WAYPOINT_SWATCH_GAP = 6;
+    private static final int WAYPOINT_SWATCH_GAP = 4;
     private static final long DOUBLE_CLICK_NANOS = 350_000_000L;
     private static final double DOUBLE_CLICK_DISTANCE = 6.0;
     private double viewCenterX;
@@ -165,6 +167,13 @@ public class MapScreen extends Screen {
     private static final int HUD_GAP = 6;
     private static final int HUD_BUTTON_HEIGHT = 24;
     private static final int KEY_HINT_HEIGHT = 22;
+    private static final double GRID_MAX_BLOCKS_PER_PIXEL = 2.0;
+    private static final double SLIME_MAX_BLOCKS_PER_PIXEL = 8.0;
+    private static final int MAX_GRID_LINES = 160;
+    private static final long MAX_SLIME_CHUNKS = 6400L;
+    private static final int CHUNK_GRID_COLOR = 0x44FFFFFF;
+    private static final int SLIME_OUTLINE_COLOR = 0xDD55FF55;
+    private static final int SLIME_INNER_COLOR = 0x8855FF55;
 
     public MapScreen() {
         super(TITLE);
@@ -469,6 +478,7 @@ public class MapScreen extends Screen {
                 {Component.translatable("overlay.voxymap.key.fast.button").getString(), Component.translatable("overlay.voxymap.key.fast").getString()},
                 {Component.translatable("overlay.voxymap.key.zoom.button").getString(), Component.translatable("overlay.voxymap.key.zoom").getString()},
                 {Component.translatable("overlay.voxymap.key.center.button").getString(), Component.translatable("overlay.voxymap.key.center").getString()},
+                {Component.translatable("overlay.voxymap.key.goto.button").getString(), Component.translatable("overlay.voxymap.key.goto").getString()},
                 {Component.translatable("overlay.voxymap.key.objects.button").getString(), Component.translatable("overlay.voxymap.key.objects").getString()},
                 {Component.translatable("overlay.voxymap.key.follow.button").getString(), Component.translatable("overlay.voxymap.key.follow").getString()},
                 {Component.translatable("overlay.voxymap.key.close.button").getString(), Component.translatable("overlay.voxymap.key.close").getString()}
@@ -565,14 +575,32 @@ public class MapScreen extends Screen {
             case SCREENSHOT -> VoxyMapSettings.cycleScreenshotContent();
             case VIEW_DIRECTION -> VoxyMapSettings.toggleViewDirection();
             case WAYPOINTS -> VoxyMapSettings.toggleWaypointsVisible();
+            case WAYPOINT_LABELS -> VoxyMapSettings.cycleWaypointLabelMode();
+            case WAYPOINTS_OTHER_DIMENSION -> VoxyMapSettings.toggleOtherDimensionWaypoints();
+            case WAYPOINT_BEAMS -> VoxyMapSettings.toggleWaypointBeams();
             case DEATH_POINTS -> VoxyMapSettings.toggleDeathPoints();
             case VANILLASQUAD_PLAYERS -> VoxyMapSettings.toggleVanillaSquadPlayers();
             case VANILLASQUAD_FLAGS -> VoxyMapSettings.toggleVanillaSquadFlags();
             case VANILLASQUAD_MAP -> VoxyMapSettings.cycleVanillaSquadMap(worldId);
             case MINIMAP -> VoxyMapSettings.toggleMinimap();
             case MINIMAP_ROTATE -> VoxyMapSettings.toggleMinimapRotates();
-            case MOBS -> VoxyMapSettings.toggleMobs();
+            case MINIMAP_COLORS -> VoxyMapSettings.cycleMinimapColors();
+            case MINIMAP_SHAPE -> VoxyMapSettings.cycleMinimapShape();
+            case MINIMAP_SIZE -> VoxyMapSettings.cycleMinimapSize();
+            case MINIMAP_CORNER -> VoxyMapSettings.cycleMinimapCorner();
+            case MINIMAP_ZOOM -> VoxyMapSettings.zoomMinimap(mouseX < settingsPanelX + settingsPanelW / 2.0 ? -1 : 1);
+            case MINIMAP_MOVE -> minecraft.setScreenAndShow(new MinimapLayoutScreen(null));
+            case MINIMAP_OPACITY -> VoxyMapSettings.cycleMinimapOpacity();
+            case MINIMAP_NIGHT -> VoxyMapSettings.toggleMinimapNightShading();
+            case MINIMAP_CAVE -> VoxyMapSettings.cycleCaveMode();
+            case MINIMAP_SCREENS -> VoxyMapSettings.cycleMinimapScreenVisibility();
+            case INFO_COORDINATES, INFO_NETHER_COORDINATES, INFO_BIOME, INFO_LIGHT, INFO_TIME, INFO_CHUNK, INFO_FACING ->
+                    VoxyMapSettings.toggleInfoLine(entry.infoLine());
+            case RADAR_HOSTILE, RADAR_NEUTRAL, RADAR_PASSIVE, RADAR_ITEMS, RADAR_PLAYERS ->
+                    VoxyMapSettings.toggleRadarCategory(entry.radarCategory());
             case CHUNK_GRID -> VoxyMapSettings.toggleChunkGrid();
+            case RADAR_ICONS -> VoxyMapSettings.cycleRadarIcons();
+            case OVERLAY_SLIME, OVERLAY_LIGHT, OVERLAY_BIOMES -> VoxyMapSettings.toggleOverlay(entry.mapOverlay());
             case SCHEMATICS -> VoxyMapSettings.toggleSchematics();
             case SPATIAL_GUI_FLAT_MAP -> VoxyMapSettings.toggleSpatialGuiFlatMap();
             case SPATIAL_GUI_3D -> VoxyMapSettings.toggleWindowMap3d();
@@ -681,6 +709,7 @@ public class MapScreen extends Screen {
     }
 
     private void drawWorldViewerOverlay(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        drawMapGrids(g);
         drawFlagMarkers(g);
         drawSchematicPlacements(g, mouseX, mouseY);
         drawWaypoints(g, mouseX, mouseY);
@@ -728,6 +757,84 @@ public class MapScreen extends Screen {
             refreshObjectPanel();
         }
         objectPanel.render(g, minecraft.font, width, height, mouseX, mouseY);
+    }
+
+    private void drawMapGrids(GuiGraphicsExtractor g) {
+        boolean grid = VoxyMapSettings.chunkGridEnabled() && blocksPerPixel <= GRID_MAX_BLOCKS_PER_PIXEL;
+        Long seed = VoxyMapSettings.overlayShown(MapOverlay.SLIME_CHUNKS) && blocksPerPixel <= SLIME_MAX_BLOCKS_PER_PIXEL
+                ? MinimapOverlays.slimeSeed(minecraft.level) : null;
+        if (!grid && seed == null) {
+            return;
+        }
+        double[] bounds = visibleGroundBounds();
+        int minChunkX = Math.floorDiv(Mth.floor(bounds[0]), 16);
+        int minChunkZ = Math.floorDiv(Mth.floor(bounds[1]), 16);
+        int maxChunkX = Math.floorDiv(Mth.floor(bounds[2]), 16);
+        int maxChunkZ = Math.floorDiv(Mth.floor(bounds[3]), 16);
+        int spanX = maxChunkX - minChunkX + 1;
+        int spanZ = maxChunkZ - minChunkZ + 1;
+        double y = viewCenterY;
+        if (grid && spanX <= MAX_GRID_LINES && spanZ <= MAX_GRID_LINES) {
+            for (int cx = minChunkX; cx <= maxChunkX + 1; cx++) {
+                draw3DLine(g, cx * 16.0, y, minChunkZ * 16.0, cx * 16.0, y, (maxChunkZ + 1) * 16.0, CHUNK_GRID_COLOR);
+            }
+            for (int cz = minChunkZ; cz <= maxChunkZ + 1; cz++) {
+                draw3DLine(g, minChunkX * 16.0, y, cz * 16.0, (maxChunkX + 1) * 16.0, y, cz * 16.0, CHUNK_GRID_COLOR);
+            }
+        }
+        if (seed != null && (long) spanX * spanZ <= MAX_SLIME_CHUNKS) {
+            for (int cx = minChunkX; cx <= maxChunkX; cx++) {
+                for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
+                    if (MinimapOverlays.isSlimeChunk(seed, cx, cz)) {
+                        drawChunkOutline(g, cx, cz, y, 0.0, SLIME_OUTLINE_COLOR);
+                        drawChunkOutline(g, cx, cz, y, 1.0, SLIME_INNER_COLOR);
+                    }
+                }
+            }
+        }
+    }
+
+    private void drawChunkOutline(GuiGraphicsExtractor g, int chunkX, int chunkZ, double y, double inset, int color) {
+        double x0 = chunkX * 16.0 + inset;
+        double z0 = chunkZ * 16.0 + inset;
+        double x1 = chunkX * 16.0 + 16.0 - inset;
+        double z1 = chunkZ * 16.0 + 16.0 - inset;
+        draw3DLine(g, x0, y, z0, x1, y, z0, color);
+        draw3DLine(g, x1, y, z0, x1, y, z1, color);
+        draw3DLine(g, x1, y, z1, x0, y, z1, color);
+        draw3DLine(g, x0, y, z1, x0, y, z0, color);
+    }
+
+    private double[] visibleGroundBounds() {
+        double reach = blocksPerPixel * Math.max(width, height);
+        double minX = viewCenterX - 16.0;
+        double minZ = viewCenterZ - 16.0;
+        double maxX = viewCenterX + 16.0;
+        double maxZ = viewCenterZ + 16.0;
+        double[][] samples = {{0, 0}, {width, 0}, {0, height}, {width, height}, {width / 2.0, 0},
+                {width / 2.0, height}, {0, height / 2.0}, {width, height / 2.0}};
+        int hits = 0;
+        for (double[] sample : samples) {
+            GroundPoint point = mapPointAt(sample[0], sample[1]);
+            if (point == null) {
+                continue;
+            }
+            hits++;
+            minX = Math.min(minX, point.x());
+            minZ = Math.min(minZ, point.z());
+            maxX = Math.max(maxX, point.x());
+            maxZ = Math.max(maxZ, point.z());
+        }
+        if (hits < samples.length) {
+            minX = Math.min(minX, viewCenterX - reach);
+            minZ = Math.min(minZ, viewCenterZ - reach);
+            maxX = Math.max(maxX, viewCenterX + reach);
+            maxZ = Math.max(maxZ, viewCenterZ + reach);
+        }
+        double limit = reach * 2.0;
+        return new double[]{
+                Math.max(minX, viewCenterX - limit), Math.max(minZ, viewCenterZ - limit),
+                Math.min(maxX, viewCenterX + limit), Math.min(maxZ, viewCenterZ + limit)};
     }
 
     private void refreshObjectPanel() {
@@ -1055,7 +1162,7 @@ public class MapScreen extends Screen {
             return;
         }
 
-        List<WaypointManager.Waypoint> waypoints = WaypointManager.forWorld(worldId);
+        List<WaypointManager.Waypoint> waypoints = WaypointManager.visibleForWorld(worldId);
         List<ProjectedWaypoint> projected = new ArrayList<>();
         for (WaypointManager.Waypoint waypoint : waypoints) {
             ScreenPoint point = projectToScreen(waypoint.x(), waypoint.y(), waypoint.z());
@@ -1317,6 +1424,29 @@ public class MapScreen extends Screen {
         }
     }
 
+    private void beginGoto() {
+        textInputKind = TextInputKind.GOTO;
+        nameInputBuffer.setLength(0);
+        nameInputBuffer.append(Mth.floor(viewCenterX)).append(' ').append(Mth.floor(viewCenterZ));
+    }
+
+    private boolean applyGoto(String value) {
+        MapGoto.Target target = MapGoto.parse(value);
+        if (target == null) {
+            return false;
+        }
+        stopFollowing();
+        viewCenterX = target.x() + 0.5;
+        viewCenterZ = target.z() + 0.5;
+        if (target.y() != null) {
+            viewCenterY = target.y();
+        }
+        moveVelocityX = 0.0;
+        moveVelocityZ = 0.0;
+        syncWorldCamera();
+        return true;
+    }
+
     private void cancelTextInput() {
         textInputKind = null;
         renamingWaypointId = null;
@@ -1326,6 +1456,12 @@ public class MapScreen extends Screen {
     private void confirmTextInput() {
         String worldId = currentVoxyWorldId();
         String value = nameInputBuffer.toString().trim();
+        if (textInputKind == TextInputKind.GOTO) {
+            if (applyGoto(value)) {
+                cancelTextInput();
+            }
+            return;
+        }
         if (worldId != null) {
             switch (textInputKind) {
                 case WAYPOINT_RENAME -> {
@@ -1341,6 +1477,8 @@ public class MapScreen extends Screen {
                         MapShareClient.startReceiving(minecraft, address, value);
                     }
                 }
+                case GOTO -> {
+                }
             }
         }
         cancelTextInput();
@@ -1352,6 +1490,7 @@ public class MapScreen extends Screen {
             case SYNC_ADDRESS -> 128;
             case SYNC_PASSWORD -> 64;
             case RECEIVE_CODE -> 6;
+            case GOTO -> 40;
         };
     }
 
@@ -1376,6 +1515,7 @@ public class MapScreen extends Screen {
             case SYNC_ADDRESS -> "screen.voxymap.sync.address_title";
             case SYNC_PASSWORD -> "screen.voxymap.sync.password_title";
             case RECEIVE_CODE -> "screen.voxymap.mapshare.receive_code_title";
+            case GOTO -> "screen.voxymap.goto.title";
         };
         String title = Component.translatable(titleKey).getString();
         String text = textInputKind == TextInputKind.SYNC_PASSWORD
@@ -1400,7 +1540,8 @@ public class MapScreen extends Screen {
             g.fill(caretX, fieldY + 3, caretX + 1, fieldY + fieldH - 3, 0xFFFFFFFF);
         }
 
-        String hint = Component.translatable("screen.voxymap.waypoint.hint").getString();
+        String hint = Component.translatable(textInputKind == TextInputKind.GOTO
+                ? "screen.voxymap.goto.hint" : "screen.voxymap.waypoint.hint").getString();
         g.text(minecraft.font, hint, boxX + 10, boxY + boxH - 12, 0xFF9FD8FF);
     }
 
@@ -1953,6 +2094,10 @@ public class MapScreen extends Screen {
                     Component.translatable(VoxyMapSettings.screenshotContent().translationKey()).getString(), 0xFFFFFFFF);
             case VIEW_DIRECTION -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.viewDirectionEnabled());
             case WAYPOINTS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.waypointsEnabled());
+            case WAYPOINT_LABELS -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.waypointLabelMode().translationKey()).getString(), 0xFFFFFFFF);
+            case WAYPOINT_BEAMS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.waypointBeams());
+            case WAYPOINTS_OTHER_DIMENSION -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.otherDimensionWaypoints());
             case DEATH_POINTS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.deathPointsEnabled());
             case VANILLASQUAD_PLAYERS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.vanillaSquadPlayersEnabled());
             case VANILLASQUAD_FLAGS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.vanillaSquadFlagsEnabled());
@@ -1966,8 +2111,41 @@ public class MapScreen extends Screen {
             }
             case MINIMAP -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.minimapEnabled());
             case MINIMAP_ROTATE -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.minimapRotates());
-            case MOBS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.mobsEnabled());
+            case MINIMAP_COLORS -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.minimapColors().translationKey()).getString(), 0xFFFFFFFF);
+            case MINIMAP_SHAPE -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.minimapShape().translationKey()).getString(), 0xFFFFFFFF);
+            case MINIMAP_SIZE -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.minimapSize().translationKey()).getString(), 0xFFFFFFFF);
+            case MINIMAP_CORNER -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.minimapCorner().translationKey()).getString(), 0xFFFFFFFF);
+            case MINIMAP_ZOOM -> drawSettingValue(g, x, y, entry, SettingsValues.minimapZoomLabel(), 0xFFFFFFFF);
+            case MINIMAP_MOVE -> drawSettingValue(g, x, y, entry,
+                    Component.translatable("screen.voxymap.settings.minimapmove.open").getString(), 0xFFFFFFFF);
+            case MINIMAP_OPACITY -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.minimapOpacity().translationKey()).getString(), 0xFFFFFFFF);
+            case MINIMAP_NIGHT -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.minimapNightShading());
+            case MINIMAP_CAVE -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.caveMode().translationKey()).getString(), 0xFFFFFFFF);
+            case MINIMAP_SCREENS -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.minimapScreenVisibility().translationKey()).getString(), 0xFFFFFFFF);
+            case INFO_COORDINATES, INFO_NETHER_COORDINATES, INFO_BIOME, INFO_LIGHT, INFO_TIME, INFO_CHUNK, INFO_FACING ->
+                    drawToggleSetting(g, x, y, entry, VoxyMapSettings.infoLineShown(entry.infoLine()));
+            case RADAR_HOSTILE, RADAR_NEUTRAL, RADAR_PASSIVE, RADAR_ITEMS, RADAR_PLAYERS ->
+                    drawToggleSetting(g, x, y, entry, VoxyMapSettings.radarShows(entry.radarCategory()));
             case CHUNK_GRID -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.chunkGridEnabled());
+            case RADAR_ICONS -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.radarIcons().translationKey()).getString(), 0xFFFFFFFF);
+            case OVERLAY_SLIME -> {
+                if (SettingsValues.slimeSeedMissing()) {
+                    drawSettingValue(g, x, y, entry,
+                            Component.translatable("screen.voxymap.settings.overlay.slime.no_seed").getString(), 0xFFFFC94D);
+                } else {
+                    drawToggleSetting(g, x, y, entry, VoxyMapSettings.overlayShown(entry.mapOverlay()));
+                }
+            }
+            case OVERLAY_LIGHT, OVERLAY_BIOMES ->
+                    drawToggleSetting(g, x, y, entry, VoxyMapSettings.overlayShown(entry.mapOverlay()));
             case SCHEMATICS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.schematicsEnabled());
             case SPATIAL_GUI_FLAT_MAP -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.spatialGuiFlatMap());
             case SPATIAL_GUI_3D -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.windowMap3d());
@@ -2543,6 +2721,10 @@ public class MapScreen extends Screen {
             objectPanel.toggle();
             return true;
         }
+        if (keyCode == InputConstants.KEY_G) {
+            beginGoto();
+            return true;
+        }
         if (keyCode == InputConstants.KEY_F && selectedObjectId != null && selectedObjectId.startsWith("player:")) {
             followingPlayerId = selectedObjectId.equals(followingPlayerId) ? null : selectedObjectId;
             return true;
@@ -2591,7 +2773,8 @@ public class MapScreen extends Screen {
     public boolean charTyped(CharacterEvent event) {
         if (waypointDraftActive || textInputKind != null) {
             boolean allowed = event.isAllowedChatCharacter()
-                    && (textInputKind != TextInputKind.RECEIVE_CODE || Character.isDigit(event.codepoint()));
+                    && (textInputKind != TextInputKind.RECEIVE_CODE || Character.isDigit(event.codepoint()))
+                    && (textInputKind != TextInputKind.GOTO || MapGoto.allowedCharacter(event.codepoint()));
             if (allowed && nameInputBuffer.length() < activeInputMaxLength()) {
                 nameInputBuffer.append(event.codepointAsString());
             }
@@ -2715,7 +2898,7 @@ public class MapScreen extends Screen {
                                      int labelX, int labelY, int labelW, int labelH) {
     }
 
-    private enum TextInputKind { WAYPOINT_RENAME, SYNC_ADDRESS, SYNC_PASSWORD, RECEIVE_CODE }
+    private enum TextInputKind { WAYPOINT_RENAME, SYNC_ADDRESS, SYNC_PASSWORD, RECEIVE_CODE, GOTO }
 
     private record PlayerMarker(String name, double x, double y, double z, boolean local, boolean remote,
                                 UUID uuid, float yawDegrees) {

@@ -12,14 +12,18 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 public final class VoxyMapSettings {
     private static final String VANILLA_SQUAD_WORLD_PREFIX = "vanillaSquadWorld.";
+    private static final String SLIME_SEED_PREFIX = "slimeSeed.";
+    private static final String NETHER_LINK_PREFIX = "netherLink.";
     private static final Pattern VOXY_WORLD_ID = Pattern.compile("[0-9a-f]{32}");
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("voxymap.properties");
     private static final Path BACKUP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".bak");
@@ -28,6 +32,8 @@ public final class VoxyMapSettings {
     public static final double CAMERA_SPEED_MIN = 0.25;
     public static final double CAMERA_SPEED_MAX = 4.0;
     public static final double CAMERA_SPEED_STEP = 0.25;
+    public static final double[] MINIMAP_ZOOM_LEVELS = {0.5, 1.0, 2.0, 4.0};
+    private static final int DEFAULT_MINIMAP_ZOOM = 1;
 
     private static boolean loaded = false;
     private static boolean pauseSingleplayer = true;
@@ -36,10 +42,29 @@ public final class VoxyMapSettings {
     private static boolean vanillaSquadFlagsEnabled = false;
     private static final Map<String, VanillaSquadMap> vanillaSquadWorldMaps = new ConcurrentHashMap<>();
     private static boolean waypointsEnabled = true;
+    private static WaypointLabelMode waypointLabelMode = WaypointLabelMode.AIMING;
+    private static boolean waypointBeams = true;
     private static boolean minimapEnabled = true;
     private static TimeOfDay timeOfDayMode = TimeOfDay.AUTO;
-    private static boolean mobsEnabled = true;
+    private static final EnumSet<RadarCategory> radarCategories = EnumSet.copyOf(RadarCategory.defaults());
+    private static final EnumSet<MinimapInfoLine> infoLines = EnumSet.copyOf(MinimapInfoLine.defaults());
+    private static final EnumSet<MapOverlay> mapOverlays = EnumSet.noneOf(MapOverlay.class);
+    private static final Map<String, Long> slimeSeeds = new ConcurrentHashMap<>();
+    private static final Map<String, String> netherLinks = new ConcurrentHashMap<>();
+    private static boolean otherDimensionWaypoints = true;
+    private static RadarIcons radarIcons = RadarIcons.HEADS;
     private static boolean minimapRotates = false;
+    private static MinimapColors minimapColors = MinimapColors.TEXTURES;
+    private static MinimapShape minimapShape = MinimapShape.SQUARE;
+    private static MinimapSize minimapSize = MinimapSize.MEDIUM;
+    private static MinimapCorner minimapCorner = MinimapCorner.TOP_LEFT;
+    private static int minimapZoom = DEFAULT_MINIMAP_ZOOM;
+    private static double minimapX = 0.0;
+    private static double minimapY = 0.0;
+    private static MinimapOpacity minimapOpacity = MinimapOpacity.FULL;
+    private static boolean minimapNightShading = true;
+    private static CaveMode caveMode = CaveMode.AUTO;
+    private static ScreenVisibility minimapScreenVisibility = ScreenVisibility.ALWAYS;
     private static boolean chunkGridEnabled = false;
     private static boolean schematicsEnabled = true;
     private static boolean spatialGuiFlatMap = true;
@@ -79,10 +104,56 @@ public final class VoxyMapSettings {
             }
         }
         waypointsEnabled = readBoolean(properties.getProperty("waypointsEnabled"), waypointsEnabled);
+        waypointLabelMode = parseEnum(WaypointLabelMode.class, properties.getProperty("waypointLabelMode"),
+                WaypointLabelMode.AIMING);
+        waypointBeams = readBoolean(properties.getProperty("waypointBeams"), waypointBeams);
         minimapEnabled = readBoolean(properties.getProperty("minimapEnabled"), minimapEnabled);
         timeOfDayMode = TimeOfDay.parse(properties.getProperty("timeOfDayMode"));
-        mobsEnabled = readBoolean(properties.getProperty("mobsEnabled"), mobsEnabled);
+        radarCategories.clear();
+        radarCategories.addAll(EnumFlags.parse(RadarCategory.class, properties.getProperty("radarCategories"),
+                legacyRadarCategories(properties.getProperty("mobsEnabled"))));
+        mapOverlays.clear();
+        mapOverlays.addAll(EnumFlags.parse(MapOverlay.class, properties.getProperty("mapOverlays"),
+                EnumSet.noneOf(MapOverlay.class)));
+        radarIcons = parseEnum(RadarIcons.class, properties.getProperty("radarIcons"), RadarIcons.HEADS);
+        otherDimensionWaypoints = readBoolean(properties.getProperty("otherDimensionWaypoints"), otherDimensionWaypoints);
+        netherLinks.clear();
+        for (String key : properties.stringPropertyNames()) {
+            if (!key.startsWith(NETHER_LINK_PREFIX)) continue;
+            String overworldId = key.substring(NETHER_LINK_PREFIX.length());
+            String netherId = properties.getProperty(key).trim();
+            if (validWorldId(overworldId) && validWorldId(netherId)) {
+                netherLinks.put(overworldId, netherId);
+            }
+        }
+        slimeSeeds.clear();
+        for (String key : properties.stringPropertyNames()) {
+            if (!key.startsWith(SLIME_SEED_PREFIX)) continue;
+            String worldId = key.substring(SLIME_SEED_PREFIX.length());
+            try {
+                if (validWorldId(worldId)) {
+                    slimeSeeds.put(worldId, Long.parseLong(properties.getProperty(key).trim()));
+                }
+            } catch (NumberFormatException ignored) {
+
+            }
+        }
+        infoLines.clear();
+        infoLines.addAll(EnumFlags.parse(MinimapInfoLine.class, properties.getProperty("minimapInfoLines"),
+                MinimapInfoLine.defaults()));
         minimapRotates = readBoolean(properties.getProperty("minimapRotates"), minimapRotates);
+        minimapColors = parseEnum(MinimapColors.class, properties.getProperty("minimapColors"), MinimapColors.TEXTURES);
+        minimapShape = parseEnum(MinimapShape.class, properties.getProperty("minimapShape"), MinimapShape.SQUARE);
+        minimapSize = parseEnum(MinimapSize.class, properties.getProperty("minimapSize"), MinimapSize.MEDIUM);
+        minimapCorner = parseEnum(MinimapCorner.class, properties.getProperty("minimapCorner"), MinimapCorner.TOP_LEFT);
+        minimapZoom = clampZoomIndex((int) readDouble(properties.getProperty("minimapZoom"), DEFAULT_MINIMAP_ZOOM));
+        minimapX = clamp(readDouble(properties.getProperty("minimapX"), minimapX), 0.0, 1.0);
+        minimapY = clamp(readDouble(properties.getProperty("minimapY"), minimapY), 0.0, 1.0);
+        minimapOpacity = parseEnum(MinimapOpacity.class, properties.getProperty("minimapOpacity"), MinimapOpacity.FULL);
+        minimapNightShading = readBoolean(properties.getProperty("minimapNightShading"), minimapNightShading);
+        caveMode = parseEnum(CaveMode.class, properties.getProperty("caveMode"), CaveMode.AUTO);
+        minimapScreenVisibility = parseEnum(ScreenVisibility.class, properties.getProperty("minimapScreenVisibility"),
+                ScreenVisibility.ALWAYS);
         chunkGridEnabled = readBoolean(properties.getProperty("chunkGridEnabled"), chunkGridEnabled);
         schematicsEnabled = readBoolean(properties.getProperty("schematicsEnabled"), schematicsEnabled);
         spatialGuiFlatMap = readBoolean(properties.getProperty("spatialGuiFlatMap"), spatialGuiFlatMap);
@@ -103,10 +174,29 @@ public final class VoxyMapSettings {
         vanillaSquadWorldMaps.forEach((worldId, map) -> properties.setProperty(
                 VANILLA_SQUAD_WORLD_PREFIX + worldId, map.name().toLowerCase(Locale.ROOT)));
         properties.setProperty("waypointsEnabled", Boolean.toString(waypointsEnabled));
+        properties.setProperty("waypointLabelMode", waypointLabelMode.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("waypointBeams", Boolean.toString(waypointBeams));
         properties.setProperty("minimapEnabled", Boolean.toString(minimapEnabled));
         properties.setProperty("timeOfDayMode", timeOfDayMode.name().toLowerCase(Locale.ROOT));
-        properties.setProperty("mobsEnabled", Boolean.toString(mobsEnabled));
+        properties.setProperty("radarCategories", EnumFlags.format(radarCategories));
+        properties.setProperty("minimapInfoLines", EnumFlags.format(infoLines));
+        properties.setProperty("mapOverlays", EnumFlags.format(mapOverlays));
+        properties.setProperty("radarIcons", radarIcons.name().toLowerCase(Locale.ROOT));
+        slimeSeeds.forEach((worldId, seed) -> properties.setProperty(SLIME_SEED_PREFIX + worldId, Long.toString(seed)));
+        properties.setProperty("otherDimensionWaypoints", Boolean.toString(otherDimensionWaypoints));
+        netherLinks.forEach((overworldId, netherId) -> properties.setProperty(NETHER_LINK_PREFIX + overworldId, netherId));
         properties.setProperty("minimapRotates", Boolean.toString(minimapRotates));
+        properties.setProperty("minimapColors", minimapColors.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("minimapShape", minimapShape.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("minimapSize", minimapSize.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("minimapCorner", minimapCorner.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("minimapZoom", Integer.toString(minimapZoom));
+        properties.setProperty("minimapX", String.format(Locale.ROOT, "%.4f", minimapX));
+        properties.setProperty("minimapY", String.format(Locale.ROOT, "%.4f", minimapY));
+        properties.setProperty("minimapOpacity", minimapOpacity.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("minimapNightShading", Boolean.toString(minimapNightShading));
+        properties.setProperty("caveMode", caveMode.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("minimapScreenVisibility", minimapScreenVisibility.name().toLowerCase(Locale.ROOT));
         properties.setProperty("chunkGridEnabled", Boolean.toString(chunkGridEnabled));
         properties.setProperty("schematicsEnabled", Boolean.toString(schematicsEnabled));
         properties.setProperty("spatialGuiFlatMap", Boolean.toString(spatialGuiFlatMap));
@@ -193,6 +283,28 @@ public final class VoxyMapSettings {
         save();
     }
 
+    public static WaypointLabelMode waypointLabelMode() {
+        load();
+        return waypointLabelMode;
+    }
+
+    public static void cycleWaypointLabelMode() {
+        load();
+        waypointLabelMode = next(waypointLabelMode);
+        save();
+    }
+
+    public static boolean waypointBeams() {
+        load();
+        return waypointBeams;
+    }
+
+    public static void toggleWaypointBeams() {
+        load();
+        waypointBeams = !waypointBeams;
+        save();
+    }
+
     public static boolean minimapEnabled() {
         load();
         return minimapEnabled;
@@ -218,13 +330,138 @@ public final class VoxyMapSettings {
 
     public static boolean mobsEnabled() {
         load();
-        return mobsEnabled;
+        for (RadarCategory category : radarCategories) {
+            if (category.mob()) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    public static void toggleMobs() {
+    public static boolean radarShows(RadarCategory category) {
         load();
-        mobsEnabled = !mobsEnabled;
+        return radarCategories.contains(category);
+    }
+
+    public static Set<RadarCategory> radarCategories() {
+        load();
+        return EnumSet.copyOf(radarCategories);
+    }
+
+    public static void toggleRadarCategory(RadarCategory category) {
+        load();
+        if (!radarCategories.remove(category)) {
+            radarCategories.add(category);
+        }
         save();
+    }
+
+    public static boolean overlayShown(MapOverlay overlay) {
+        load();
+        return mapOverlays.contains(overlay);
+    }
+
+    public static Set<MapOverlay> mapOverlays() {
+        load();
+        return mapOverlays.isEmpty() ? EnumSet.noneOf(MapOverlay.class) : EnumSet.copyOf(mapOverlays);
+    }
+
+    public static void toggleOverlay(MapOverlay overlay) {
+        load();
+        if (!mapOverlays.remove(overlay)) {
+            mapOverlays.add(overlay);
+        }
+        save();
+    }
+
+    public static Long slimeSeed(String worldId) {
+        load();
+        return worldId == null ? null : slimeSeeds.get(worldId);
+    }
+
+    public static void setSlimeSeed(String worldId, Long seed) {
+        load();
+        if (!validWorldId(worldId)) return;
+        if (seed == null) {
+            slimeSeeds.remove(worldId);
+        } else {
+            slimeSeeds.put(worldId, seed);
+        }
+        save();
+    }
+
+    public static boolean otherDimensionWaypoints() {
+        load();
+        return otherDimensionWaypoints;
+    }
+
+    public static void toggleOtherDimensionWaypoints() {
+        load();
+        otherDimensionWaypoints = !otherDimensionWaypoints;
+        save();
+    }
+
+    public static String linkedNether(String overworldId) {
+        load();
+        return overworldId == null ? null : netherLinks.get(overworldId);
+    }
+
+    public static String linkedOverworld(String netherId) {
+        load();
+        if (netherId == null) return null;
+        for (Map.Entry<String, String> link : netherLinks.entrySet()) {
+            if (link.getValue().equals(netherId)) {
+                return link.getKey();
+            }
+        }
+        return null;
+    }
+
+    public static void linkDimensions(String overworldId, String netherId) {
+        load();
+        if (!validWorldId(overworldId) || !validWorldId(netherId) || netherId.equals(netherLinks.get(overworldId))) {
+            return;
+        }
+        netherLinks.values().removeIf(netherId::equals);
+        netherLinks.put(overworldId, netherId);
+        save();
+    }
+
+    public static RadarIcons radarIcons() {
+        load();
+        return radarIcons;
+    }
+
+    public static void cycleRadarIcons() {
+        load();
+        radarIcons = next(radarIcons);
+        save();
+    }
+
+    public static boolean infoLineShown(MinimapInfoLine line) {
+        load();
+        return infoLines.contains(line);
+    }
+
+    public static Set<MinimapInfoLine> infoLines() {
+        load();
+        return EnumSet.copyOf(infoLines);
+    }
+
+    public static void toggleInfoLine(MinimapInfoLine line) {
+        load();
+        if (!infoLines.remove(line)) {
+            infoLines.add(line);
+        }
+        save();
+    }
+
+    private static Set<RadarCategory> legacyRadarCategories(String mobsEnabled) {
+        Set<RadarCategory> categories = EnumSet.copyOf(RadarCategory.defaults());
+        if ("false".equalsIgnoreCase(mobsEnabled)) {
+            categories.removeIf(RadarCategory::mob);
+        }
+        return categories;
     }
 
     public static boolean minimapRotates() {
@@ -236,6 +473,163 @@ public final class VoxyMapSettings {
         load();
         minimapRotates = !minimapRotates;
         save();
+    }
+
+    public static MinimapColors minimapColors() {
+        load();
+        return minimapColors;
+    }
+
+    public static void cycleMinimapColors() {
+        load();
+        minimapColors = next(minimapColors);
+        save();
+    }
+
+    public static MinimapShape minimapShape() {
+        load();
+        return minimapShape;
+    }
+
+    public static void cycleMinimapShape() {
+        load();
+        minimapShape = next(minimapShape);
+        save();
+    }
+
+    public static MinimapSize minimapSize() {
+        load();
+        return minimapSize;
+    }
+
+    public static void cycleMinimapSize() {
+        load();
+        minimapSize = next(minimapSize);
+        save();
+    }
+
+    public static MinimapCorner minimapCorner() {
+        load();
+        return minimapCorner;
+    }
+
+    public static void cycleMinimapCorner() {
+        load();
+        minimapCorner = next(minimapCorner);
+        save();
+    }
+
+    public static double minimapX() {
+        load();
+        return minimapX;
+    }
+
+    public static double minimapY() {
+        load();
+        return minimapY;
+    }
+
+    public static void setMinimapPosition(double x, double y, boolean persist) {
+        load();
+        minimapX = clamp(x, 0.0, 1.0);
+        minimapY = clamp(y, 0.0, 1.0);
+        minimapCorner = MinimapCorner.CUSTOM;
+        if (persist) {
+            save();
+        }
+    }
+
+    public static void resetMinimapPosition() {
+        load();
+        minimapCorner = MinimapCorner.TOP_LEFT;
+        minimapX = 0.0;
+        minimapY = 0.0;
+        save();
+    }
+
+    public static MinimapOpacity minimapOpacity() {
+        load();
+        return minimapOpacity;
+    }
+
+    public static void cycleMinimapOpacity() {
+        load();
+        minimapOpacity = next(minimapOpacity);
+        save();
+    }
+
+    public static boolean minimapNightShading() {
+        load();
+        return minimapNightShading;
+    }
+
+    public static void toggleMinimapNightShading() {
+        load();
+        minimapNightShading = !minimapNightShading;
+        save();
+    }
+
+    public static CaveMode caveMode() {
+        load();
+        return caveMode;
+    }
+
+    public static void cycleCaveMode() {
+        load();
+        caveMode = next(caveMode);
+        save();
+    }
+
+    public static ScreenVisibility minimapScreenVisibility() {
+        load();
+        return minimapScreenVisibility;
+    }
+
+    public static void cycleMinimapScreenVisibility() {
+        load();
+        minimapScreenVisibility = next(minimapScreenVisibility);
+        save();
+    }
+
+    public static double minimapPixelsPerBlock() {
+        load();
+        return MINIMAP_ZOOM_LEVELS[minimapZoom];
+    }
+
+    public static void zoomMinimap(int steps) {
+        load();
+        int zoom = clampZoomIndex(minimapZoom + steps);
+        if (zoom == minimapZoom) {
+            return;
+        }
+        minimapZoom = zoom;
+        save();
+    }
+
+    public static void cycleMinimapZoom() {
+        load();
+        minimapZoom = (minimapZoom + 1) % MINIMAP_ZOOM_LEVELS.length;
+        save();
+    }
+
+    static int clampZoomIndex(int index) {
+        return Math.max(0, Math.min(MINIMAP_ZOOM_LEVELS.length - 1, index));
+    }
+
+    private static <E extends Enum<E>> E next(E value) {
+        E[] values = value.getDeclaringClass().getEnumConstants();
+        return values[(value.ordinal() + 1) % values.length];
+    }
+
+    static <E extends Enum<E>> E parseEnum(Class<E> type, String value, E fallback) {
+        if (value != null) {
+            try {
+                return Enum.valueOf(type, value.trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException ignored) {
+
+            }
+        }
+        return fallback;
     }
 
     public static boolean chunkGridEnabled() {
@@ -419,6 +813,176 @@ public final class VoxyMapSettings {
                 }
             }
             return AUTO;
+        }
+    }
+
+    public enum RadarIcons {
+        HEADS("screen.voxymap.settings.radaricons.heads"),
+        HEADS_ON_TAB("screen.voxymap.settings.radaricons.tab"),
+        DOTS("screen.voxymap.settings.radaricons.dots");
+
+        private final String translationKey;
+
+        RadarIcons(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+    }
+
+    public enum WaypointLabelMode {
+        OFF("screen.voxymap.settings.waypointlabels.off"),
+        ICONS("screen.voxymap.settings.waypointlabels.icons"),
+        AIMING("screen.voxymap.settings.waypointlabels.aiming"),
+        ALWAYS("screen.voxymap.settings.waypointlabels.always");
+
+        private final String translationKey;
+
+        WaypointLabelMode(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+    }
+
+    public enum MinimapColors {
+        TEXTURES("screen.voxymap.settings.minimapcolors.textures"),
+        CLASSIC("screen.voxymap.settings.minimapcolors.classic");
+
+        private final String translationKey;
+
+        MinimapColors(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+    }
+
+    public enum MinimapOpacity {
+        FULL("screen.voxymap.settings.minimapopacity.full", 1.0f),
+        HIGH("screen.voxymap.settings.minimapopacity.high", 0.85f),
+        MEDIUM("screen.voxymap.settings.minimapopacity.medium", 0.7f),
+        LOW("screen.voxymap.settings.minimapopacity.low", 0.5f);
+
+        private final String translationKey;
+        private final float alpha;
+
+        MinimapOpacity(String translationKey, float alpha) {
+            this.translationKey = translationKey;
+            this.alpha = alpha;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        public float alpha() {
+            return alpha;
+        }
+    }
+
+    public enum CaveMode {
+        AUTO("screen.voxymap.settings.cavemode.auto"),
+        OFF("screen.voxymap.settings.cavemode.off"),
+        ALWAYS("screen.voxymap.settings.cavemode.always");
+
+        private final String translationKey;
+
+        CaveMode(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+    }
+
+    public enum ScreenVisibility {
+        ALWAYS("screen.voxymap.settings.minimapscreens.always"),
+        HIDE_IN_INVENTORIES("screen.voxymap.settings.minimapscreens.inventories"),
+        HIDE_IN_ALL_SCREENS("screen.voxymap.settings.minimapscreens.all");
+
+        private final String translationKey;
+
+        ScreenVisibility(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+    }
+
+    public enum MinimapShape {
+        SQUARE("screen.voxymap.settings.minimapshape.square"),
+        CIRCLE("screen.voxymap.settings.minimapshape.circle");
+
+        private final String translationKey;
+
+        MinimapShape(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+    }
+
+    public enum MinimapSize {
+        SMALL("screen.voxymap.settings.minimapsize.small", 96),
+        MEDIUM("screen.voxymap.settings.minimapsize.medium", 128),
+        LARGE("screen.voxymap.settings.minimapsize.large", 160),
+        HUGE("screen.voxymap.settings.minimapsize.huge", 200);
+
+        private final String translationKey;
+        private final int pixels;
+
+        MinimapSize(String translationKey, int pixels) {
+            this.translationKey = translationKey;
+            this.pixels = pixels;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        public int pixels() {
+            return pixels;
+        }
+    }
+
+    public enum MinimapCorner {
+        TOP_LEFT("screen.voxymap.settings.minimapcorner.top_left", false, false),
+        TOP_RIGHT("screen.voxymap.settings.minimapcorner.top_right", true, false),
+        BOTTOM_RIGHT("screen.voxymap.settings.minimapcorner.bottom_right", true, true),
+        CUSTOM("screen.voxymap.settings.minimapcorner.custom", false, false);
+
+        private final String translationKey;
+        private final boolean right;
+        private final boolean bottom;
+
+        MinimapCorner(String translationKey, boolean right, boolean bottom) {
+            this.translationKey = translationKey;
+            this.right = right;
+            this.bottom = bottom;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        public boolean right() {
+            return right;
+        }
+
+        public boolean bottom() {
+            return bottom;
         }
     }
 

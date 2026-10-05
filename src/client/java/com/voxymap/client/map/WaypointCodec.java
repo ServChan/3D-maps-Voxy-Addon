@@ -13,7 +13,8 @@ import java.util.regex.Pattern;
 final class WaypointCodec {
     static final Pattern VOXY_WORLD_ID = Pattern.compile("[0-9a-f]{32}");
     static final int[] PALETTE = {
-            0xFF62E7FF, 0xFFFFC94D, 0xFFFF62D4, 0xFF7CFF7A, 0xFFB388FF, 0xFFFF8A5C
+            0xFF62E7FF, 0xFFFFC94D, 0xFFFF62D4, 0xFF7CFF7A, 0xFFB388FF, 0xFFFF8A5C,
+            0xFFFF5555, 0xFF4D7CFF, 0xFF2FE0A0, 0xFFFF9EC7, 0xFFE9F2FF, 0xFFA0A8B4
     };
 
     private WaypointCodec() {
