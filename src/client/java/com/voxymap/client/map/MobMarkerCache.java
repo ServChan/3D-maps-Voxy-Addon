@@ -31,6 +31,7 @@ public final class MobMarkerCache {
     }
 
     public static void tick(Minecraft minecraft) {
+        MobHeadIcons.tick(minecraft);
         if (minecraft == null || minecraft.level == null || minecraft.player == null
                 || !VoxyMapSettings.minimapEnabled() || VoxyMapCameraController.isActive()) {
             snapshot = List.of();

@@ -45,9 +45,7 @@ public final class FlatMapRenderer {
         FlatMapTerrain.update(minecraft);
         g.enableScissor(view.left(), view.top(), view.left() + view.width(), view.top() + view.height());
         drawTerrain(g, view);
-        if (VoxyMapSettings.chunkGridEnabled() && 16 * view.pixelsPerBlock() >= MIN_GRID_PIXELS) {
-            drawChunkGrid(g, view);
-        }
+        drawChunkGridIfEnabled(g, view);
         drawSchematics(g, view);
         drawWaypoints(g, minecraft, view);
         drawPlayers(g, minecraft, view, player);
@@ -81,6 +79,12 @@ public final class FlatMapRenderer {
                 g.blit(RenderPipelines.GUI_TEXTURED, texture, x0, y0, 0.0f, 0.0f, x1 - x0, y1 - y0,
                         size, size, size, size, 0xFFFFFFFF);
             }
+        }
+    }
+
+    static void drawChunkGridIfEnabled(GuiGraphicsExtractor g, View view) {
+        if (VoxyMapSettings.chunkGridEnabled() && 16 * view.pixelsPerBlock() >= MIN_GRID_PIXELS) {
+            drawChunkGrid(g, view);
         }
     }
 

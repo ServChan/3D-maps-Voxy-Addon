@@ -24,7 +24,9 @@ public final class VoxyMapSettings {
     private static final String VANILLA_SQUAD_WORLD_PREFIX = "vanillaSquadWorld.";
     private static final String SLIME_SEED_PREFIX = "slimeSeed.";
     private static final String NETHER_LINK_PREFIX = "netherLink.";
+    private static final String WEB_MAP_LINK_PREFIX = "webMapLink.";
     private static final Pattern VOXY_WORLD_ID = Pattern.compile("[0-9a-f]{32}");
+    private static final Pattern WEB_MAP_KEY = Pattern.compile("[a-z0-9_-]{1,32}/[a-z0-9_.-]{1,64}");
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("voxymap.properties");
     private static final Path BACKUP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".bak");
     private static final Path TEMP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
@@ -51,6 +53,7 @@ public final class VoxyMapSettings {
     private static final EnumSet<MapOverlay> mapOverlays = EnumSet.noneOf(MapOverlay.class);
     private static final Map<String, Long> slimeSeeds = new ConcurrentHashMap<>();
     private static final Map<String, String> netherLinks = new ConcurrentHashMap<>();
+    private static final Map<String, String> webMapLinks = new ConcurrentHashMap<>();
     private static boolean otherDimensionWaypoints = true;
     private static RadarIcons radarIcons = RadarIcons.HEADS;
     private static boolean minimapRotates = false;
@@ -126,6 +129,15 @@ public final class VoxyMapSettings {
                 netherLinks.put(overworldId, netherId);
             }
         }
+        webMapLinks.clear();
+        for (String key : properties.stringPropertyNames()) {
+            if (!key.startsWith(WEB_MAP_LINK_PREFIX)) continue;
+            String webMapKey = key.substring(WEB_MAP_LINK_PREFIX.length());
+            String worldId = properties.getProperty(key).trim();
+            if (WEB_MAP_KEY.matcher(webMapKey).matches() && validWorldId(worldId)) {
+                webMapLinks.put(webMapKey, worldId);
+            }
+        }
         slimeSeeds.clear();
         for (String key : properties.stringPropertyNames()) {
             if (!key.startsWith(SLIME_SEED_PREFIX)) continue;
@@ -185,6 +197,7 @@ public final class VoxyMapSettings {
         slimeSeeds.forEach((worldId, seed) -> properties.setProperty(SLIME_SEED_PREFIX + worldId, Long.toString(seed)));
         properties.setProperty("otherDimensionWaypoints", Boolean.toString(otherDimensionWaypoints));
         netherLinks.forEach((overworldId, netherId) -> properties.setProperty(NETHER_LINK_PREFIX + overworldId, netherId));
+        webMapLinks.forEach((webMapKey, worldId) -> properties.setProperty(WEB_MAP_LINK_PREFIX + webMapKey, worldId));
         properties.setProperty("minimapRotates", Boolean.toString(minimapRotates));
         properties.setProperty("minimapColors", minimapColors.name().toLowerCase(Locale.ROOT));
         properties.setProperty("minimapShape", minimapShape.name().toLowerCase(Locale.ROOT));
@@ -424,6 +437,25 @@ public final class VoxyMapSettings {
         }
         netherLinks.values().removeIf(netherId::equals);
         netherLinks.put(overworldId, netherId);
+        save();
+    }
+
+    public static String linkedWebMapWorld(String mapId, String worldName) {
+        load();
+        return mapId == null || worldName == null ? null : webMapLinks.get(mapId + "/" + worldName);
+    }
+
+    public static void linkWebMapWorld(String mapId, String worldName, String worldId) {
+        load();
+        if (mapId == null || worldName == null || !validWorldId(worldId)) {
+            return;
+        }
+        String key = mapId + "/" + worldName;
+        if (!WEB_MAP_KEY.matcher(key).matches() || worldId.equals(webMapLinks.get(key))) {
+            return;
+        }
+        webMapLinks.values().removeIf(worldId::equals);
+        webMapLinks.put(key, worldId);
         save();
     }
 

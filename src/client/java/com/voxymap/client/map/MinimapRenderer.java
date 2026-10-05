@@ -37,8 +37,9 @@ public final class MinimapRenderer {
     private static final int WAYPOINT_ICON_SIZE = 9;
     private static final int MOB_MARKER_RADIUS = 1;
     private static final int PLAYER_HEAD_SIZE = 8;
-    private static final int MOB_HEAD_SIZE = 8;
-    private static final int FACE_UV_GRID = 4096;
+    private static final int MOB_ICON_MAX = 12;
+    private static final int PASSIVE_OUTLINE = 0xE0101418;
+    private static final int[][] OUTLINE_OFFSETS = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
     private static final double OFFSCREEN_EDGE_INSET = 9.0;
     private static final int INFO_LINE_HEIGHT = 10;
     private static final int EFFECT_ROW_HEIGHT = 26;
@@ -540,8 +541,7 @@ public final class MinimapRenderer {
                 int alpha = verticalAlpha(mob.y(), player.getY());
                 int extent;
                 if (heads && mob.face() != null) {
-                    drawMobHead(g, mob.face(), px, py, scaleAlpha(category.color(), alpha), alpha);
-                    extent = MOB_HEAD_SIZE / 2 + 1;
+                    extent = drawMobHead(g, mob.face(), px, py, outlineFor(category), alpha);
                 } else {
                     drawDot(g, px, py, radius, scaleAlpha(category.color(), alpha));
                     extent = radius;
@@ -637,8 +637,11 @@ public final class MinimapRenderer {
     }
 
     private static void drawHeightArrow(GuiGraphicsExtractor g, int x, int y, int direction, int alpha) {
-        int color = scaleAlpha(0xFFFFFFFF, alpha);
-        g.fill(x - 2, y - 2, x + 3, y + 2, scaleAlpha(0xCC0A0A12, alpha));
+        drawChevron(g, x + 1, y + 1, direction, scaleAlpha(0xCC0A0A12, alpha));
+        drawChevron(g, x, y, direction, scaleAlpha(0xFFFFFFFF, alpha));
+    }
+
+    private static void drawChevron(GuiGraphicsExtractor g, int x, int y, int direction, int color) {
         int tipY = direction > 0 ? y - 1 : y;
         int baseY = direction > 0 ? y : y - 1;
         g.fill(x, tipY, x + 1, tipY + 1, color);
@@ -756,15 +759,32 @@ public final class MinimapRenderer {
         g.text(minecraft.font, letter, x - textWidth / 2, y - 4, color);
     }
 
-    private static void drawMobHead(GuiGraphicsExtractor g, MobHeadIcons.Face face, int px, int py, int frameColor, int alpha) {
-        int half = MOB_HEAD_SIZE / 2;
-        g.fill(px - half - 1, py - half - 1, px - half + MOB_HEAD_SIZE + 1, py - half + MOB_HEAD_SIZE + 1, frameColor);
-        MobHeadIcons.FaceRect rect = face.rect();
-        g.blit(RenderPipelines.GUI_TEXTURED, face.texture(), px - half, py - half,
-                rect.u0() * FACE_UV_GRID, rect.v0() * FACE_UV_GRID, MOB_HEAD_SIZE, MOB_HEAD_SIZE,
-                Math.max(1, Math.round((rect.u1() - rect.u0()) * FACE_UV_GRID)),
-                Math.max(1, Math.round((rect.v1() - rect.v0()) * FACE_UV_GRID)),
-                FACE_UV_GRID, FACE_UV_GRID, scaleAlpha(0xFFFFFFFF, alpha));
+    static int outlineFor(RadarCategory category) {
+        return switch (category) {
+            case HOSTILE, NEUTRAL -> category.color();
+            default -> PASSIVE_OUTLINE;
+        };
+    }
+
+    static int[] iconSize(int width, int height, int max) {
+        double scale = Math.min(1.0, max / (double) Math.max(width, height));
+        return new int[]{Math.max(1, (int) Math.round(width * scale)), Math.max(1, (int) Math.round(height * scale))};
+    }
+
+    private static int drawMobHead(GuiGraphicsExtractor g, MobHeadIcons.Face face, int px, int py, int outlineColor,
+                                   int alpha) {
+        int[] size = iconSize(face.width(), face.height(), MOB_ICON_MAX);
+        int x = px - size[0] / 2;
+        int y = py - size[1] / 2;
+        int textureWidth = face.width() * 2;
+        int outline = scaleAlpha(outlineColor, alpha);
+        for (int[] offset : OUTLINE_OFFSETS) {
+            g.blit(RenderPipelines.GUI_TEXTURED, face.icon(), x + offset[0], y + offset[1], face.width(), 0.0f,
+                    size[0], size[1], face.width(), face.height(), textureWidth, face.height(), outline);
+        }
+        g.blit(RenderPipelines.GUI_TEXTURED, face.icon(), x, y, 0.0f, 0.0f, size[0], size[1],
+                face.width(), face.height(), textureWidth, face.height(), scaleAlpha(0xFFFFFFFF, alpha));
+        return size[1] / 2 + 1;
     }
 
     static void drawPlayerMarker(GuiGraphicsExtractor g, Minecraft minecraft, Player other, int px, int py, int alpha,

@@ -24,6 +24,8 @@ public final class RemotePlayerMarkers {
         List<RemotePlayer> playersInDimension(String dimensionId);
 
         String activeMapId();
+
+        boolean activeMapResolved(Object worldIdentity);
     }
 
     public record RemotePlayer(String name, String world, double x, double y, double z, String uuid) {
@@ -52,6 +54,15 @@ public final class RemotePlayerMarkers {
             return SOURCE.activeMapId();
         }
         return configuredOrDefaultMapId(voxyWorldId);
+    }
+
+    public static String resolvedMapId(Object worldIdentity, String voxyWorldId) {
+        String configured = VoxyMapSettings.vanillaSquadMap(voxyWorldId).mapId();
+        if (configured != null) {
+            return configured;
+        }
+        return SOURCE != null && worldIdentity != null && SOURCE.activeMapResolved(worldIdentity)
+                ? SOURCE.activeMapId() : null;
     }
 
     public static String configuredOrDefaultMapId(String voxyWorldId) {

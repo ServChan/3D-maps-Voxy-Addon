@@ -2,7 +2,9 @@ package com.voxymap.client.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.voxymap.client.VoxyMapClient;
+import com.voxymap.client.compat.MinecraftCompat;
 import com.voxymap.client.integration.LitematicaPlusBridge;
+import com.voxymap.client.integration.VanillaSquadWebMap;
 import com.voxymap.client.integration.VanillaSquadFlagMapBridge;
 import com.voxymap.client.integration.RemotePlayerMarkers;
 import com.voxymap.client.integration.SpatialGuiCompat;
@@ -114,6 +116,10 @@ public class MapScreen extends Screen {
     private int settingsButtonY = -1;
     private int settingsButtonW = 0;
     private int settingsButtonH = 0;
+    private int worldsButtonX = -1;
+    private int worldsButtonY = -1;
+    private int worldsButtonW = 0;
+    private int worldsButtonH = 0;
     private int settingsPanelX = -1;
     private int settingsPanelY = -1;
     private int settingsPanelW = 0;
@@ -750,6 +756,7 @@ public class MapScreen extends Screen {
         int footerTop = drawFooter(g, slide);
         drawXaeroButton(g, mouseX, mouseY, slide, topX, topY, topW, topH);
         drawSettingsButton(g, mouseX, mouseY, slide);
+        drawWorldsButton(g, mouseX, mouseY);
         if (settingsOpen) {
             drawSettingsPanel(g, footerTop);
         }
@@ -2001,6 +2008,43 @@ public class MapScreen extends Screen {
         g.text(minecraft.font, label, settingsButtonX + 26, settingsButtonY + 8, 0xFFE9F2FF);
     }
 
+    private void drawWorldsButton(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        if (settingsOpen || !VanillaSquadWebMap.available()) {
+            worldsButtonX = worldsButtonY = -1;
+            worldsButtonW = worldsButtonH = 0;
+            return;
+        }
+        String label = Component.translatable("overlay.voxymap.worlds").getString();
+        worldsButtonW = Math.min(width - HUD_MARGIN * 2, Math.max(settingsButtonW, minecraft.font.width(label) + 28));
+        worldsButtonH = HUD_BUTTON_HEIGHT;
+        worldsButtonX = width - worldsButtonW - HUD_MARGIN;
+        worldsButtonY = settingsButtonY + settingsButtonH + HUD_GAP;
+        boolean hovered = isInsideWorldsButton(mouseX, mouseY);
+        int accent = hovered ? 0xFF7DEBFF : 0xFF3BA4FF;
+        drawGlassPanel(g, worldsButtonX, worldsButtonY, worldsButtonW, worldsButtonH,
+                hovered ? 0xCC112338 : 0x99030914, accent);
+        int iconX = worldsButtonX + 13;
+        int iconY = worldsButtonY + 12;
+        g.outline(iconX - 5, iconY - 5, 10, 10, accent);
+        g.fill(iconX - 5, iconY - 1, iconX + 5, iconY, accent);
+        g.fill(iconX - 1, iconY - 5, iconX, iconY + 5, accent);
+        g.text(minecraft.font, label, worldsButtonX + 26, worldsButtonY + 8, 0xFFE9F2FF);
+    }
+
+    private boolean isInsideWorldsButton(double mouseX, double mouseY) {
+        return worldsButtonW > 0
+                && mouseX >= worldsButtonX && mouseX <= worldsButtonX + worldsButtonW
+                && mouseY >= worldsButtonY && mouseY <= worldsButtonY + worldsButtonH;
+    }
+
+    private void openWebMap() {
+        if (minecraft.level == null) {
+            return;
+        }
+        MinecraftCompat.showScreen(minecraft, new WebMapScreen(VanillaSquadWebMap.currentMapId(minecraft),
+                minecraft.level.dimension().identifier().toString(), viewCenterX, viewCenterZ, blocksPerPixel));
+    }
+
     private void drawSettingsPanel(GuiGraphicsExtractor g, int footerTop) {
         String worldId = currentVoxyWorldId();
         WaypointManager.SyncStatus syncStatus = worldId != null
@@ -2550,6 +2594,10 @@ public class MapScreen extends Screen {
         MapObjectPanel.Action panelAction = objectPanel.click(event.x(), event.y(), event.button());
         if (panelAction != null) {
             handleObjectPanelAction(panelAction);
+            return true;
+        }
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && isInsideWorldsButton(event.x(), event.y())) {
+            openWebMap();
             return true;
         }
         if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && handleSettingsClick(event.x(), event.y())) {

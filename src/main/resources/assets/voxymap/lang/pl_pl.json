@@ -289,5 +289,16 @@
   "screen.voxymap.settings.screenshot": "Zrzut ekranu mapy",
   "screen.voxymap.settings.screenshot.clean": "Bez interfejsu",
   "screen.voxymap.settings.screenshot.markers": "Z znacznikami",
-  "screen.voxymap.config.map_note": "Udost\u0119pnianie mapy jest dost\u0119pne tylko na mapie (M) \u2192 Ustawienia."
+  "screen.voxymap.config.map_note": "Udost\u0119pnianie mapy jest dost\u0119pne tylko na mapie (M) \u2192 Ustawienia.",
+  "overlay.voxymap.worlds": "\u015awiaty serwera",
+  "screen.voxymap.webmap.title": "Mapy serwer\u00f3w VanillaSquad",
+  "screen.voxymap.webmap.nether": "Nether",
+  "screen.voxymap.webmap.end": "End",
+  "screen.voxymap.webmap.here": "(tu jeste\u015b)",
+  "screen.voxymap.webmap.spawn": "Spawn",
+  "screen.voxymap.webmap.hints": "Przeci\u0105gaj LPM \u00b7 K\u00f3\u0142ko: zoom \u00b7 1-9 \u015bwiat \u00b7 C do gracza lub spawnu \u00b7 M zamknij",
+  "screen.voxymap.webmap.loading_worlds": "Wczytywanie listy \u015bwiat\u00f3w z vanillasquad.com\u2026",
+  "screen.voxymap.webmap.unavailable": "Mapa internetowa VanillaSquad nie odpowiada. Sprawd\u017a po\u0142\u0105czenie; ponowna pr\u00f3ba za 30 sekund.",
+  "screen.voxymap.webmap.loading_tiles": "Wczytywanie mapy\u2026",
+  "screen.voxymap.webmap.source": "\u0179r\u00f3d\u0142o: vanillasquad.com/map"
 }

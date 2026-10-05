@@ -229,6 +229,11 @@ public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.So
         return activeMapId;
     }
 
+    @Override
+    public boolean activeMapResolved(Object worldIdentity) {
+        return autoResolved && worldIdentity == lastWorldIdentity.get();
+    }
+
     static List<RemotePlayer> parse(String body) {
         if (body == null || body.length() > MAX_RESPONSE_CHARS) {
             throw new IllegalArgumentException("VanillaSquad player response is empty or too large");

@@ -5,6 +5,7 @@ import com.voxymap.client.gui.WaypointListScreen;
 import com.voxymap.client.gui.WindowMapScreen;
 import com.voxymap.client.gui.MapScreen;
 import com.voxymap.client.integration.SpatialGuiCompat;
+import com.voxymap.client.integration.VanillaSquadWebMap;
 import com.voxymap.client.compat.MinecraftCompat;
 import com.voxymap.client.map.AtomicPropertiesWriter;
 import com.voxymap.client.map.DeathWaypointTracker;
@@ -102,6 +103,7 @@ public class VoxyMapClient implements ClientModInitializer {
                 }
             }
             DimensionLinks.tick(client);
+            VanillaSquadWebMap.rememberCurrentWorld(client);
             TemporaryWaypoints.tick(client);
             WaypointChatShare.tick(client);
 

@@ -54,6 +54,11 @@ server's anti-xray decoy LODs and shows them as a tiled cross-section that looks
 treats client data the server may have withheld (unloaded or obfuscated chunks) as verified terrain or
 open air - the removed room cutaway was exactly that kind of guess.
 
+The minimap's cave scan (`MinimapTileCache.caveFloorHeight`) follows the same rule: when the player's height is
+inside solid rock it drops through at most 8 blocks to the next open space and otherwise leaves the column empty,
+because Paper's layered anti-xray fills hidden rock with one random block per chunk layer and drawing it shows a
+chunk-sized checkerboard.
+
 The ore mask follows the same rule from the other side: `OreMaskController` marks every Voxy model whose
 block is a vanilla `minecraft:*_ore` or `minecraft:ancient_debris`, and the patched fragment shader paints
 those models grey everywhere Voxy draws them, not only on the map. It has no setting; it switches off only
@@ -89,14 +94,17 @@ targets Iris must use that prefix; any other optional target (Xaero) uses `@Pseu
 
 ## Minimap heads
 
-`MinimapHeads` decides whether the minimap draws heads or dots from `VoxyMapSettings.radarIcons()`: always heads (the
-default), heads only while the player-list key is held, or dots. Mobs and players more than 3 blocks above or below
-the player get a small up or down arrow. Mob faces are not hardcoded:
-while the minimap and its mobs are on, `LivingEntityRendererMixin` hands each rendered mob to
-`MobHeadIcons`, which stores the `head` part's face rectangle per texture (at most 4096, then the cache
-resets). Renderers with a single model get their face without being seen first; for the rest, a texture
-variant never rendered this session keeps its dot. All of it catches `RuntimeException | LinkageError`
-and falls back to the dot.
+Mob icons are front views of the head, composed like Xaero's: `HeadGeometry.capture` (main thread) resets the
+pose of the model's `head` part and its children, plus root-level face parts such as `hat`, `beak` or `nose`, and
+collects every polygon facing -Z; `HeadIconComposer.compose` (worker thread, after reading the mob texture through
+the resource manager) rasterises each one as a parallelogram (rotated ears and horns must not fill their bounding
+box) back to front at one pixel per texel; `MobHeadIcons.tick` uploads the result as a
+`DynamicTexture` holding the icon and a white silhouette mask side by side. The minimap draws the mask four times
+as an outline (red for hostile, amber for neutral, dark otherwise) and the icon on top, keeping its aspect ratio,
+at most 12 px. Icons are keyed by mob texture, learned from `LivingEntityRendererMixin` or, for renderers with a
+single model, straight from the renderer; textures that are not plain resources (player skins) keep a dot.
+`MinimapHeads` picks heads or dots from `VoxyMapSettings.radarIcons()` (always heads by default, only while the
+player-list key is held, or dots); mobs and players more than 3 blocks above or below get a small arrow.
 
 ## Minimap colours
 
@@ -165,6 +173,22 @@ keyed by include path; a flavour applies only if every anchor is present. Two ed
 statement of a fog function). When a pack updates, re-check its anchors against the new source; the
 unit tests use excerpts, so they cannot notice a real layout change. A new pack means a new flavour,
 its include path in the map, and a test excerpt.
+
+## Other VanillaSquad worlds (web map)
+
+On VanillaSquad (`VanillaSquadServer.isConnected()`, by server address) the big map shows a "Server worlds" button that
+opens `WebMapScreen`: a flat view of the squaremap web map of any world of `build`, `farm` or `art`, switched by
+buttons or keys 1-9; "3D map" goes back to `MapScreen`. It is not Voxy data, so it works for worlds never visited and
+needs no player-markers module. `VanillaSquadWebMap` loads `tiles/settings.json` per map and `tiles/<world>/settings.json`
+(max zoom, spawn) only while the screen is open; `WebMapTiles` downloads 512 px PNG tiles
+(`tiles/<world>/<zoom>/<x>_<z>.png`, a tile covers `512 << (max - zoom)` blocks), at most 6 at a time, decodes them off
+the main thread, keeps at most 64 textures and frees them all in `WebMapScreen.removed()`. A missing tile answers
+200 with an empty HTML body, so tiles are checked for the PNG signature. While a tile loads, `WebMapRenderer` draws
+the matching part of a coarser loaded tile. Waypoints of another world come from `webMapLink.<map>/<world>` in
+`voxymap.properties`, learned while the player stands in that world and the map id is known
+(`RemotePlayerMarkers.resolvedMapId`: the configured map, or the player-markers auto-detection once it resolved).
+Keep tile math in `WebMapGeometry` (unit tested) and do not route these lines through `MapProjection.clipLine`: its
+long-segment rejection is for perspective projection and would drop long flat territory edges.
 
 ## Optional-mod integration pattern
 

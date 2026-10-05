@@ -289,5 +289,16 @@
   "screen.voxymap.settings.screenshot": "Captura del mapa",
   "screen.voxymap.settings.screenshot.clean": "Sin interfaz",
   "screen.voxymap.settings.screenshot.markers": "Con marcadores",
-  "screen.voxymap.config.map_note": "El intercambio de mapas solo est\u00e1 disponible en el mapa (M) \u2192 Ajustes."
+  "screen.voxymap.config.map_note": "El intercambio de mapas solo est\u00e1 disponible en el mapa (M) \u2192 Ajustes.",
+  "overlay.voxymap.worlds": "Mundos del servidor",
+  "screen.voxymap.webmap.title": "Mapas de servidores de VanillaSquad",
+  "screen.voxymap.webmap.nether": "Nether",
+  "screen.voxymap.webmap.end": "End",
+  "screen.voxymap.webmap.here": "(est\u00e1s aqu\u00ed)",
+  "screen.voxymap.webmap.spawn": "Spawn",
+  "screen.voxymap.webmap.hints": "Arrastra con clic izq. \u00b7 Rueda: zoom \u00b7 1-9 mundo \u00b7 C al jugador o al spawn \u00b7 M cerrar",
+  "screen.voxymap.webmap.loading_worlds": "Cargando la lista de mundos de vanillasquad.com\u2026",
+  "screen.voxymap.webmap.unavailable": "El mapa web de VanillaSquad no responde. Revisa tu conexi\u00f3n; se reintentar\u00e1 en 30 segundos.",
+  "screen.voxymap.webmap.loading_tiles": "Cargando mapa\u2026",
+  "screen.voxymap.webmap.source": "Fuente: vanillasquad.com/map"
 }

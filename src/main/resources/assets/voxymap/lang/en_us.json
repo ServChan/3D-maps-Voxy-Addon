@@ -289,5 +289,16 @@
   "screen.voxymap.settings.screenshot": "Map screenshot",
   "screen.voxymap.settings.screenshot.clean": "No interface",
   "screen.voxymap.settings.screenshot.markers": "With markers",
-  "screen.voxymap.config.map_note": "Map sharing is only available on the map (M) -> Settings."
+  "screen.voxymap.config.map_note": "Map sharing is only available on the map (M) -> Settings.",
+  "overlay.voxymap.worlds": "Server worlds",
+  "screen.voxymap.webmap.title": "VanillaSquad server maps",
+  "screen.voxymap.webmap.nether": "Nether",
+  "screen.voxymap.webmap.end": "End",
+  "screen.voxymap.webmap.here": "(you are here)",
+  "screen.voxymap.webmap.spawn": "Spawn",
+  "screen.voxymap.webmap.hints": "Drag with LMB \u00b7 Wheel to zoom \u00b7 1-9 world \u00b7 C to player or spawn \u00b7 M close",
+  "screen.voxymap.webmap.loading_worlds": "Loading the world list from vanillasquad.com\u2026",
+  "screen.voxymap.webmap.unavailable": "The VanillaSquad web map is not responding. Check your connection; retrying in 30 seconds.",
+  "screen.voxymap.webmap.loading_tiles": "Loading map\u2026",
+  "screen.voxymap.webmap.source": "Source: vanillasquad.com/map"
 }

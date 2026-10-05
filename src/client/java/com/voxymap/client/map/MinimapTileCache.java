@@ -19,6 +19,7 @@ final class MinimapTileCache {
     static final int TILE_SIZE = 16;
     static final int Y_TOLERANCE_BLOCKS = 8;
     static final int ROOF_CLEARANCE_BLOCKS = 3;
+    static final int CAVE_SOLID_SKIP_BLOCKS = 8;
 
     enum ScanMode { SURFACE, CAVE }
 
@@ -226,10 +227,12 @@ final class MinimapTileCache {
         int startY = mode == ScanMode.SURFACE
                 ? Math.max(source.getHeight(Heightmap.Types.WORLD_SURFACE, x, z), minY + 1)
                 : caveStartY;
-        return surfaceHeight((sx, sy, sz) -> {
+        AirCheck air = (sx, sy, sz) -> {
             BlockState state = source.getBlockState(scan.set(sx, sy, sz));
             return state.isAir() || state.getMapColor(level, scan) == MapColor.NONE;
-        }, x, z, startY, minY);
+        };
+        return mode == ScanMode.SURFACE ? surfaceHeight(air, x, z, startY, minY)
+                : caveFloorHeight(air, x, z, startY, minY);
     }
 
     private static int classicColor(Level level, ChunkAccess chunk, BlockPos.MutableBlockPos pos, int x, int height,
@@ -305,6 +308,17 @@ final class MinimapTileCache {
     @FunctionalInterface
     interface AirCheck {
         boolean isAir(int x, int y, int z);
+    }
+
+    static int caveFloorHeight(AirCheck airCheck, int x, int z, int startY, int minY) {
+        int y = startY;
+        while (y > minY && !airCheck.isAir(x, y, z)) {
+            if (startY - y >= CAVE_SOLID_SKIP_BLOCKS) {
+                return minY;
+            }
+            y--;
+        }
+        return y <= minY ? minY : surfaceHeight(airCheck, x, z, y, minY);
     }
 
     static int surfaceHeight(AirCheck airCheck, int x, int z, int startY, int minY) {

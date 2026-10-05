@@ -83,4 +83,22 @@ class MinimapTileCacheTest {
     void shadeIsNormalWhenTheNorthNeighborIsTheSameHeight() {
         assertEquals(MinimapTileCache.Shade.NORMAL, MinimapTileCache.shadeOf(64, 64));
     }
+
+    @Test
+    void caveScanDropsThroughAirToTheFloorBelow() {
+        int floor = MinimapTileCache.caveFloorHeight((x, y, z) -> y > 40, 0, 0, 60, -64);
+        assertEquals(41, floor);
+    }
+
+    @Test
+    void caveScanSkipsAShortRunOfSolidRockAboveACave() {
+        int floor = MinimapTileCache.caveFloorHeight((x, y, z) -> y < 57 && y > 30, 0, 0, 60, -64);
+        assertEquals(31, floor);
+    }
+
+    @Test
+    void caveScanInsideThickRockShowsNothingInsteadOfHiddenBlocks() {
+        int floor = MinimapTileCache.caveFloorHeight((x, y, z) -> y < 20, 0, 0, 60, -64);
+        assertEquals(-64, floor);
+    }
 }
