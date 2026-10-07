@@ -118,7 +118,15 @@ per frame, nearest first.
 
 ## Waypoints outside the map screen
 
-B opens `WaypointEditScreen`, U opens `WaypointListScreen`. Temporary waypoints live only in memory
+B opens `WaypointEditScreen`, U opens `WaypointListScreen`. Adding and editing a waypoint always goes through
+`WaypointForm` (name, symbol, coordinates, colour, display mode, temporary/shared), hosted by `WaypointEditScreen` and
+embedded in `MapScreen`: there its widgets are added as screen children and rendered by hand (MapScreen does not call
+`super.extractRenderState`), clicks inside the panel go to `super.mouseClicked`, a click on the map moves the pending
+point, and an accidental click no longer saves. On the big map a right click without dragging opens `MapContextMenu`
+(waypoint, temporary waypoint, copy coordinates, teleport for operators) and the add-waypoint key places one under the
+cursor. Minecraft 26.3 delivers `charTyped` only after `TextInputManager.startTextInput` (SDL3): `EditBox` does it on
+focus, but a hand-drawn input field must call `minecraft.textInputManager().startTextInput(owner)` itself
+(`MapScreen.syncTextInput`), otherwise nothing can be typed into it. Temporary waypoints live only in memory
 (`WaypointManager.temporaryByWorld`, ids start with `temp-`), are never synced, and are removed once the player
 has been more than 12 blocks away and comes back within 6. Chat sharing uses Xaero's `xaero-waypoint:` format
 (`WaypointText`) so Xaero users can import ours and we import theirs; `WaypointChatShare` answers a shared
@@ -158,10 +166,13 @@ and saves only on release. The minimap and the in-world waypoint icons hide on F
 
 ## Waypoint display settings and import
 
-Hiding a single waypoint and its 1-2 letter symbol are local preferences keyed by waypoint id
+Where a waypoint is drawn and its 1-2 letter symbol are local preferences keyed by waypoint id
 (`WaypointPrefs`, `config/voxymap-waypoint-prefs.properties`), so the waypoint format and the sync protocol stay
-unchanged and shared waypoints can be hidden too. Every renderer reads `WaypointManager.visibleForWorld`; only the
-list screen and the object panel see hidden ones. `WaypointImport` scans `xaero/minimap`, `XaeroWaypoints` and
+unchanged and shared waypoints can be hidden too. `WaypointDisplay` is everywhere / maps only (minimap and big map) /
+big map only / hidden; legacy `hidden.<id>=true` entries load as hidden. New waypoints take the `newWaypointDisplay`
+setting. Every renderer reads `WaypointManager.visibleForWorld(worldId, Surface)` with its own surface (`WORLD` for
+labels and beams, `MINIMAP`, `MAP` for the big map, the window map and the web map) and filters foreign-dimension
+waypoints the same way; only the list screen and the object panel see hidden ones. `WaypointImport` scans `xaero/minimap`, `XaeroWaypoints` and
 `journeymap/data` off the main thread and imports into the current world as local waypoints, skipping ones with the
 same name and block, keeping Xaero symbols and disabled flags and skipping deathpoints.
 

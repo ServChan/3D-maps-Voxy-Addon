@@ -61,7 +61,7 @@ public final class WaypointBeaconRenderer {
         double maxDistanceSq = range.unlimited() ? MAX_RENDER_DISTANCE_SQ
                 : Math.min(MAX_RENDER_DISTANCE_SQ, (double) range.blocks() * range.blocks());
 
-        for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId)) {
+        for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId, WaypointDisplay.Surface.WORLD)) {
             double dx = waypoint.x() - cameraPos.x;
             double dy = waypoint.y() - cameraPos.y;
             double dz = waypoint.z() - cameraPos.z;

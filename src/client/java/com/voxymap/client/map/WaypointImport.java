@@ -68,7 +68,7 @@ public final class WaypointImport {
                 WaypointPrefs.setSymbol(added.id(), candidate.symbol());
             }
             if (candidate.disabled()) {
-                WaypointPrefs.setHidden(added.id(), true);
+                WaypointPrefs.setDisplay(added.id(), WaypointDisplay.HIDDEN);
             }
             imported++;
         }

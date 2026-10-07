@@ -60,9 +60,11 @@ public final class WaypointLabels {
         }
         List<Candidate> waypoints = new ArrayList<>();
         for (DimensionLinks.Foreign foreign : DimensionLinks.foreignWaypoints(minecraft)) {
-            waypoints.add(new Candidate(foreign.local(), dimensionName(foreign.source())));
+            if (WaypointPrefs.shownOn(foreign.original().id(), WaypointDisplay.Surface.WORLD)) {
+                waypoints.add(new Candidate(foreign.local(), dimensionName(foreign.source())));
+            }
         }
-        for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId)) {
+        for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId, WaypointDisplay.Surface.WORLD)) {
             waypoints.add(new Candidate(waypoint, null));
         }
         if (waypoints.isEmpty()) {

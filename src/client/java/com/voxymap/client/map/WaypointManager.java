@@ -77,11 +77,11 @@ public final class WaypointManager {
         return merged;
     }
 
-    public static List<Waypoint> visibleForWorld(String worldId) {
+    public static List<Waypoint> visibleForWorld(String worldId, WaypointDisplay.Surface surface) {
         List<Waypoint> all = forWorld(worldId);
         List<Waypoint> visible = new ArrayList<>(all.size());
         for (Waypoint waypoint : all) {
-            if (!WaypointPrefs.hidden(waypoint.id())) {
+            if (WaypointPrefs.shownOn(waypoint.id(), surface)) {
                 visible.add(waypoint);
             }
         }
@@ -206,48 +206,6 @@ public final class WaypointManager {
 
     public static int[] palette() {
         return WaypointCodec.PALETTE.clone();
-    }
-
-    public static void rename(String worldId, String id, String newName) {
-        load();
-        if (!WaypointCodec.validWorldId(worldId) || id == null || newName == null || newName.isBlank()) return;
-
-        List<Waypoint> temporary = temporaryByWorld.get(worldId);
-        if (temporary != null) {
-            for (int i = 0; i < temporary.size(); i++) {
-                Waypoint current = temporary.get(i);
-                if (current.id().equals(id)) {
-                    temporary.set(i, new Waypoint(current.id(), newName.trim(), current.x(), current.y(), current.z(), current.color(), false));
-                    localVersion++;
-                    return;
-                }
-            }
-        }
-
-        List<Waypoint> list = byWorld.get(worldId);
-        if (list != null) {
-            for (int i = 0; i < list.size(); i++) {
-                Waypoint current = list.get(i);
-                if (current.id().equals(id)) {
-                    list.set(i, new Waypoint(current.id(), newName.trim(), current.x(), current.y(), current.z(), current.color(), false));
-                    localVersion++;
-                    save();
-                    return;
-                }
-            }
-        }
-
-        String address = WaypointSyncSettings.address(worldId);
-        if (address == null) return;
-        String password = WaypointSyncSettings.password(worldId);
-        if (password == null) return;
-        for (Waypoint current : WaypointSyncClient.cached(worldId, address)) {
-            if (current.id().equals(id)) {
-                WaypointSyncClient.add(worldId, address, password,
-                        new Waypoint(current.id(), newName.trim(), current.x(), current.y(), current.z(), current.color(), true));
-                return;
-            }
-        }
     }
 
     public static void remove(String worldId, String id) {

@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class WaypointPrefs {
@@ -20,10 +19,11 @@ public final class WaypointPrefs {
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("voxymap-waypoint-prefs.properties");
     private static final Path BACKUP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".bak");
     private static final Path TEMP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
-    private static final String HIDDEN_PREFIX = "hidden.";
+    private static final String LEGACY_HIDDEN_PREFIX = "hidden.";
+    private static final String DISPLAY_PREFIX = "display.";
     private static final String SYMBOL_PREFIX = "symbol.";
 
-    private static final Set<String> HIDDEN = ConcurrentHashMap.newKeySet();
+    private static final Map<String, WaypointDisplay> DISPLAYS = new ConcurrentHashMap<>();
     private static final Map<String, String> SYMBOLS = new ConcurrentHashMap<>();
     private static volatile boolean loaded;
     private static volatile int version;
@@ -31,16 +31,26 @@ public final class WaypointPrefs {
     private WaypointPrefs() {
     }
 
-    public static boolean hidden(String id) {
+    public static WaypointDisplay display(String id) {
         load();
-        return id != null && HIDDEN.contains(id);
+        if (id == null) return WaypointDisplay.EVERYWHERE;
+        return DISPLAYS.getOrDefault(id, WaypointDisplay.EVERYWHERE);
     }
 
-    public static void setHidden(String id, boolean hidden) {
+    public static boolean shownOn(String id, WaypointDisplay.Surface surface) {
+        return display(id).shows(surface);
+    }
+
+    public static boolean hidden(String id) {
+        return display(id) == WaypointDisplay.HIDDEN;
+    }
+
+    public static void setDisplay(String id, WaypointDisplay display) {
         load();
         if (id == null) return;
-        boolean changed = hidden ? HIDDEN.add(id) : HIDDEN.remove(id);
-        if (changed) {
+        WaypointDisplay target = display == null ? WaypointDisplay.EVERYWHERE : display;
+        WaypointDisplay previous = target == WaypointDisplay.EVERYWHERE ? DISPLAYS.remove(id) : DISPLAYS.put(id, target);
+        if ((previous == null ? WaypointDisplay.EVERYWHERE : previous) != target) {
             save();
         }
     }
@@ -68,7 +78,7 @@ public final class WaypointPrefs {
     public static void forget(String id) {
         load();
         if (id == null) return;
-        boolean changed = HIDDEN.remove(id);
+        boolean changed = DISPLAYS.remove(id) != null;
         changed |= SYMBOLS.remove(id) != null;
         if (changed) {
             save();
@@ -85,10 +95,16 @@ public final class WaypointPrefs {
             }
             if (properties != null) {
                 for (String key : properties.stringPropertyNames()) {
-                    if (key.startsWith(HIDDEN_PREFIX) && "true".equals(properties.getProperty(key))) {
-                        HIDDEN.add(key.substring(HIDDEN_PREFIX.length()));
+                    String value = properties.getProperty(key);
+                    if (key.startsWith(LEGACY_HIDDEN_PREFIX) && "true".equals(value)) {
+                        DISPLAYS.putIfAbsent(key.substring(LEGACY_HIDDEN_PREFIX.length()), WaypointDisplay.HIDDEN);
+                    } else if (key.startsWith(DISPLAY_PREFIX)) {
+                        WaypointDisplay display = WaypointDisplay.parse(value);
+                        if (display != null && display != WaypointDisplay.EVERYWHERE) {
+                            DISPLAYS.put(key.substring(DISPLAY_PREFIX.length()), display);
+                        }
                     } else if (key.startsWith(SYMBOL_PREFIX)) {
-                        String symbol = WaypointText.cleanSymbol(properties.getProperty(key));
+                        String symbol = WaypointText.cleanSymbol(value);
                         if (symbol != null) {
                             SYMBOLS.put(key.substring(SYMBOL_PREFIX.length()), symbol);
                         }
@@ -106,7 +122,7 @@ public final class WaypointPrefs {
     private static void save() {
         version++;
         Properties properties = new Properties();
-        HIDDEN.forEach(id -> properties.setProperty(HIDDEN_PREFIX + id, "true"));
+        DISPLAYS.forEach((id, display) -> properties.setProperty(DISPLAY_PREFIX + id, display.key()));
         SYMBOLS.forEach((id, symbol) -> properties.setProperty(SYMBOL_PREFIX + id, symbol));
         AtomicPropertiesWriter.save(CONFIG_PATH, BACKUP_PATH, TEMP_PATH, properties, "VoxyMap waypoint display settings");
     }

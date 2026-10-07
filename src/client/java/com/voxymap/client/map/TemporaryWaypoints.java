@@ -42,11 +42,15 @@ public final class TemporaryWaypoints {
             minecraft.gui.hud.setOverlayMessage(Component.translatable("message.voxymap.waypoint.nothing_in_sight"), false);
             return;
         }
-        String name = Component.translatable("screen.voxymap.waypoint.temporary_name").getString();
-        if (WaypointManager.addTemporary(worldId, name, target.x, target.y, target.z, COLOR) != null) {
+        if (place(worldId, target.x, target.y, target.z) != null) {
             minecraft.gui.hud.setOverlayMessage(Component.translatable("message.voxymap.waypoint.temporary_placed",
                     (int) Math.floor(target.x), (int) Math.floor(target.y), (int) Math.floor(target.z)), false);
         }
+    }
+
+    public static WaypointManager.Waypoint place(String worldId, double x, double y, double z) {
+        String name = Component.translatable("screen.voxymap.waypoint.temporary_name").getString();
+        return WaypointManager.addTemporary(worldId, name, x, y, z, COLOR);
     }
 
     public static void tick(Minecraft minecraft) {

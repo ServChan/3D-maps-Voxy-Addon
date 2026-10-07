@@ -60,6 +60,7 @@ public final class SettingsCatalog {
         VANILLASQUAD_MAP(Group.LAYERS, "screen.voxymap.settings.vanillasquadmap", Availability.IN_WORLD, true),
         SCHEMATICS(Group.LAYERS, "screen.voxymap.settings.schematics", Availability.EVERYWHERE, false),
 
+        NEW_WAYPOINT_DISPLAY(Group.WAYPOINT_LOOK, "screen.voxymap.settings.newwaypointdisplay", Availability.EVERYWHERE, false),
         WAYPOINT_SHAPE(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointshape", Availability.EVERYWHERE, false),
         WAYPOINT_SIZE(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointsize", Availability.EVERYWHERE, false),
         WAYPOINT_LABELS(Group.WAYPOINT_LOOK, "screen.voxymap.settings.waypointlabels", Availability.EVERYWHERE, false),

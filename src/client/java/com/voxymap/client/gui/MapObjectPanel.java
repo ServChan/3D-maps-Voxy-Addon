@@ -56,6 +56,14 @@ final class MapObjectPanel {
         return open;
     }
 
+    boolean searchFocused() {
+        return open && searchFocused;
+    }
+
+    void blurSearch() {
+        searchFocused = false;
+    }
+
     void toggle() {
         open = !open;
         searchFocused = false;

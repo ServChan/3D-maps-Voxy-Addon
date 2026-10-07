@@ -23,17 +23,22 @@ import com.voxymap.client.map.VoxyMapGuiRenderer;
 import com.voxymap.client.map.VoxyMapPicker;
 import com.voxymap.client.map.VoxyMapSettings;
 import com.voxymap.client.map.MapShareClient;
+import com.voxymap.client.map.TemporaryWaypoints;
+import com.voxymap.client.map.WaypointDisplay;
 import com.voxymap.client.map.WaypointManager;
 import com.voxymap.client.map.WaypointSyncSettings;
 import me.cortex.voxy.commonImpl.WorldIdentifier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.permissions.Permissions;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import org.lwjgl.sdl.SDLScancode;
@@ -69,9 +74,7 @@ public class MapScreen extends Screen {
     private static final int PLAYER_CLUSTER_MAX_EXPANDED_ROWS = 18;
     private static final long SKIN_RETRY_INTERVAL_NANOS = 5_000_000_000L;
     private static final double WAYPOINT_HOVER_DISTANCE = 10.0;
-    private static final int WAYPOINT_NAME_MAX_LENGTH = 48;
-    private static final int WAYPOINT_SWATCH_SIZE = 16;
-    private static final int WAYPOINT_SWATCH_GAP = 4;
+    private static final double CLICK_MOVE_TOLERANCE = 4.0;
     private static final long DOUBLE_CLICK_NANOS = 350_000_000L;
     private static final double DOUBLE_CLICK_DISTANCE = 6.0;
     private double viewCenterX;
@@ -151,17 +154,20 @@ public class MapScreen extends Screen {
     private double lastHoverCursorPickMouseX = Double.NaN;
     private double lastHoverCursorPickMouseY = Double.NaN;
     private TextInputKind textInputKind = null;
-    private String renamingWaypointId = null;
-    private boolean waypointDraftActive = false;
+    private WaypointForm waypointForm;
+    private final MapContextMenu contextMenu = new MapContextMenu();
+    private boolean pinPressPending;
+    private double pinPressX;
+    private double pinPressY;
+    private double rightPressX;
+    private double rightPressY;
+    private boolean rightPressMoved;
+    private String transientMessage;
+    private long transientMessageUntilNanos;
     private boolean mapShareSelectionActive = false;
     private GroundPoint mapShareFirstCorner = null;
     private MapShareBounds mapShareBounds = null;
     private String pendingMapShareAddress = null;
-    private int draftColor;
-    private boolean draftShared;
-    private double pendingWaypointX;
-    private double pendingWaypointY;
-    private double pendingWaypointZ;
     private final StringBuilder nameInputBuffer = new StringBuilder();
     private static final int SETTINGS_ROW_HEIGHT = 24;
     private static final int SETTINGS_HEADER_HEIGHT = 18;
@@ -200,6 +206,9 @@ public class MapScreen extends Screen {
         }
         capturePlayerMarkers();
         cachedKeyHints = buildKeyHints();
+        if (waypointForm != null) {
+            installWaypointForm();
+        }
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
@@ -228,8 +237,10 @@ public class MapScreen extends Screen {
         drawWorldViewerOverlay(g, mouseX, mouseY);
         drawOpeningAnimation(g);
         drawTextInputOverlay(g);
-        drawWaypointDraftOverlay(g);
+        drawWaypointForm(g, mouseX, mouseY, delta);
         drawTransientMapMessage(g);
+        contextMenu.render(g, minecraft.font, mouseX, mouseY);
+        syncTextInput();
         if (xaeroTransitionActive) {
             drawXaeroTransition(g);
             if (!xaeroOpenScheduled && System.nanoTime() - xaeroTransitionStartedAt >= XAERO_TRANSITION_NANOS) {
@@ -260,7 +271,7 @@ public class MapScreen extends Screen {
         double dt = lastFrameNanos == 0L ? 1.0 / 60.0 : Math.min(0.08, (now - lastFrameNanos) / 1_000_000_000.0);
         lastFrameNanos = now;
 
-        if (textInputKind != null || waypointDraftActive) {
+        if (textInputKind != null || (waypointForm != null && waypointForm.typing(getFocused()))) {
 
             moveVelocityX = 0.0;
             moveVelocityZ = 0.0;
@@ -478,6 +489,7 @@ public class MapScreen extends Screen {
         return new String[][] {
                 {Component.translatable("overlay.voxymap.key.drag.button").getString(), Component.translatable("overlay.voxymap.key.drag").getString()},
                 {Component.translatable("overlay.voxymap.key.waypoint.button").getString(), Component.translatable("overlay.voxymap.key.waypoint").getString()},
+                {Component.translatable("overlay.voxymap.key.menu.button").getString(), Component.translatable("overlay.voxymap.key.menu").getString()},
                 {Component.translatable("overlay.voxymap.key.rotate.button").getString(), Component.translatable("overlay.voxymap.key.rotate").getString()},
                 {Component.translatable("overlay.voxymap.key.delete.button").getString(), Component.translatable("overlay.voxymap.key.delete").getString()},
                 {Component.translatable("overlay.voxymap.key.move.button").getString(), Component.translatable("overlay.voxymap.key.move").getString()},
@@ -584,6 +596,7 @@ public class MapScreen extends Screen {
             case WAYPOINT_LABELS -> VoxyMapSettings.cycleWaypointLabelMode();
             case WAYPOINTS_OTHER_DIMENSION -> VoxyMapSettings.toggleOtherDimensionWaypoints();
             case WAYPOINT_BEAMS -> VoxyMapSettings.toggleWaypointBeams();
+            case NEW_WAYPOINT_DISPLAY -> VoxyMapSettings.cycleNewWaypointDisplay();
             case WAYPOINT_SHAPE -> VoxyMapSettings.cycleWaypointIconShape();
             case WAYPOINT_SIZE -> VoxyMapSettings.cycleWaypointIconSize();
             case WAYPOINT_LABEL_STYLE -> VoxyMapSettings.cycleWaypointLabelStyle();
@@ -921,7 +934,7 @@ public class MapScreen extends Screen {
         } else if (action.type() == MapObjectPanel.ActionType.EDIT) {
             selectObject(entry);
             WaypointManager.Waypoint waypoint = selectedWaypoint();
-            if (waypoint != null && !blockedFromEditing(currentVoxyWorldId(), waypoint)) beginRenameWaypoint(waypoint);
+            if (waypoint != null) beginEditWaypoint(waypoint);
         } else if (action.type() == MapObjectPanel.ActionType.DELETE) {
             selectObject(entry);
             deleteSelectedWaypoint();
@@ -1175,7 +1188,7 @@ public class MapScreen extends Screen {
             return;
         }
 
-        List<WaypointManager.Waypoint> waypoints = WaypointManager.visibleForWorld(worldId);
+        List<WaypointManager.Waypoint> waypoints = WaypointManager.visibleForWorld(worldId, WaypointDisplay.Surface.MAP);
         List<ProjectedWaypoint> projected = new ArrayList<>();
         for (WaypointManager.Waypoint waypoint : waypoints) {
             ScreenPoint point = projectToScreen(waypoint.x(), waypoint.y(), waypoint.z());
@@ -1216,10 +1229,11 @@ public class MapScreen extends Screen {
         }
         lastProjectedWaypoints = List.copyOf(projected);
 
-        if (waypointDraftActive) {
-            ScreenPoint pendingPoint = projectToScreen(pendingWaypointX, pendingWaypointY, pendingWaypointZ);
+        if (waypointForm != null) {
+            double[] pending = waypointForm.previewPosition();
+            ScreenPoint pendingPoint = projectToScreen(pending[0], pending[1], pending[2]);
             if (pendingPoint != null) {
-                drawWaypointPin(g, pendingPoint, draftColor, true);
+                drawWaypointPin(g, pendingPoint, waypointForm.color(), true);
             }
         }
     }
@@ -1289,6 +1303,8 @@ public class MapScreen extends Screen {
             message = Component.translatable("screen.voxymap.waypoint.no_surface").getString();
         } else if (deletedWaypoint != null && System.nanoTime() < undoDeleteUntilNanos) {
             message = Component.translatable("screen.voxymap.waypoint.deleted_undo").getString();
+        } else if (transientMessage != null && System.nanoTime() < transientMessageUntilNanos) {
+            message = transientMessage;
         }
         if (message == null) return;
         int boxW = minecraft.font.width(message) + 20;
@@ -1298,125 +1314,161 @@ public class MapScreen extends Screen {
         g.centeredText(minecraft.font, message, width / 2, boxY + 6, 0xFFFFFFFF);
     }
 
+    private void showTransientMessage(Component message) {
+        transientMessage = message.getString();
+        transientMessageUntilNanos = System.nanoTime() + 3_000_000_000L;
+    }
+
     private void beginAddWaypoint(double worldX, double worldY, double worldZ) {
         String worldId = currentVoxyWorldId();
-        waypointDraftActive = true;
-        pendingWaypointX = worldX;
-        pendingWaypointY = worldY;
-        pendingWaypointZ = worldZ;
-        draftColor = worldId != null ? WaypointManager.suggestedColor(worldId) : WaypointManager.palette()[0];
-        draftShared = worldId != null && WaypointManager.canShare(worldId);
-        int nextIndex = (worldId != null ? WaypointManager.forWorld(worldId).size() : 0) + 1;
-        nameInputBuffer.setLength(0);
-        nameInputBuffer.append(Component.translatable("screen.voxymap.waypoint.default_name", nextIndex).getString());
+        if (worldId == null) return;
+        openWaypointForm(WaypointForm.create(worldId, worldX, worldY, worldZ, waypointFormListener()));
     }
 
-    private void cancelWaypointDraft() {
-        waypointDraftActive = false;
-        nameInputBuffer.setLength(0);
-    }
-
-    private void confirmWaypointDraft() {
+    private void beginEditWaypoint(WaypointManager.Waypoint waypoint) {
         String worldId = currentVoxyWorldId();
-        String name = nameInputBuffer.toString().trim();
-        if (worldId != null && !name.isEmpty()) {
-            WaypointManager.Waypoint added = WaypointManager.add(
-                    worldId, name, pendingWaypointX, pendingWaypointY, pendingWaypointZ, draftColor, draftShared);
-            if (added != null) {
-                selectedWaypointId = added.id();
-                selectedObjectId = waypointObjectId(added);
-            }
-        }
-        cancelWaypointDraft();
+        if (worldId == null || blockedFromEditing(worldId, waypoint)) return;
+        openWaypointForm(WaypointForm.edit(worldId, waypoint, waypointFormListener()));
     }
 
-    private boolean handleWaypointDraftClick(double mouseX, double mouseY) {
+    private WaypointForm.Listener waypointFormListener() {
+        return new WaypointForm.Listener() {
+            @Override
+            public void saved(WaypointManager.Waypoint waypoint) {
+                selectedWaypointId = waypoint.id();
+                selectedObjectId = waypointObjectId(waypoint);
+                closeWaypointForm();
+            }
+
+            @Override
+            public void cancelled() {
+                closeWaypointForm();
+            }
+
+            @Override
+            public void teleported() {
+                closeWaypointForm();
+                onClose();
+            }
+        };
+    }
+
+    private void openWaypointForm(WaypointForm form) {
+        closeWaypointForm();
+        cancelTextInput();
+        contextMenu.close();
+        objectPanel.blurSearch();
+        form.setHint(Component.translatable("screen.voxymap.waypoint.map_hint"));
+        waypointForm = form;
+        installWaypointForm();
+    }
+
+    private void installWaypointForm() {
+        if (waypointForm == null) return;
+        for (AbstractWidget widget : waypointForm.widgets()) {
+            removeWidget(widget);
+        }
+        for (AbstractWidget widget : waypointForm.layout(minecraft.font, width, height, HUD_MARGIN + 4)) {
+            addRenderableWidget(widget);
+        }
+        setFocused(waypointForm.nameBox());
+    }
+
+    private void closeWaypointForm() {
+        pinPressPending = false;
+        if (waypointForm == null) return;
+        setFocused(null);
+        for (AbstractWidget widget : waypointForm.widgets()) {
+            removeWidget(widget);
+        }
+        waypointForm = null;
+    }
+
+    private void drawWaypointForm(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
+        if (waypointForm == null) return;
+        waypointForm.extractPanel(g, minecraft.font);
+        for (AbstractWidget widget : waypointForm.widgets()) {
+            widget.extractRenderState(g, mouseX, mouseY, delta);
+        }
+        waypointForm.extractOverlay(g, minecraft.font);
+    }
+
+    private void syncTextInput() {
+        if (minecraft == null) return;
+        if (textInputKind != null || objectPanel.searchFocused()) {
+            minecraft.textInputManager().startTextInput(this);
+        } else {
+            minecraft.textInputManager().stopTextInput(this);
+        }
+    }
+
+    private void openContextMenu(double mouseX, double mouseY) {
         String worldId = currentVoxyWorldId();
-        boolean showShareToggle = WaypointManager.canShare(worldId);
-        int boxW = Math.min(320, width - HUD_MARGIN * 2);
-        int boxX = width / 2 - boxW / 2;
-        int boxY = HUD_MARGIN + 4;
-        int swatchY = boxY + 20 + 18 + 6;
-        int swatchX = boxX + 10;
-
-        int[] palette = WaypointManager.palette();
-        for (int i = 0; i < palette.length; i++) {
-            int sx = swatchX + i * (WAYPOINT_SWATCH_SIZE + WAYPOINT_SWATCH_GAP);
-            if (mouseX >= sx && mouseX <= sx + WAYPOINT_SWATCH_SIZE && mouseY >= swatchY && mouseY <= swatchY + WAYPOINT_SWATCH_SIZE) {
-                draftColor = palette[i];
-                return true;
+        if (worldId == null) return;
+        pickSurfaceAt(mouseX, mouseY, surface -> {
+            if (surface == null) {
+                pickFailureUntilNanos = System.nanoTime() + 3_000_000_000L;
+                return;
             }
-        }
-
-        if (showShareToggle) {
-            int toggleY = swatchY + WAYPOINT_SWATCH_SIZE + 6;
-            int toggleX = boxX + 10;
-            int toggleW = boxW - 20;
-            if (mouseX >= toggleX && mouseX <= toggleX + toggleW && mouseY >= toggleY && mouseY <= toggleY + 18) {
-                draftShared = !draftShared;
-                return true;
+            int bx = surface.blockX();
+            int by = surface.blockY() + 1;
+            int bz = surface.blockZ();
+            double wx = bx + 0.5;
+            double wy = by;
+            double wz = bz + 0.5;
+            List<MapContextMenu.Item> items = new ArrayList<>();
+            items.add(new MapContextMenu.Item(Component.translatable("screen.voxymap.context.add_waypoint"), true,
+                    () -> beginAddWaypoint(wx, wy, wz)));
+            items.add(new MapContextMenu.Item(Component.translatable("screen.voxymap.context.add_temporary"), true, () -> {
+                WaypointManager.Waypoint added = TemporaryWaypoints.place(worldId, wx, wy, wz);
+                if (added != null) {
+                    selectedWaypointId = added.id();
+                    selectedObjectId = waypointObjectId(added);
+                    showTransientMessage(Component.translatable("message.voxymap.waypoint.temporary_placed", bx, by, bz));
+                }
+            }));
+            items.add(new MapContextMenu.Item(Component.translatable("screen.voxymap.context.copy"), true, () -> {
+                minecraft.keyboardHandler.setClipboard(bx + " " + by + " " + bz);
+                showTransientMessage(Component.translatable("screen.voxymap.context.copied", bx, by, bz));
+            }));
+            if (canTeleport()) {
+                items.add(new MapContextMenu.Item(Component.translatable("screen.voxymap.context.teleport"), true, () -> {
+                    minecraft.getConnection().sendCommand("tp @s " + bx + " " + by + " " + bz);
+                    onClose();
+                }));
             }
-        }
-
-        confirmWaypointDraft();
-        return true;
+            contextMenu.open(mouseX, mouseY, Component.literal(bx + " / " + by + " / " + bz), items,
+                    minecraft.font, width, height);
+        });
     }
 
-    private void drawWaypointDraftOverlay(GuiGraphicsExtractor g) {
-        if (!waypointDraftActive) {
-            return;
-        }
-        String worldId = currentVoxyWorldId();
-        boolean showShareToggle = WaypointManager.canShare(worldId);
-        int boxW = Math.min(320, width - HUD_MARGIN * 2);
-        int boxH = showShareToggle ? 98 : 76;
-        int boxX = width / 2 - boxW / 2;
-        int boxY = HUD_MARGIN + 4;
-        drawGlassPanel(g, boxX, boxY, boxW, boxH, 0xEE030914, 0xFF7DEBFF);
-        g.text(minecraft.font, Component.translatable("screen.voxymap.waypoint.add_title"), boxX + 10, boxY + 6, 0xFFE9F2FF);
-
-        String text = nameInputBuffer.toString();
-        int fieldX = boxX + 10;
-        int fieldY = boxY + 20;
-        int fieldW = boxW - 20;
-        int fieldH = 18;
-        g.fill(fieldX, fieldY, fieldX + fieldW, fieldY + fieldH, 0xAA0B1622);
-        g.fill(fieldX, fieldY, fieldX + 2, fieldY + fieldH, 0xFF7DEBFF);
-        g.text(minecraft.font, text, fieldX + 5, fieldY + 5, 0xFFFFFFFF);
-        if ((System.nanoTime() / 500_000_000L) % 2 == 0) {
-            int caretX = fieldX + 5 + minecraft.font.width(text);
-            g.fill(caretX, fieldY + 3, caretX + 1, fieldY + fieldH - 3, 0xFFFFFFFF);
-        }
-
-        int swatchY = fieldY + fieldH + 6;
-        int swatchX = fieldX;
-        int[] palette = WaypointManager.palette();
-        for (int color : palette) {
-            boolean selected = color == draftColor;
-            int outline = selected ? 0xFFFFFFFF : 0xFF0A0A12;
-            g.fill(swatchX - 1, swatchY - 1, swatchX + WAYPOINT_SWATCH_SIZE + 1, swatchY + WAYPOINT_SWATCH_SIZE + 1, outline);
-            g.fill(swatchX, swatchY, swatchX + WAYPOINT_SWATCH_SIZE, swatchY + WAYPOINT_SWATCH_SIZE, color);
-            swatchX += WAYPOINT_SWATCH_SIZE + WAYPOINT_SWATCH_GAP;
-        }
-
-        if (showShareToggle) {
-            int toggleY = swatchY + WAYPOINT_SWATCH_SIZE + 6;
-            String toggleLabel = Component.translatable(draftShared
-                    ? "screen.voxymap.waypoint.share.shared" : "screen.voxymap.waypoint.share.local").getString();
-            g.fill(fieldX, toggleY, fieldX + fieldW, toggleY + 18, 0x66102034);
-            g.fill(fieldX, toggleY, fieldX + 2, toggleY + 18, draftShared ? 0xFF55FF55 : 0xFF3BA4FF);
-            g.text(minecraft.font, toggleLabel, fieldX + 6, toggleY + 5, draftShared ? 0xFF9CFFA0 : 0xFFDFF8FF);
-        }
-
-        String hint = Component.translatable("screen.voxymap.waypoint.hint").getString();
-        g.text(minecraft.font, hint, boxX + 10, boxY + boxH - 12, 0xFF9FD8FF);
+    private boolean canTeleport() {
+        return minecraft != null && minecraft.player != null && minecraft.getConnection() != null
+                && minecraft.player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
     }
 
-    private void beginRenameWaypoint(WaypointManager.Waypoint waypoint) {
-        textInputKind = TextInputKind.WAYPOINT_RENAME;
-        renamingWaypointId = waypoint.id();
-        nameInputBuffer.setLength(0);
-        nameInputBuffer.append(waypoint.name());
+    private void addWaypointAtCursor() {
+        if (currentVoxyWorldId() == null) return;
+        pickSurfaceAt(lastZoomMouseX(), lastZoomMouseY(), surface -> {
+            if (surface != null) {
+                beginAddWaypoint(surface.blockX() + 0.5, surface.blockY() + 1.0, surface.blockZ() + 0.5);
+            } else {
+                pickFailureUntilNanos = System.nanoTime() + 3_000_000_000L;
+            }
+        });
+    }
+
+    private void moveWaypointFormTo(double mouseX, double mouseY) {
+        if (waypointForm == null) return;
+        WaypointForm form = waypointForm;
+        pickSurfaceAt(mouseX, mouseY, surface -> {
+            if (waypointForm != form) return;
+            if (surface != null) {
+                form.moveTo(surface.blockX() + 0.5, surface.blockY() + 1.0, surface.blockZ() + 0.5);
+            } else {
+                pickFailureUntilNanos = System.nanoTime() + 3_000_000_000L;
+            }
+        });
     }
 
     private void beginEditSyncAddress(String worldId) {
@@ -1462,7 +1514,6 @@ public class MapScreen extends Screen {
 
     private void cancelTextInput() {
         textInputKind = null;
-        renamingWaypointId = null;
         nameInputBuffer.setLength(0);
     }
 
@@ -1477,11 +1528,6 @@ public class MapScreen extends Screen {
         }
         if (worldId != null) {
             switch (textInputKind) {
-                case WAYPOINT_RENAME -> {
-                    if (!value.isEmpty()) {
-                        WaypointManager.rename(worldId, renamingWaypointId, value);
-                    }
-                }
                 case SYNC_ADDRESS -> WaypointSyncSettings.setAddress(worldId, value);
                 case SYNC_PASSWORD -> WaypointSyncSettings.setPassword(worldId, value);
                 case RECEIVE_CODE -> {
@@ -1499,7 +1545,6 @@ public class MapScreen extends Screen {
 
     private int textInputMaxLength() {
         return switch (textInputKind) {
-            case WAYPOINT_RENAME -> WAYPOINT_NAME_MAX_LENGTH;
             case SYNC_ADDRESS -> 128;
             case SYNC_PASSWORD -> 64;
             case RECEIVE_CODE -> 6;
@@ -1524,7 +1569,6 @@ public class MapScreen extends Screen {
             return;
         }
         String titleKey = switch (textInputKind) {
-            case WAYPOINT_RENAME -> "screen.voxymap.waypoint.rename_title";
             case SYNC_ADDRESS -> "screen.voxymap.sync.address_title";
             case SYNC_PASSWORD -> "screen.voxymap.sync.password_title";
             case RECEIVE_CODE -> "screen.voxymap.mapshare.receive_code_title";
@@ -1548,6 +1592,7 @@ public class MapScreen extends Screen {
         g.fill(fieldX, fieldY, fieldX + fieldW, fieldY + fieldH, 0xAA0B1622);
         g.fill(fieldX, fieldY, fieldX + 2, fieldY + fieldH, 0xFF7DEBFF);
         g.text(minecraft.font, text, fieldX + 5, fieldY + 5, 0xFFFFFFFF);
+        minecraft.textInputManager().setTextInputArea(fieldX, fieldY, fieldX + fieldW, fieldY + fieldH);
         if ((System.nanoTime() / 500_000_000L) % 2 == 0) {
             int caretX = fieldX + 5 + minecraft.font.width(text);
             g.fill(caretX, fieldY + 3, caretX + 1, fieldY + fieldH - 3, 0xFFFFFFFF);
@@ -2147,6 +2192,8 @@ public class MapScreen extends Screen {
             case WAYPOINT_LABELS -> drawSettingValue(g, x, y, entry,
                     Component.translatable(VoxyMapSettings.waypointLabelMode().translationKey()).getString(), 0xFFFFFFFF);
             case WAYPOINT_BEAMS -> drawToggleSetting(g, x, y, entry, VoxyMapSettings.waypointBeams());
+            case NEW_WAYPOINT_DISPLAY -> drawSettingValue(g, x, y, entry,
+                    Component.translatable(VoxyMapSettings.newWaypointDisplay().translationKey()).getString(), 0xFFFFFFFF);
             case WAYPOINT_SHAPE -> drawSettingValue(g, x, y, entry,
                     Component.translatable(VoxyMapSettings.waypointIconShape().translationKey()).getString(), 0xFFFFFFFF);
             case WAYPOINT_SIZE -> drawSettingValue(g, x, y, entry,
@@ -2555,6 +2602,12 @@ public class MapScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (contextMenu.isOpen()) {
+            contextMenu.close();
+        }
+        if (waypointForm != null && waypointForm.contains(mouseX, mouseY)) {
+            return true;
+        }
         if (objectPanel.scroll(mouseX, mouseY, scrollY)) {
             refreshObjectPanel();
             return true;
@@ -2588,6 +2641,9 @@ public class MapScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean isInside) {
+        if (contextMenu.click(event.x(), event.y())) {
+            return true;
+        }
         if (mapShareSelectionActive) {
             if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
                 return handleMapShareSelectionClick(event.x(), event.y());
@@ -2599,8 +2655,8 @@ public class MapScreen extends Screen {
             }
             return true;
         }
-        if (waypointDraftActive) {
-            return handleWaypointDraftClick(event.x(), event.y());
+        if (waypointForm != null) {
+            return handleWaypointFormClick(event, isInside);
         }
         if (textInputKind != null) {
 
@@ -2638,14 +2694,14 @@ public class MapScreen extends Screen {
                 && !isInsideSettingsButton(event.x(), event.y()) && !isInsideSettingsPanel(event.x(), event.y())
                 && !isInsideXaeroButton(event.x(), event.y())) {
 
-            rightDragging = true;
+            startRightPress(event.x(), event.y());
             return true;
         }
         if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             WaypointManager.Waypoint hit = hitTestWaypoint(event.x(), event.y());
             if (hit != null) {
-                if (hit.id().equals(selectedWaypointId) && !blockedFromEditing(currentVoxyWorldId(), hit)) {
-                    beginRenameWaypoint(hit);
+                if (hit.id().equals(selectedWaypointId)) {
+                    beginEditWaypoint(hit);
                 } else {
                     selectedWaypointId = hit.id();
                     selectedObjectId = waypointObjectId(hit);
@@ -2679,7 +2735,7 @@ public class MapScreen extends Screen {
                 if (currentVoxyWorldId() != null) {
                     pickSurfaceAt(event.x(), event.y(), surface -> {
                         if (surface != null) {
-                            beginAddWaypoint(surface.x() + 0.5, surface.y() + 1.0, surface.z() + 0.5);
+                            beginAddWaypoint(surface.blockX() + 0.5, surface.blockY() + 1.0, surface.blockZ() + 0.5);
                         } else {
                             pickFailureUntilNanos = System.nanoTime() + 3_000_000_000L;
                         }
@@ -2699,14 +2755,56 @@ public class MapScreen extends Screen {
         return super.mouseClicked(event, isInside);
     }
 
+    private boolean handleWaypointFormClick(MouseButtonEvent event, boolean isInside) {
+        if (waypointForm.contains(event.x(), event.y())) {
+            super.mouseClicked(event, isInside);
+            return true;
+        }
+        setFocused(null);
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
+            pinPressPending = true;
+            pinPressX = event.x();
+            pinPressY = event.y();
+            dragging = true;
+            moveVelocityX = 0.0;
+            moveVelocityZ = 0.0;
+        } else if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+            rightDragging = true;
+            rightPressMoved = true;
+        }
+        return true;
+    }
+
+    private void startRightPress(double mouseX, double mouseY) {
+        rightDragging = true;
+        rightPressX = mouseX;
+        rightPressY = mouseY;
+        rightPressMoved = false;
+    }
+
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
+        if (waypointForm != null) {
+            super.mouseReleased(event);
+        }
         if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             dragging = false;
+            if (pinPressPending) {
+                pinPressPending = false;
+                if (Math.hypot(event.x() - pinPressX, event.y() - pinPressY) <= CLICK_MOVE_TOLERANCE) {
+                    moveWaypointFormTo(event.x(), event.y());
+                }
+            }
             return true;
         }
         if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+            boolean click = rightDragging && !rightPressMoved
+                    && Math.hypot(event.x() - rightPressX, event.y() - rightPressY) <= CLICK_MOVE_TOLERANCE;
             rightDragging = false;
+            rightPressMoved = false;
+            if (click && waypointForm == null && textInputKind == null) {
+                openContextMenu(event.x(), event.y());
+            }
             return true;
         }
         return super.mouseReleased(event);
@@ -2735,6 +2833,9 @@ public class MapScreen extends Screen {
             return true;
         }
         if (rightDragging) {
+            if (Math.hypot(event.x() - rightPressX, event.y() - rightPressY) > CLICK_MOVE_TOLERANCE) {
+                rightPressMoved = true;
+            }
             viewYaw += deltaX * 0.01;
             viewPitch = Mth.clamp(viewPitch + deltaY * 0.006, 0.0, 1.285);
             syncWorldCamera();
@@ -2753,11 +2854,25 @@ public class MapScreen extends Screen {
             }
             return true;
         }
-        if (waypointDraftActive || textInputKind != null) {
+        if (contextMenu.keyPressed(keyCode)) {
+            return true;
+        }
+        if (waypointForm != null) {
             if (keyCode == InputConstants.KEY_ESCAPE) {
-                if (waypointDraftActive) cancelWaypointDraft(); else cancelTextInput();
+                closeWaypointForm();
+            } else if ((keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER)
+                    && !(getFocused() instanceof Button)) {
+                waypointForm.submit();
+            } else {
+                super.keyPressed(event);
+            }
+            return true;
+        }
+        if (textInputKind != null) {
+            if (keyCode == InputConstants.KEY_ESCAPE) {
+                cancelTextInput();
             } else if (keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER) {
-                if (waypointDraftActive) confirmWaypointDraft(); else confirmTextInput();
+                confirmTextInput();
             } else if (keyCode == InputConstants.KEY_BACKSPACE && nameInputBuffer.length() > 0) {
                 nameInputBuffer.deleteCharAt(nameInputBuffer.length() - 1);
             } else if (event.isPaste()) {
@@ -2789,6 +2904,10 @@ public class MapScreen extends Screen {
             beginGoto();
             return true;
         }
+        if (VoxyMapClient.isAddWaypointKey(event)) {
+            addWaypointAtCursor();
+            return true;
+        }
         if (keyCode == InputConstants.KEY_F && selectedObjectId != null && selectedObjectId.startsWith("player:")) {
             followingPlayerId = selectedObjectId.equals(followingPlayerId) ? null : selectedObjectId;
             return true;
@@ -2805,8 +2924,8 @@ public class MapScreen extends Screen {
         }
         if ((keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER)) {
             WaypointManager.Waypoint selected = selectedWaypoint();
-            if (selected != null && !blockedFromEditing(currentVoxyWorldId(), selected)) {
-                beginRenameWaypoint(selected);
+            if (selected != null) {
+                beginEditWaypoint(selected);
                 return true;
             }
         }
@@ -2835,7 +2954,11 @@ public class MapScreen extends Screen {
 
     @Override
     public boolean charTyped(CharacterEvent event) {
-        if (waypointDraftActive || textInputKind != null) {
+        if (waypointForm != null) {
+            super.charTyped(event);
+            return true;
+        }
+        if (textInputKind != null) {
             boolean allowed = event.isAllowedChatCharacter()
                     && (textInputKind != TextInputKind.RECEIVE_CODE || Character.isDigit(event.codepoint()))
                     && (textInputKind != TextInputKind.GOTO || MapGoto.allowedCharacter(event.codepoint()));
@@ -2852,7 +2975,7 @@ public class MapScreen extends Screen {
     }
 
     private int activeInputMaxLength() {
-        return waypointDraftActive ? WAYPOINT_NAME_MAX_LENGTH : textInputMaxLength();
+        return textInputMaxLength();
     }
 
     private void pasteFromClipboard() {
@@ -2895,6 +3018,8 @@ public class MapScreen extends Screen {
 
     @Override
     public void removed() {
+        closeWaypointForm();
+        contextMenu.close();
         surfacePickRequest++;
         surfacePickPending = false;
         hoverCursorPickRequest++;
@@ -2962,7 +3087,7 @@ public class MapScreen extends Screen {
                                      int labelX, int labelY, int labelW, int labelH) {
     }
 
-    private enum TextInputKind { WAYPOINT_RENAME, SYNC_ADDRESS, SYNC_PASSWORD, RECEIVE_CODE, GOTO }
+    private enum TextInputKind { SYNC_ADDRESS, SYNC_PASSWORD, RECEIVE_CODE, GOTO }
 
     private record PlayerMarker(String name, double x, double y, double z, boolean local, boolean remote,
                                 UUID uuid, float yawDegrees) {

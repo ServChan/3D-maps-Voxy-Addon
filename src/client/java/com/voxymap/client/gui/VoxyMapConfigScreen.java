@@ -151,6 +151,9 @@ public final class VoxyMapConfigScreen extends Screen {
                     () -> Component.translatable(VoxyMapSettings.waypointLabelMode().translationKey()),
                     VoxyMapSettings::cycleWaypointLabelMode);
             case WAYPOINT_BEAMS -> toggle(controlWidth, VoxyMapSettings::waypointBeams, VoxyMapSettings::toggleWaypointBeams);
+            case NEW_WAYPOINT_DISPLAY -> cycle(controlWidth,
+                    () -> Component.translatable(VoxyMapSettings.newWaypointDisplay().translationKey()),
+                    VoxyMapSettings::cycleNewWaypointDisplay);
             case WAYPOINT_SHAPE -> cycle(controlWidth,
                     () -> Component.translatable(VoxyMapSettings.waypointIconShape().translationKey()),
                     VoxyMapSettings::cycleWaypointIconShape);

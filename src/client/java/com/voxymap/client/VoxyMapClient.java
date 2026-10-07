@@ -26,6 +26,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,6 +118,10 @@ public class VoxyMapClient implements ClientModInitializer {
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> AtomicPropertiesWriter.flush());
 
         LOGGER.info("[VoxyMap] Loaded. Press M to open the map.");
+    }
+
+    public static boolean isAddWaypointKey(KeyEvent event) {
+        return addWaypointKey != null && addWaypointKey.matches(event);
     }
 
     private static void watchHudHook(Minecraft client) {

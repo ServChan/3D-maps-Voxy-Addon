@@ -3,6 +3,7 @@ package com.voxymap.client.gui;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.voxymap.client.map.DimensionLinks;
 import com.voxymap.client.map.WaypointChatShare;
+import com.voxymap.client.map.WaypointDisplay;
 import com.voxymap.client.map.WaypointLabels;
 import com.voxymap.client.map.WaypointManager;
 import com.voxymap.client.map.WaypointPrefs;
@@ -148,8 +149,9 @@ public final class WaypointListScreen extends Screen {
                     .bounds(buttonsLeft + buttonW + 4, 0, buttonW, CONTROL_HEIGHT)
                     .tooltip(Tooltip.create(Component.translatable("screen.voxymap.waypoints.share.tooltip"))).build());
             Button visibility = addRenderableWidget(Button.builder(visibilityLabel(listed.original()),
-                            pressed -> toggleVisibility(listed, pressed))
-                    .bounds(buttonsLeft + (buttonW + 4) * 2, 0, buttonW, CONTROL_HEIGHT).build());
+                            pressed -> cycleVisibility(listed, pressed))
+                    .bounds(buttonsLeft + (buttonW + 4) * 2, 0, buttonW, CONTROL_HEIGHT)
+                    .tooltip(visibilityTooltip(listed.original())).build());
             Button delete = addRenderableWidget(Button.builder(deleteLabel(listed.original()), pressed -> delete(listed))
                     .bounds(buttonsLeft + (buttonW + 4) * 3, 0, buttonW, CONTROL_HEIGHT).build());
             edit.active = editable;
@@ -206,14 +208,22 @@ public final class WaypointListScreen extends Screen {
     }
 
     private Component visibilityLabel(WaypointManager.Waypoint waypoint) {
-        return Component.translatable(WaypointPrefs.hidden(waypoint.id())
-                ? "screen.voxymap.waypoints.show" : "screen.voxymap.waypoints.hide");
+        return Component.translatable(WaypointPrefs.display(waypoint.id()).shortTranslationKey());
     }
 
-    private void toggleVisibility(Listed listed, Button button) {
+    private Tooltip visibilityTooltip(WaypointManager.Waypoint waypoint) {
+        WaypointDisplay display = WaypointPrefs.display(waypoint.id());
+        return Tooltip.create(Component.translatable("screen.voxymap.waypoint.display",
+                        Component.translatable(display.translationKey()))
+                .append("\n").append(Component.translatable(display.tooltipTranslationKey()))
+                .append("\n").append(Component.translatable("screen.voxymap.waypoints.display_cycle")));
+    }
+
+    private void cycleVisibility(Listed listed, Button button) {
         String id = listed.original().id();
-        WaypointPrefs.setHidden(id, !WaypointPrefs.hidden(id));
+        WaypointPrefs.setDisplay(id, WaypointPrefs.display(id).next());
         button.setMessage(visibilityLabel(listed.original()));
+        button.setTooltip(visibilityTooltip(listed.original()));
     }
 
     private void delete(Listed listed) {

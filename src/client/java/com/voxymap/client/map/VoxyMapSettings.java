@@ -46,6 +46,7 @@ public final class VoxyMapSettings {
     private static boolean waypointsEnabled = true;
     private static WaypointLabelMode waypointLabelMode = WaypointLabelMode.AIMING;
     private static boolean waypointBeams = true;
+    private static WaypointDisplay newWaypointDisplay = WaypointDisplay.EVERYWHERE;
     private static WaypointIconShape waypointIconShape = WaypointIconShape.SQUARE;
     private static WaypointIconSize waypointIconSize = WaypointIconSize.MEDIUM;
     private static WaypointLabelStyle waypointLabelStyle = WaypointLabelStyle.BOX;
@@ -116,6 +117,8 @@ public final class VoxyMapSettings {
         waypointLabelMode = parseEnum(WaypointLabelMode.class, properties.getProperty("waypointLabelMode"),
                 WaypointLabelMode.AIMING);
         waypointBeams = readBoolean(properties.getProperty("waypointBeams"), waypointBeams);
+        newWaypointDisplay = parseEnum(WaypointDisplay.class, properties.getProperty("newWaypointDisplay"),
+                WaypointDisplay.EVERYWHERE);
         waypointIconShape = parseEnum(WaypointIconShape.class, properties.getProperty("waypointIconShape"),
                 WaypointIconShape.SQUARE);
         waypointIconSize = parseEnum(WaypointIconSize.class, properties.getProperty("waypointIconSize"),
@@ -204,6 +207,7 @@ public final class VoxyMapSettings {
         properties.setProperty("waypointsEnabled", Boolean.toString(waypointsEnabled));
         properties.setProperty("waypointLabelMode", waypointLabelMode.name().toLowerCase(Locale.ROOT));
         properties.setProperty("waypointBeams", Boolean.toString(waypointBeams));
+        properties.setProperty("newWaypointDisplay", newWaypointDisplay.key());
         properties.setProperty("waypointIconShape", waypointIconShape.name().toLowerCase(Locale.ROOT));
         properties.setProperty("waypointIconSize", waypointIconSize.name().toLowerCase(Locale.ROOT));
         properties.setProperty("waypointLabelStyle", waypointLabelStyle.name().toLowerCase(Locale.ROOT));
@@ -337,6 +341,17 @@ public final class VoxyMapSettings {
     public static void toggleWaypointBeams() {
         load();
         waypointBeams = !waypointBeams;
+        save();
+    }
+
+    public static WaypointDisplay newWaypointDisplay() {
+        load();
+        return newWaypointDisplay;
+    }
+
+    public static void cycleNewWaypointDisplay() {
+        load();
+        newWaypointDisplay = newWaypointDisplay.next();
         save();
     }
 

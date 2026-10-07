@@ -125,7 +125,7 @@ public final class FlatMapRenderer {
         if (worldId == null || !VoxyMapSettings.waypointsEnabled()) {
             return;
         }
-        for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId)) {
+        for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId, WaypointDisplay.Surface.MAP)) {
             double sx = view.screenX(waypoint.x());
             double sy = view.screenY(waypoint.z());
             if (!view.contains(sx, sy)) {

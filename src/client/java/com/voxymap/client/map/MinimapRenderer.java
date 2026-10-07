@@ -572,9 +572,11 @@ public final class MinimapRenderer {
         String worldId = currentWorldId(minecraft);
         if (worldId != null && VoxyMapSettings.waypointsEnabled()) {
             for (DimensionLinks.Foreign foreign : DimensionLinks.foreignWaypoints(minecraft)) {
-                drawWaypoint(g, minecraft, view, player, foreign.local(), WaypointIcons.OTHER_DIMENSION_ALPHA);
+                if (WaypointPrefs.shownOn(foreign.original().id(), WaypointDisplay.Surface.MINIMAP)) {
+                    drawWaypoint(g, minecraft, view, player, foreign.local(), WaypointIcons.OTHER_DIMENSION_ALPHA);
+                }
             }
-            for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId)) {
+            for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId, WaypointDisplay.Surface.MINIMAP)) {
                 drawWaypoint(g, minecraft, view, player, waypoint, 0xFF);
             }
         }

@@ -7,6 +7,7 @@ import com.voxymap.client.map.FlatMapRenderer;
 import com.voxymap.client.map.NetherRoofController;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapSettings;
+import com.voxymap.client.map.WaypointDisplay;
 import com.voxymap.client.map.WaypointManager;
 import com.voxymap.client.map.WindowMapRenderer;
 import me.cortex.voxy.commonImpl.WorldIdentifier;
@@ -188,7 +189,7 @@ public final class WindowMapScreen extends Screen {
         g.enableScissor(view.left(), view.top(), view.left() + view.width(), view.top() + view.height());
         String worldId = minecraft.level == null ? null : worldId();
         if (worldId != null && VoxyMapSettings.waypointsEnabled()) {
-            for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId)) {
+            for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId, WaypointDisplay.Surface.MAP)) {
                 int[] point = project(view, waypoint.x(), waypoint.y(), waypoint.z());
                 if (point != null) {
                     drawMarker(g, point[0], point[1], waypoint.color(), waypoint.name());
