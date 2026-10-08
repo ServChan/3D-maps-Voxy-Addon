@@ -62,7 +62,7 @@ public class VoxyMapClient implements ClientModInitializer {
         minimapZoomOutKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.voxymap.minimap_zoom_out", InputConstants.Type.KEYBOARD, InputConstants.KEY_MINUS, CATEGORY));
         addWaypointKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-                "key.voxymap.add_waypoint", InputConstants.Type.KEYBOARD, InputConstants.KEY_B, CATEGORY));
+                "key.voxymap.add_waypoint", InputConstants.Type.KEYBOARD, InputConstants.KEY_N, CATEGORY));
         waypointListKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.voxymap.waypoint_list", InputConstants.Type.KEYBOARD, InputConstants.KEY_U, CATEGORY));
         temporaryWaypointKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
