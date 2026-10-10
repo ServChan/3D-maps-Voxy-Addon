@@ -65,7 +65,7 @@ public final class WindowMapRenderer {
     }
 
     public static Status status() {
-        if (failed || GET_OR_CREATE == null) {
+        if (failed || GET_OR_CREATE == null || !GraphicsBackend.openGl()) {
             return Status.FAILED;
         }
         if (shaderPackInUse()) {
@@ -172,8 +172,7 @@ public final class WindowMapRenderer {
     private static void fail(Throwable exception) {
         if (!failed) {
             failed = true;
-            VoxyMapClient.LOGGER.warn("[VoxyMap] 3D map in the Spatial GUI window is off: Voxy could not render a second view.",
-                    exception);
+            VoxyMapClient.LOGGER.warn("Could not render a second Voxy view; the 3D map in the Spatial GUI window is off", exception);
         }
     }
 
@@ -184,7 +183,7 @@ public final class WindowMapRenderer {
             method.setAccessible(true);
             return method;
         } catch (ReflectiveOperationException | RuntimeException | LinkageError exception) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Voxy has no extra viewports; the window map stays flat.", exception);
+            VoxyMapClient.LOGGER.warn("Could not find Voxy's extra viewports; the window map stays flat", exception);
             return null;
         }
     }

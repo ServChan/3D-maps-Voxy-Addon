@@ -98,10 +98,10 @@ public final class RemotePlayerMarkers {
             Class<?> provider = Class.forName(PROVIDER_CLASS, true, RemotePlayerMarkers.class.getClassLoader());
             return (Source) provider.getDeclaredConstructor().newInstance();
         } catch (ClassNotFoundException absent) {
-            VoxyMapClient.LOGGER.info("[VoxyMap] Built without VanillaSquad web-map player markers.");
+            VoxyMapClient.LOGGER.info("This build has no VanillaSquad web map player markers");
             return null;
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not start VanillaSquad web-map player markers; they stay off.", exception);
+            VoxyMapClient.LOGGER.warn("Could not start VanillaSquad web map player markers; they stay off", exception);
             return null;
         }
     }

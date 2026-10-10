@@ -76,7 +76,7 @@ public final class WaypointSyncSettings {
         if (properties == null) {
             properties = readProperties(BACKUP_PATH);
             if (properties != null) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Loaded sync settings from backup after the primary file failed.");
+                VoxyMapClient.LOGGER.warn("Loaded sync settings from backup {}", BACKUP_PATH);
             }
         }
         if (properties == null) properties = new Properties();
@@ -118,7 +118,7 @@ public final class WaypointSyncSettings {
             return properties;
         } catch (IOException | IllegalArgumentException exception) {
             if (logFailure) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read sync settings from {}", path, exception);
+                VoxyMapClient.LOGGER.warn("Could not read sync settings from {}", path, exception);
             }
             return null;
         }

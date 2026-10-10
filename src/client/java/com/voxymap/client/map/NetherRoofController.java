@@ -32,7 +32,8 @@ public final class NetherRoofController {
         }
 
         Level level = minecraft.level;
-        boolean isNether = NETHER.equals(level.dimension().identifier().toString());
+        boolean isNether = NETHER.equals(level.dimension().identifier().toString())
+                && ServerRules.caveMapsAllowed(true);
 
         float netherRoofCutoff = isNether
                 ? NetherRoofPolicy.cutoff(

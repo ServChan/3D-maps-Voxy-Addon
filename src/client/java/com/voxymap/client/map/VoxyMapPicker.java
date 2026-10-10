@@ -1,5 +1,6 @@
 package com.voxymap.client.map;
 
+import com.voxymap.client.ModLog;
 import com.voxymap.client.VoxyMapClient;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
@@ -12,6 +13,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class VoxyMapPicker {
+    private static final java.util.Set<String> REPORTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final ExecutorService PICKER_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "VoxyMap surface picker");
         thread.setDaemon(true);
@@ -47,7 +49,9 @@ public final class VoxyMapPicker {
                     hit.blockZ(), hit.face());
         } catch (RuntimeException | LinkageError exception) {
 
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not pick the Voxy surface under the cursor.", exception);
+            if (REPORTED.add(ModLog.describe(exception))) {
+                VoxyMapClient.LOGGER.warn("Could not pick the Voxy surface under the cursor", exception);
+            }
             return null;
         }
     }

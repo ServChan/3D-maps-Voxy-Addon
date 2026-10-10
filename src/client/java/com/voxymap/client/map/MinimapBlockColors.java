@@ -159,7 +159,7 @@ final class MinimapBlockColors {
     private static void disable(Throwable cause) {
         if (!disabled) {
             disabled = true;
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Texture colours for the minimap are unavailable, using map colours", cause);
+            VoxyMapClient.LOGGER.warn("Could not read texture colours for the minimap; using map colours", cause);
         }
     }
 }

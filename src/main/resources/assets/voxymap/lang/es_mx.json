@@ -291,6 +291,7 @@
   "screen.voxymap.diagnostics.ok": "Todas las integraciones listas",
   "screen.voxymap.diagnostics.shader_unsupported": "Shader de Voxy incompatible",
   "screen.voxymap.diagnostics.ore_mask_unsupported": "Máscara de minerales no disponible",
+  "screen.voxymap.diagnostics.vulkan": "Vulkan: sin máscara de minerales",
   "screen.voxymap.settings.group.general": "General",
   "screen.voxymap.settings.group.layers": "Capas del mapa",
   "screen.voxymap.settings.group.minimap": "Minimapa",

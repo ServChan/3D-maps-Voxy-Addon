@@ -146,7 +146,7 @@ public final class FlatMapRenderer {
     private static void drawPlayers(GuiGraphicsExtractor g, Minecraft minecraft, View view, Player self) {
         boolean heads = MinimapHeads.shown(minecraft);
         for (Player other : minecraft.level.players()) {
-            if (other == self) {
+            if (other == self || !ServerRules.radarAllowed()) {
                 continue;
             }
             double sx = view.screenX(other.getX());

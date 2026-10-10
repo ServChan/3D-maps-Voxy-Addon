@@ -33,7 +33,7 @@ public final class WaypointBeaconRenderer {
 
             if (!warnedOnce) {
                 warnedOnce = true;
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Failed to render waypoint beacons in the world", exception);
+                VoxyMapClient.LOGGER.warn("Could not draw waypoint beacons in the world", exception);
             }
         }
     }

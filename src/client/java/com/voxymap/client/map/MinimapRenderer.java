@@ -132,7 +132,7 @@ public final class MinimapRenderer {
 
     public static void extract(GuiGraphicsExtractor g, Minecraft minecraft) {
         hudHookFired = true;
-        if (!VoxyMapSettings.minimapEnabled() || minecraft.level == null || minecraft.player == null
+        if (!VoxyMapSettings.minimapEnabled() || !ServerRules.minimapAllowed() || minecraft.level == null || minecraft.player == null
                 || VoxyMapCameraController.isActive() || minecraft.gui.hud.isHidden() || hiddenByScreen(minecraft)) {
             return;
         }
@@ -173,11 +173,13 @@ public final class MinimapRenderer {
         MinimapTileCache.ScanMode autoMode = MinimapTileCache.scanMode(level.dimensionType().hasCeiling(), playerY,
                 level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                         (int) Math.floor(player.getX()), (int) Math.floor(player.getZ())));
-        MinimapTileCache.ScanMode mode = switch (VoxyMapSettings.caveMode()) {
+        MinimapTileCache.ScanMode wantedMode = switch (VoxyMapSettings.caveMode()) {
             case AUTO -> autoMode;
             case OFF -> level.dimensionType().hasCeiling() ? autoMode : MinimapTileCache.ScanMode.SURFACE;
             case ALWAYS -> MinimapTileCache.ScanMode.CAVE;
         };
+        MinimapTileCache.ScanMode mode = ServerRules.caveMapsAllowed(dimension.equals(Level.NETHER))
+                ? wantedMode : MinimapTileCache.ScanMode.SURFACE;
         TileLook look = new TileLook(VoxyMapSettings.minimapColors(), VoxyMapSettings.mapOverlays(),
                 VoxyMapSettings.overlayShown(MapOverlay.SLIME_CHUNKS) ? MinimapOverlays.slimeSeed(level) : null);
         boolean changedColors = !look.equals(lastLook);
@@ -527,7 +529,8 @@ public final class MinimapRenderer {
         Player player = minecraft.player;
         boolean heads = MinimapHeads.shown(minecraft);
 
-        List<MobMarkerCache.MobSnapshot> mobs = MobMarkerCache.snapshot();
+        boolean radar = ServerRules.radarAllowed();
+        List<MobMarkerCache.MobSnapshot> mobs = radar ? MobMarkerCache.snapshot() : List.of();
         for (RadarCategory category : RadarCategory.MARKER_DRAW_ORDER) {
             if (!VoxyMapSettings.radarShows(category)) continue;
             int radius = category == RadarCategory.ITEMS ? 0 : MOB_MARKER_RADIUS;
@@ -553,7 +556,7 @@ public final class MinimapRenderer {
             }
         }
 
-        boolean showPlayers = VoxyMapSettings.radarShows(RadarCategory.PLAYERS);
+        boolean showPlayers = radar && VoxyMapSettings.radarShows(RadarCategory.PLAYERS);
         for (Player other : minecraft.level.players()) {
             if (other == player || !showPlayers) continue;
             double dx = other.getX() - player.getX();
@@ -892,6 +895,10 @@ public final class MinimapRenderer {
     }
 
     public static String currentWorldId(Minecraft minecraft) {
+        return WaypointWorlds.effective(currentVoxyWorldId(minecraft));
+    }
+
+    public static String currentVoxyWorldId(Minecraft minecraft) {
         if (minecraft.level == null) return null;
         WorldIdentifier identifier = WorldIdentifier.of(minecraft.level);
         return identifier == null ? null : identifier.getWorldId();

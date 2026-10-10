@@ -274,7 +274,7 @@ public final class VoxyMapConfigScreen extends Screen {
             return null;
         }
         WorldIdentifier identifier = WorldIdentifier.of(minecraft.level);
-        return identifier == null ? null : identifier.getWorldId();
+        return identifier == null ? null : com.voxymap.client.map.WaypointWorlds.effective(identifier.getWorldId());
     }
 
     private static Component screenshotLabel() {

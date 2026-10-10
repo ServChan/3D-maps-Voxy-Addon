@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.voxymap.client.ModLog;
 import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.integration.RemotePlayerMarkers;
 import com.voxymap.client.integration.RemotePlayerMarkers.Observer;
@@ -44,6 +45,7 @@ public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.So
     private static final Map<String, Long> LAST_FETCH_NANOS_BY_MAP = new ConcurrentHashMap<>();
     private static final Map<String, AtomicBoolean> FETCHING_BY_MAP = new ConcurrentHashMap<>();
     private static final Map<String, Long> FETCHED_GENERATION_BY_MAP = new ConcurrentHashMap<>();
+    private static final java.util.Set<String> REPORTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static volatile SelectionContext selectionContext;
     private static volatile String activeMapId = "build";
     private static volatile boolean autoResolved;
@@ -122,14 +124,20 @@ public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.So
                             return;
                         }
                         if (throwable != null) {
-                            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not fetch VanillaSquad player positions for {}: {}", mapId, throwable.toString());
+                            if (REPORTED.add(mapId + " " + ModLog.describe(throwable))) {
+                                VoxyMapClient.LOGGER.warn("Could not fetch VanillaSquad player positions for {}", mapId, throwable);
+                            }
                         } else if (response.statusCode() == 200) {
                             PLAYERS_BY_MAP.put(mapId, parse(response.body()));
                         } else {
-                            VoxyMapClient.LOGGER.warn("[VoxyMap] VanillaSquad player endpoint returned HTTP {} for {}.", response.statusCode(), mapId);
+                            if (REPORTED.add(mapId + " HTTP " + response.statusCode())) {
+                                VoxyMapClient.LOGGER.warn("Could not fetch VanillaSquad player positions for {}; the server answered HTTP {}", mapId, response.statusCode());
+                            }
                         }
                     } catch (RuntimeException exception) {
-                        VoxyMapClient.LOGGER.warn("[VoxyMap] Could not parse VanillaSquad player positions for {}.", mapId, exception);
+                        if (REPORTED.add(mapId + " " + ModLog.describe(exception))) {
+                            VoxyMapClient.LOGGER.warn("Could not parse VanillaSquad player positions for {}", mapId, exception);
+                        }
                     } finally {
                         if (generation == worldGeneration) {
                             FETCHED_GENERATION_BY_MAP.put(mapId, generation);

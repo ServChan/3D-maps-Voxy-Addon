@@ -131,7 +131,7 @@ public final class WebMapTiles {
             return new Result(key, requestGeneration, Outcome.FAILED, null);
         }
         if (throwable != null) {
-            logFailure(throwable.toString());
+            logFailure("Could not download a VanillaSquad web map tile", throwable);
             return new Result(key, requestGeneration, Outcome.FAILED, null);
         }
         int status = response.statusCode();
@@ -139,22 +139,22 @@ public final class WebMapTiles {
             return new Result(key, requestGeneration, Outcome.MISSING, null);
         }
         if (status != 200) {
-            logFailure("HTTP " + status);
+            logFailure("Could not download a VanillaSquad web map tile; the server answered HTTP {}", status);
             return new Result(key, requestGeneration, Outcome.FAILED, null);
         }
         try {
             return new Result(key, requestGeneration, Outcome.READY,
                     NativeImage.read(new ByteArrayInputStream(response.body())));
         } catch (IOException | RuntimeException exception) {
-            logFailure(exception.toString());
+            logFailure("Could not decode a VanillaSquad web map tile", exception);
             return new Result(key, requestGeneration, Outcome.MISSING, null);
         }
     }
 
-    private static void logFailure(String detail) {
+    private static void logFailure(String message, Object... args) {
         if (!failureLogged) {
             failureLogged = true;
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not download a VanillaSquad web map tile: {}", detail);
+            VoxyMapClient.LOGGER.warn(message, args);
         }
     }
 

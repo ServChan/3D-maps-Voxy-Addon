@@ -127,7 +127,7 @@ public final class LitematicaPlusBridge {
     private static void logFailure(Throwable exception) {
         if (!failureLogged) {
             failureLogged = true;
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Litematica Plus integration call failed: {}", exception.toString());
+            VoxyMapClient.LOGGER.warn("Could not call the Litematica Plus map API", exception);
         }
     }
 
@@ -140,8 +140,7 @@ public final class LitematicaPlusBridge {
             return new Accessor(api.getMethod("placements"), api.getMethod("select", String.class),
                     api.getMethod("openEditor", String.class));
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Litematica Plus is installed but its map API is missing: {}",
-                    exception.toString());
+            VoxyMapClient.LOGGER.warn("Could not find the Litematica Plus map API; the integration is off", exception);
             return null;
         }
     }

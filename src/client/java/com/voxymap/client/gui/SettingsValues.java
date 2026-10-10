@@ -1,5 +1,6 @@
 package com.voxymap.client.gui;
 
+import com.voxymap.client.map.GraphicsBackend;
 import com.voxymap.client.map.MapOverlay;
 import com.voxymap.client.map.MinimapOverlays;
 import com.voxymap.client.map.OreMaskController;
@@ -30,6 +31,9 @@ final class SettingsValues {
     }
 
     static String diagnosticsKey() {
+        if (!GraphicsBackend.openGl()) {
+            return "screen.voxymap.diagnostics.vulkan";
+        }
         if (!VoxyShaderPatcher.isSupported()) {
             return "screen.voxymap.diagnostics.shader_unsupported";
         }

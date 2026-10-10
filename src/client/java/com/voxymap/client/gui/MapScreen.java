@@ -23,10 +23,12 @@ import com.voxymap.client.map.VoxyMapGuiRenderer;
 import com.voxymap.client.map.VoxyMapPicker;
 import com.voxymap.client.map.VoxyMapSettings;
 import com.voxymap.client.map.MapShareClient;
+import com.voxymap.client.map.ServerRules;
 import com.voxymap.client.map.TemporaryWaypoints;
 import com.voxymap.client.map.WaypointDisplay;
 import com.voxymap.client.map.WaypointManager;
 import com.voxymap.client.map.WaypointSyncSettings;
+import com.voxymap.client.map.WaypointWorlds;
 import me.cortex.voxy.commonImpl.WorldIdentifier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -214,7 +216,7 @@ public class MapScreen extends Screen {
         syncWorldCamera();
 
         if (!openLogged) {
-            VoxyMapClient.LOGGER.info("[VoxyMap] Map opened.");
+            VoxyMapClient.LOGGER.debug("Map opened");
             openLogged = true;
         }
     }
@@ -380,7 +382,7 @@ public class MapScreen extends Screen {
             surfacePickPending = false;
             if (!expectedWorldId.equals(currentVoxyWorldId())) return;
             if (throwable != null) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Asynchronous surface pick failed.", throwable);
+                VoxyMapClient.LOGGER.warn("Could not pick the map surface under the cursor", throwable);
                 resultConsumer.accept(null);
             } else {
                 resultConsumer.accept(hit);
@@ -584,7 +586,7 @@ public class MapScreen extends Screen {
     }
 
     private void activateSetting(SettingsCatalog.Entry entry, double mouseX) {
-        String worldId = currentVoxyWorldId();
+        String worldId = currentWaypointWorldId();
         switch (entry) {
             case PAUSE -> VoxyMapSettings.togglePauseSingleplayer();
             case SPEED -> VoxyMapSettings.changeCameraSpeed(mouseX < settingsPanelX + settingsPanelW / 2.0 ? -0.25 : 0.25);
@@ -876,7 +878,7 @@ public class MapScreen extends Screen {
                         marker.local ? 0xFF55D8FF : marker.remote ? 0xFFFFC94D : 0xFFFF55CC, true, false));
             }
         }
-        String worldId = currentVoxyWorldId();
+        String worldId = currentWaypointWorldId();
         if (worldId != null) {
             for (WaypointManager.Waypoint waypoint : WaypointManager.forWorld(worldId)) {
                 long distance = minecraft != null && minecraft.player != null
@@ -1091,7 +1093,11 @@ public class MapScreen extends Screen {
         List<PlayerMarker> snapshot = new ArrayList<>();
         Set<String> knownUuids = new HashSet<>();
         Set<String> knownNames = new HashSet<>();
+        boolean radar = ServerRules.radarAllowed();
         for (Player player : minecraft.level.players()) {
+            if (!radar && player != minecraft.player) {
+                continue;
+            }
             knownUuids.add(RemotePlayerMarkers.normalizeUuid(player.getUUID().toString()));
             knownNames.add(player.getName().getString().toLowerCase(java.util.Locale.ROOT));
             snapshot.add(new PlayerMarker(
@@ -1183,7 +1189,7 @@ public class MapScreen extends Screen {
         if (!VoxyMapCameraController.isActive() || !VoxyMapSettings.waypointsEnabled()) {
             return;
         }
-        String worldId = currentVoxyWorldId();
+        String worldId = currentWaypointWorldId();
         if (worldId == null) {
             return;
         }
@@ -1266,14 +1272,14 @@ public class MapScreen extends Screen {
     }
 
     private WaypointManager.Waypoint selectedWaypoint() {
-        String worldId = currentVoxyWorldId();
+        String worldId = currentWaypointWorldId();
         if (worldId == null || selectedWaypointId == null) return null;
         return WaypointManager.forWorld(worldId).stream()
                 .filter(waypoint -> waypoint.id().equals(selectedWaypointId)).findFirst().orElse(null);
     }
 
     private void deleteSelectedWaypoint() {
-        String worldId = currentVoxyWorldId();
+        String worldId = currentWaypointWorldId();
         WaypointManager.Waypoint selected = selectedWaypoint();
         if (worldId == null || selected == null || blockedFromEditing(worldId, selected)) return;
         deletedWaypoint = selected;
@@ -1320,13 +1326,13 @@ public class MapScreen extends Screen {
     }
 
     private void beginAddWaypoint(double worldX, double worldY, double worldZ) {
-        String worldId = currentVoxyWorldId();
+        String worldId = currentWaypointWorldId();
         if (worldId == null) return;
         openWaypointForm(WaypointForm.create(worldId, worldX, worldY, worldZ, waypointFormListener()));
     }
 
     private void beginEditWaypoint(WaypointManager.Waypoint waypoint) {
-        String worldId = currentVoxyWorldId();
+        String worldId = currentWaypointWorldId();
         if (worldId == null || blockedFromEditing(worldId, waypoint)) return;
         openWaypointForm(WaypointForm.edit(worldId, waypoint, waypointFormListener()));
     }
@@ -1403,7 +1409,7 @@ public class MapScreen extends Screen {
     }
 
     private void openContextMenu(double mouseX, double mouseY) {
-        String worldId = currentVoxyWorldId();
+        String worldId = currentWaypointWorldId();
         if (worldId == null) return;
         pickSurfaceAt(mouseX, mouseY, surface -> {
             if (surface == null) {
@@ -1448,7 +1454,7 @@ public class MapScreen extends Screen {
     }
 
     private void addWaypointAtCursor() {
-        if (currentVoxyWorldId() == null) return;
+        if (currentWaypointWorldId() == null) return;
         pickSurfaceAt(lastZoomMouseX(), lastZoomMouseY(), surface -> {
             if (surface != null) {
                 beginAddWaypoint(surface.blockX() + 0.5, surface.blockY() + 1.0, surface.blockZ() + 0.5);
@@ -1518,7 +1524,7 @@ public class MapScreen extends Screen {
     }
 
     private void confirmTextInput() {
-        String worldId = currentVoxyWorldId();
+        String worldId = currentWaypointWorldId();
         String value = nameInputBuffer.toString().trim();
         if (textInputKind == TextInputKind.GOTO) {
             if (applyGoto(value)) {
@@ -2097,7 +2103,7 @@ public class MapScreen extends Screen {
     }
 
     private void drawSettingsPanel(GuiGraphicsExtractor g, int footerTop) {
-        String worldId = currentVoxyWorldId();
+        String worldId = currentWaypointWorldId();
         WaypointManager.SyncStatus syncStatus = worldId != null
                 ? WaypointManager.syncStatus(worldId) : WaypointManager.SyncStatus.DISABLED;
         String syncErrorDetail = syncStatus == WaypointManager.SyncStatus.ERROR
@@ -2348,6 +2354,10 @@ public class MapScreen extends Screen {
         int valueW = Math.max(62, minecraft.font.width(label) + 14);
         int valueX = settingsPanelX + settingsPanelW - valueW - 14;
         drawValueBox(g, valueX, y + 3, valueW, 16, label, color);
+    }
+
+    private String currentWaypointWorldId() {
+        return WaypointWorlds.effective(currentVoxyWorldId());
     }
 
     private String currentVoxyWorldId() {
@@ -2732,7 +2742,7 @@ public class MapScreen extends Screen {
             lastLeftPressY = event.y();
             if (isDoubleClick) {
                 lastLeftPressNanos = 0L;
-                if (currentVoxyWorldId() != null) {
+                if (currentWaypointWorldId() != null) {
                     pickSurfaceAt(event.x(), event.y(), surface -> {
                         if (surface != null) {
                             beginAddWaypoint(surface.blockX() + 0.5, surface.blockY() + 1.0, surface.blockZ() + 0.5);
@@ -3027,7 +3037,7 @@ public class MapScreen extends Screen {
         hoverCursorHit = null;
         closeMapView();
         if (openLogged) {
-            VoxyMapClient.LOGGER.info("[VoxyMap] Map closed.");
+            VoxyMapClient.LOGGER.debug("Map closed");
             openLogged = false;
         }
         super.removed();

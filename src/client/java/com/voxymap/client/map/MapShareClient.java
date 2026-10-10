@@ -1,5 +1,6 @@
 package com.voxymap.client.map;
 
+import com.voxymap.client.ModLog;
 import com.voxymap.client.VoxyMapClient;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.commonImpl.WorldIdentifier;
@@ -35,6 +36,7 @@ import java.util.zip.GZIPOutputStream;
 
 public final class MapShareClient {
     private static final int MAGIC = 0x564D4150;
+    private static final java.util.Set<String> REPORTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final byte PROTOCOL_VERSION = 4;
     private static final int FIRST_VERSION_WITH_END_MARKER = 4;
     private static final int END_OF_SECTIONS = Integer.MIN_VALUE;
@@ -204,7 +206,7 @@ public final class MapShareClient {
                 if (isCurrentShare(code)) {
                     shareError = exception.getMessage();
                     shareStatus = ShareStatus.ERROR;
-                    VoxyMapClient.LOGGER.warn("[VoxyMap] Map share {} cannot start: {}", code, exception.getMessage());
+                    VoxyMapClient.LOGGER.warn("Could not start map share {}", code, exception);
                 }
                 break;
             } catch (IOException exception) {
@@ -213,7 +215,9 @@ public final class MapShareClient {
                 }
                 shareError = exception.toString();
                 shareStatus = ShareStatus.ERROR;
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Map share attempt failed for code {}: {}", code, exception.toString());
+                if (REPORTED.add(code + " " + ModLog.describe(exception))) {
+                    VoxyMapClient.LOGGER.warn("Could not send map share {}; retrying", code, exception);
+                }
                 sleepQuietly(SHARE_RETRY_DELAY_MILLIS);
             } catch (RuntimeException exception) {
                 if (!isCurrentShare(code)) {
@@ -221,7 +225,9 @@ public final class MapShareClient {
                 }
                 shareError = exception.toString();
                 shareStatus = ShareStatus.ERROR;
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Map share attempt failed with unexpected error for code {}: {}", code, exception.toString());
+                if (REPORTED.add(code + " " + ModLog.describe(exception))) {
+                    VoxyMapClient.LOGGER.warn("Could not send map share {}; retrying", code, exception);
+                }
                 sleepQuietly(SHARE_RETRY_DELAY_MILLIS);
             }
         }
@@ -362,7 +368,7 @@ public final class MapShareClient {
         }
 
         long sectionCount = VoxySectionBridge.exportedSectionCount(worldId, bounds);
-        VoxyMapClient.LOGGER.info("[VoxyMap] Map share {}: exporting {} explored level-0 sections{} ({} block/biome mapping rows)",
+        VoxyMapClient.LOGGER.debug("Map share {}: exporting {} explored level-0 sections{} with {} block and biome mappings",
                 code, sectionCount, bounds == null ? "" : " inside " + bounds, mappings.size());
 
         long chunkSectionCount;
@@ -407,7 +413,7 @@ public final class MapShareClient {
                     sent[0]++;
                     shareSectionsSentThisAttempt = sent[0];
                     if (sent[0] % PROGRESS_LOG_INTERVAL == 0) {
-                        VoxyMapClient.LOGGER.info("[VoxyMap] Map share {}: sent {} chunk-sections so far", code, sent[0]);
+                        VoxyMapClient.LOGGER.debug("Map share {}: sent {} chunk sections", code, sent[0]);
                     }
                 }
             } catch (IOException exception) {
@@ -421,7 +427,7 @@ public final class MapShareClient {
             throw new IOException("Map share stopped before the export finished");
         }
         out.writeInt(END_OF_SECTIONS);
-        VoxyMapClient.LOGGER.info("[VoxyMap] Map share {}: export finished, {} chunk-sections total", code, sent[0]);
+        VoxyMapClient.LOGGER.info("Map share {} finished; {} chunk sections sent", code, sent[0]);
     }
 
     public static ReceiveStatus receiveStatus() {
@@ -529,7 +535,7 @@ public final class MapShareClient {
             setReceiveStatus(session, ReceiveStatus.IDLE);
         } catch (Exception exception) {
             failReceive(session, exception.toString());
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Map receive info for code {} failed: {}", code, exception.toString());
+            VoxyMapClient.LOGGER.warn("Could not look up map share {}", code, exception);
         }
     }
 
@@ -558,7 +564,7 @@ public final class MapShareClient {
                 setReceiveStatus(session, ReceiveStatus.IDLE);
             } catch (Exception exception) {
                 failReceive(session, exception.toString());
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Map receive confirm for code {} failed: {}", code, exception.toString());
+                VoxyMapClient.LOGGER.warn("Could not confirm receiving map share {}", code, exception);
             }
         });
     }
@@ -580,7 +586,7 @@ public final class MapShareClient {
                 if (exception instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Map receive decline for code {} failed: {}", code, exception.toString());
+                VoxyMapClient.LOGGER.warn("Could not decline map share {}", code, exception);
             }
         });
     }
@@ -610,15 +616,15 @@ public final class MapShareClient {
                     receiveStatus = ReceiveStatus.DONE;
                 }
             }
-            VoxyMapClient.LOGGER.info("[VoxyMap] Map receive {}: {}, {} imported, {} already had",
-                    code, finished ? "done" : "stopped", receiveImportedCount, receiveSkippedCount);
+            VoxyMapClient.LOGGER.info("Map share {} {}; {} sections imported, {} already present",
+                    code, finished ? "received" : "stopped", receiveImportedCount, receiveSkippedCount);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             setReceiveStatus(session, ReceiveStatus.IDLE);
         } catch (Exception exception) {
             if (!isCurrentReceive(session)) return;
             failReceive(session, exception.toString());
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Map receive for code {} failed: {}", code, exception.toString());
+            VoxyMapClient.LOGGER.warn("Could not receive map share {}", code, exception);
         }
     }
 
@@ -647,7 +653,7 @@ public final class MapShareClient {
         int declaredTotal = version >= 3 ? MapShareProtocolLimits.declaredSectionCount(in.readInt()) : 0;
         if (!isCurrentReceive(session)) return;
         receiveTotalCount = declaredTotal;
-        VoxyMapClient.LOGGER.info("[VoxyMap] Map receive {}: got {} mapping rows (sender protocol v{}), importing{}...",
+        VoxyMapClient.LOGGER.debug("Map share {}: got {} mappings from protocol v{}, importing{}",
                 code, mappings.size(), version, declaredTotal > 0 ? " up to " + declaredTotal + " sections" : "");
 
         Map<VoxySectionBridge.WorldSectionKey, Integer> occupiedMaskCache = new HashMap<>();
@@ -689,7 +695,7 @@ public final class MapShareClient {
             }
             sectionIndex++;
             if ((imported + skipped) % PROGRESS_LOG_INTERVAL == 0) {
-                VoxyMapClient.LOGGER.info("[VoxyMap] Map receive {}: {} imported, {} already had, still going...",
+                VoxyMapClient.LOGGER.debug("Map share {}: {} sections imported, {} already present",
                         code, imported, skipped);
             }
         }

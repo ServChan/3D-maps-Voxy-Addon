@@ -215,7 +215,7 @@ public final class MobHeadIcons {
     private static void logOnce(Throwable exception) {
         if (!failureLogged) {
             failureLogged = true;
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not resolve a minimap head icon; affected mobs keep a dot.", exception);
+            VoxyMapClient.LOGGER.warn("Could not resolve a minimap head icon; affected mobs keep a dot", exception);
         }
     }
 }

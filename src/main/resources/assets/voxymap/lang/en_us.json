@@ -291,6 +291,7 @@
   "screen.voxymap.diagnostics.ok": "All integrations ready",
   "screen.voxymap.diagnostics.shader_unsupported": "Voxy shader unsupported",
   "screen.voxymap.diagnostics.ore_mask_unsupported": "Ore mask unavailable",
+  "screen.voxymap.diagnostics.vulkan": "Vulkan: ore mask off",
   "screen.voxymap.settings.group.general": "General",
   "screen.voxymap.settings.group.layers": "Map layers",
   "screen.voxymap.settings.group.minimap": "Minimap",

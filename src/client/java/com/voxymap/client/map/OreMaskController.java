@@ -42,7 +42,7 @@ public final class OreMaskController {
     }
 
     public static void tick(Minecraft minecraft) {
-        if (minecraft == null || minecraft.level == null || MODEL_SERVICE_FIELD == null) {
+        if (minecraft == null || minecraft.level == null || MODEL_SERVICE_FIELD == null || !GraphicsBackend.openGl()) {
             return;
         }
 
@@ -143,7 +143,7 @@ public final class OreMaskController {
         } catch (IllegalAccessException | RuntimeException exception) {
             if (!accessFailureLogged) {
                 accessFailureLogged = true;
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read Voxy's model service; ore masking is disabled.", exception);
+                VoxyMapClient.LOGGER.warn("Could not read Voxy's model service; ore masking is off", exception);
             }
             return null;
         }
@@ -155,7 +155,7 @@ public final class OreMaskController {
             field.setAccessible(true);
             return field;
         } catch (NoSuchFieldException | RuntimeException exception) {
-            VoxyMapClient.LOGGER.info("[VoxyMap] Voxy's render system layout changed; ore masking is disabled.", exception);
+            VoxyMapClient.LOGGER.warn("Could not find Voxy's model service field; ore masking is off", exception);
             return null;
         }
     }

@@ -65,6 +65,15 @@ those models grey everywhere Voxy draws them, not only on the map. It has no set
 together with the Voxy shader patch (`VoxyShaderPatcher.isSupported()`) or when Voxy's `modelService` field
 cannot be read.
 
+## Vulkan backend
+
+Minecraft 26.3 can run on Vulkan (`preferredGraphicsBackend:"vulkan"`), where there is no OpenGL context and any
+`org.lwjgl.opengl` call aborts the JVM. Every raw GL path (`OreMaskTexture`/`GlClientTextureUpload` through
+`OreMaskController.tick`, the uniforms in `MDICSectionRendererMixin`, the Voxy second view in `WindowMapRenderer`)
+runs only when `map/GraphicsBackend.openGl()` is true; it reads `DeviceInfo.backendName()` of
+`RenderSystem.tryGetDevice()`. On Vulkan those features are off with one log line and the diagnostics row shows
+`screen.voxymap.diagnostics.vulkan`. Put any new raw GL call behind the same check.
+
 ## Mixin gating
 
 `VoxyMapMixinPlugin` applies a mixin whose class name starts with `Iris` only when Iris is loaded, so Iris

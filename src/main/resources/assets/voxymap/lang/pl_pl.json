@@ -291,6 +291,7 @@
   "screen.voxymap.diagnostics.ok": "Wszystkie integracje dzia\u0142aj\u0105",
   "screen.voxymap.diagnostics.shader_unsupported": "Shader Voxy nieobs\u0142ugiwany",
   "screen.voxymap.diagnostics.ore_mask_unsupported": "Maska rud niedost\u0119pna",
+  "screen.voxymap.diagnostics.vulkan": "Vulkan: maska rud wy\u0142\u0105czona",
   "screen.voxymap.settings.group.general": "Og\u00f3lne",
   "screen.voxymap.settings.group.layers": "Warstwy mapy",
   "screen.voxymap.settings.group.minimap": "Minimapa",

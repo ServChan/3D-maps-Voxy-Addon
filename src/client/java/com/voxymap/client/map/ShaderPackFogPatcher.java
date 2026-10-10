@@ -162,7 +162,7 @@ public final class ShaderPackFogPatcher {
             if (!mismatchLogged) {
                 mismatchLogged = true;
                 VoxyMapClient.LOGGER.info(
-                        "[VoxyMap] The shader pack's fog layout was not recognized ({}); leaving its fog unchanged.",
+                        "Could not recognise the shader pack fog layout in {}; its fog is left unchanged",
                         path);
             }
             return source;

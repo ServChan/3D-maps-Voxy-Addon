@@ -134,7 +134,7 @@ public final class WaypointPrefs {
             properties.load(reader);
             return properties;
         } catch (IOException | IllegalArgumentException exception) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read waypoint display settings from {}", path, exception);
+            VoxyMapClient.LOGGER.warn("Could not read waypoint display settings from {}", path, exception);
             return null;
         }
     }

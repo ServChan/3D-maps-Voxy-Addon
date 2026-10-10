@@ -263,7 +263,7 @@ public final class WaypointManager {
         if (properties == null) {
             properties = readProperties(BACKUP_PATH);
             if (properties != null) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Loaded waypoints from backup after the primary file failed.");
+                VoxyMapClient.LOGGER.warn("Loaded waypoints from backup {}", BACKUP_PATH);
             }
         }
         if (properties == null) properties = new Properties();
@@ -290,7 +290,7 @@ public final class WaypointManager {
             return properties;
         } catch (IOException | IllegalArgumentException exception) {
             if (logFailure) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read waypoints from {}", path, exception);
+                VoxyMapClient.LOGGER.warn("Could not read waypoints from {}", path, exception);
             }
             return null;
         }

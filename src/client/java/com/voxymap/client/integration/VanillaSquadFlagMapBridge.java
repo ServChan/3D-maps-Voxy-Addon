@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.voxymap.client.ModLog;
 import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.map.VoxyMapSettings;
 
@@ -38,6 +39,7 @@ public final class VanillaSquadFlagMapBridge {
     private static final Map<String, List<Territory>> TERRITORIES_BY_WORLD = new ConcurrentHashMap<>();
     private static final Map<String, Long> LAST_FETCH_NANOS_BY_WORLD = new ConcurrentHashMap<>();
     private static final Map<String, AtomicBoolean> FETCHING_BY_WORLD = new ConcurrentHashMap<>();
+    private static final java.util.Set<String> REPORTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private VanillaSquadFlagMapBridge() {
     }
@@ -70,15 +72,21 @@ public final class VanillaSquadFlagMapBridge {
                 .whenComplete((response, throwable) -> {
                     try {
                         if (throwable != null) {
-                            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not fetch VanillaSquad flags for {}: {}", world, throwable.toString());
+                            if (REPORTED.add(world + " " + ModLog.describe(throwable))) {
+                                VoxyMapClient.LOGGER.warn("Could not fetch VanillaSquad flags for {}", world, throwable);
+                            }
                         } else if (response.statusCode() == 200) {
 
                             TERRITORIES_BY_WORLD.put(cacheKey, TerritoryClusterer.cluster(parse(response.body())));
                         } else {
-                            VoxyMapClient.LOGGER.warn("[VoxyMap] VanillaSquad markers endpoint returned HTTP {} for {}.", response.statusCode(), world);
+                            if (REPORTED.add(world + " HTTP " + response.statusCode())) {
+                                VoxyMapClient.LOGGER.warn("Could not fetch VanillaSquad flags for {}; the server answered HTTP {}", world, response.statusCode());
+                            }
                         }
                     } catch (RuntimeException exception) {
-                        VoxyMapClient.LOGGER.warn("[VoxyMap] Could not parse VanillaSquad flags for {}.", world, exception);
+                        if (REPORTED.add(world + " " + ModLog.describe(exception))) {
+                            VoxyMapClient.LOGGER.warn("Could not parse VanillaSquad flags for {}", world, exception);
+                        }
                     } finally {
                         fetching.set(false);
                     }

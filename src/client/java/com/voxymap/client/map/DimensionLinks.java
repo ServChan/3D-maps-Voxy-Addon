@@ -36,7 +36,7 @@ public final class DimensionLinks {
             lastWorldId = null;
             return;
         }
-        String worldId = MinimapRenderer.currentWorldId(minecraft);
+        String worldId = MinimapRenderer.currentVoxyWorldId(minecraft);
         WaypointText.Dimension dimension = WaypointChatShare.currentDimension(minecraft);
         if (worldId == null) {
             return;
@@ -63,7 +63,8 @@ public final class DimensionLinks {
         if (source == null) {
             return List.of();
         }
-        String sourceId = counterpartWorldId(minecraft.level, MinimapRenderer.currentWorldId(minecraft), here);
+        String sourceId = WaypointWorlds.effective(
+                counterpartWorldId(minecraft.level, MinimapRenderer.currentVoxyWorldId(minecraft), here));
         if (sourceId == null) {
             return List.of();
         }
@@ -111,7 +112,7 @@ public final class DimensionLinks {
         } catch (RuntimeException | LinkageError exception) {
             if (!failureLogged) {
                 failureLogged = true;
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Could not work out the paired dimension's world id", exception);
+                VoxyMapClient.LOGGER.warn("Could not work out the world id of the paired dimension", exception);
             }
             return null;
         }

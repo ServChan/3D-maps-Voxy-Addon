@@ -95,7 +95,7 @@ public final class VoxyMapSettings {
         if (properties == null) {
             properties = readProperties(BACKUP_PATH);
             if (properties != null) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Loaded settings from backup after the primary file failed.");
+                VoxyMapClient.LOGGER.warn("Loaded settings from backup {}", BACKUP_PATH);
             }
         }
         if (properties == null) properties = new Properties();
@@ -1345,7 +1345,7 @@ public final class VoxyMapSettings {
             return properties;
         } catch (IOException | IllegalArgumentException exception) {
             if (logFailure) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Could not read settings from {}", path, exception);
+                VoxyMapClient.LOGGER.warn("Could not read settings from {}", path, exception);
             }
             return null;
         }

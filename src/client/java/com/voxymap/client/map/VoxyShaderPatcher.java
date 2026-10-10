@@ -94,7 +94,7 @@ public final class VoxyShaderPatcher {
         } catch (IllegalStateException exception) {
             unsupported = true;
             VoxyMapClient.LOGGER.warn(
-                    "[VoxyMap] Voxy shader layout changed; disabling Nether roof removal and ore masking.", exception);
+                    "Could not patch Voxy shader {}; Nether roof removal and ore masking are off", resource, exception);
             return source;
         }
     }

@@ -7,6 +7,7 @@ import com.voxymap.client.map.FlatMapRenderer;
 import com.voxymap.client.map.NetherRoofController;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapSettings;
+import com.voxymap.client.map.ServerRules;
 import com.voxymap.client.map.WaypointDisplay;
 import com.voxymap.client.map.WaypointManager;
 import com.voxymap.client.map.WindowMapRenderer;
@@ -197,7 +198,7 @@ public final class WindowMapScreen extends Screen {
             }
         }
         for (Player other : minecraft.level.players()) {
-            if (other == player) {
+            if (other == player || !ServerRules.radarAllowed()) {
                 continue;
             }
             int[] point = project(view, other.getX(), other.getY(), other.getZ());

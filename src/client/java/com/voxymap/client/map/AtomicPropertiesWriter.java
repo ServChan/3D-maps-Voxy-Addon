@@ -63,7 +63,7 @@ public final class AtomicPropertiesWriter {
             Future<?> barrier = WORKER.submit(() -> writes.forEach(AtomicPropertiesWriter::persist));
             barrier.get(10, TimeUnit.SECONDS);
         } catch (Exception exception) {
-            VoxyMapClient.LOGGER.error("[VoxyMap] Timed out flushing client configuration", exception);
+            VoxyMapClient.LOGGER.error("Could not finish saving settings before shutdown", exception);
         }
     }
 
@@ -86,7 +86,7 @@ public final class AtomicPropertiesWriter {
             }
             replaceAtomically(write.temporary, write.target);
         } catch (IOException exception) {
-            VoxyMapClient.LOGGER.error("[VoxyMap] Could not save {}", write.target, exception);
+            VoxyMapClient.LOGGER.error("Could not save {}", write.target, exception);
             try {
                 Files.deleteIfExists(write.temporary);
             } catch (IOException cleanupException) {

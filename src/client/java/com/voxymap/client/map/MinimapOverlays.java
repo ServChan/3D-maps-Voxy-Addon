@@ -37,7 +37,7 @@ public final class MinimapOverlays {
 
             }
         }
-        return VoxyMapSettings.slimeSeed(MinimapRenderer.currentWorldId(minecraft));
+        return VoxyMapSettings.slimeSeed(MinimapRenderer.currentVoxyWorldId(minecraft));
     }
 
     public static boolean slimeSeedKnown(Minecraft minecraft) {
@@ -75,7 +75,7 @@ public final class MinimapOverlays {
 
     private static int setSeed(CommandContext<FabricClientCommandSource> context) {
         Minecraft minecraft = Minecraft.getInstance();
-        String worldId = MinimapRenderer.currentWorldId(minecraft);
+        String worldId = MinimapRenderer.currentVoxyWorldId(minecraft);
         if (worldId == null || minecraft.level == null || !minecraft.level.dimension().equals(Level.OVERWORLD)) {
             context.getSource().sendError(Component.translatable("message.voxymap.seed.overworld_only"));
             return 0;
@@ -88,7 +88,7 @@ public final class MinimapOverlays {
 
     private static int clearSeed(CommandContext<FabricClientCommandSource> context) {
         Minecraft minecraft = Minecraft.getInstance();
-        VoxyMapSettings.setSlimeSeed(MinimapRenderer.currentWorldId(minecraft), null);
+        VoxyMapSettings.setSlimeSeed(MinimapRenderer.currentVoxyWorldId(minecraft), null);
         context.getSource().sendFeedback(Component.translatable("message.voxymap.seed.cleared"));
         return 1;
     }

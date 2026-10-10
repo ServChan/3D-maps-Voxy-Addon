@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.voxymap.client.ModLog;
 import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.map.MinimapRenderer;
 import com.voxymap.client.map.VoxyMapSettings;
@@ -45,6 +46,7 @@ public final class VanillaSquadWebMap {
     private static final Map<String, List<World>> WORLDS_BY_MAP = new ConcurrentHashMap<>();
     private static final Map<String, Long> LAST_FETCH_NANOS = new ConcurrentHashMap<>();
     private static final Map<String, Boolean> FAILED_BY_MAP = new ConcurrentHashMap<>();
+    private static final java.util.Set<String> REPORTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final Map<String, AtomicBoolean> FETCHING_BY_MAP = new ConcurrentHashMap<>();
 
     private VanillaSquadWebMap() {
@@ -117,7 +119,7 @@ public final class VanillaSquadWebMap {
         if (!available()) {
             return null;
         }
-        return RemotePlayerMarkers.resolvedMapId(minecraft.level, MinimapRenderer.currentWorldId(minecraft));
+        return RemotePlayerMarkers.resolvedMapId(minecraft.level, MinimapRenderer.currentVoxyWorldId(minecraft));
     }
 
     public static void rememberCurrentWorld(Minecraft minecraft) {
@@ -162,8 +164,9 @@ public final class VanillaSquadWebMap {
                     try {
                         if (throwable != null) {
                             FAILED_BY_MAP.put(mapId, true);
-                            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not load the VanillaSquad {} web map: {}",
-                                    mapId, throwable.toString());
+                            if (REPORTED.add(mapId + " " + ModLog.describe(throwable))) {
+                                VoxyMapClient.LOGGER.warn("Could not load the VanillaSquad {} web map", mapId, throwable);
+                            }
                         } else {
                             WORLDS_BY_MAP.put(mapId, List.copyOf(worlds));
                             FAILED_BY_MAP.put(mapId, false);

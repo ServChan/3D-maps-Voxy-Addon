@@ -189,7 +189,7 @@ public final class WebMapRenderer {
         }
         boolean heads = MinimapHeads.shown(minecraft);
         for (Player other : minecraft.level.players()) {
-            if (other == self) {
+            if (other == self || !ServerRules.radarAllowed()) {
                 continue;
             }
             double sx = view.screenX(other.getX());

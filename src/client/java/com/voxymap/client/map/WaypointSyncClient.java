@@ -33,6 +33,7 @@ final class WaypointSyncClient {
             .build();
 
     private static final ConcurrentHashMap<String, State> STATES = new ConcurrentHashMap<>();
+    private static final java.util.Set<String> REPORTED = ConcurrentHashMap.newKeySet();
 
     enum Status { SYNCING, OK, ERROR }
 
@@ -109,7 +110,9 @@ final class WaypointSyncClient {
             state.inFlight = false;
             state.status = Status.ERROR;
             state.lastError = "Bad address: " + exception.getMessage();
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Waypoint sync address for {} is invalid ({}): {}", worldId, address, exception.toString());
+            if (REPORTED.add(worldId + " " + address + " " + state.lastError)) {
+                VoxyMapClient.LOGGER.warn("Could not use waypoint sync address {} for {}", address, worldId, exception);
+            }
             return;
         }
 
@@ -120,13 +123,17 @@ final class WaypointSyncClient {
                     if (error != null) {
                         state.status = Status.ERROR;
                         state.lastError = rootCause(error).toString();
-                        VoxyMapClient.LOGGER.warn("[VoxyMap] Waypoint sync GET {} failed: {}", url, state.lastError);
+                        if (REPORTED.add(url + " " + state.lastError)) {
+                            VoxyMapClient.LOGGER.warn("Could not fetch synced waypoints from {}", url, rootCause(error));
+                        }
                         return;
                     }
                     if (response.statusCode() != 200) {
                         state.status = Status.ERROR;
                         state.lastError = "HTTP " + response.statusCode();
-                        VoxyMapClient.LOGGER.warn("[VoxyMap] Waypoint sync GET {} returned {}", url, response.statusCode());
+                        if (REPORTED.add(url + " " + state.lastError)) {
+                            VoxyMapClient.LOGGER.warn("Could not fetch synced waypoints from {}; the server answered HTTP {}", url, response.statusCode());
+                        }
                         return;
                     }
                     if (state.mutations.get() != mutationsAtStart) {
@@ -160,7 +167,7 @@ final class WaypointSyncClient {
         } catch (RuntimeException exception) {
             state.status = Status.ERROR;
             state.lastError = "Bad address or password: " + exception.getMessage();
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Waypoint sync {} for {} could not be sent: {}", method, worldId, exception.toString());
+            VoxyMapClient.LOGGER.warn("Could not send waypoint sync {} for {}", method, worldId, exception);
             return;
         }
         HTTP.sendAsync(request, HttpResponse.BodyHandlers.discarding())
@@ -168,11 +175,11 @@ final class WaypointSyncClient {
                 .whenComplete((response, error) -> {
                     if (error != null) {
                         state.lastError = rootCause(error).toString();
-                        VoxyMapClient.LOGGER.warn("[VoxyMap] Waypoint sync {} failed for {}: {}", method, worldId, state.lastError);
+                        VoxyMapClient.LOGGER.warn("Could not send waypoint sync {} for {}", method, worldId, rootCause(error));
                         state.status = Status.ERROR;
                     } else if (response.statusCode() >= 400) {
                         state.lastError = "HTTP " + response.statusCode();
-                        VoxyMapClient.LOGGER.warn("[VoxyMap] Waypoint sync {} rejected for {}: HTTP {}", method, worldId, response.statusCode());
+                        VoxyMapClient.LOGGER.warn("Waypoint sync server rejected {} for {} with HTTP {}", method, worldId, response.statusCode());
                         state.status = Status.ERROR;
                     }
 

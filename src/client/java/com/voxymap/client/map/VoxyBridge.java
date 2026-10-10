@@ -63,14 +63,14 @@ public final class VoxyBridge {
             } catch (NoSuchFieldException ignored) {
             }
         }
-        VoxyMapClient.LOGGER.info("[VoxyMap] Voxy has no configurable environmental fog field; no override is needed.");
+        VoxyMapClient.LOGGER.debug("Voxy has no environmental fog setting; no override is needed");
         return null;
     }
 
     private static void logAccessFailure(Exception exception) {
         if (!accessFailureLogged) {
             accessFailureLogged = true;
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not temporarily change Voxy fog settings.", exception);
+            VoxyMapClient.LOGGER.warn("Could not temporarily change Voxy fog settings", exception);
         }
     }
 }

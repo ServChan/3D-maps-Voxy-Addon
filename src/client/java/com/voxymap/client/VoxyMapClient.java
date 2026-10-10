@@ -15,10 +15,12 @@ import com.voxymap.client.map.MinimapOverlays;
 import com.voxymap.client.map.MinimapRenderer;
 import com.voxymap.client.map.MobMarkerCache;
 import com.voxymap.client.map.OreMaskController;
+import com.voxymap.client.map.ServerRules;
 import com.voxymap.client.map.TemporaryWaypoints;
 import com.voxymap.client.map.WaypointChatShare;
 import com.voxymap.client.map.VoxyMapSettings;
 import com.voxymap.client.map.WaypointBeaconRenderer;
+import com.voxymap.client.map.WaypointWorlds;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -28,13 +30,11 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.resources.Identifier;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class VoxyMapClient implements ClientModInitializer {
 
     public static final String MOD_ID = "voxymap";
-    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    public static final ModLog LOGGER = ModLog.root();
 
     private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
             Identifier.fromNamespaceAndPath(MOD_ID, "main"));
@@ -67,6 +67,7 @@ public class VoxyMapClient implements ClientModInitializer {
                 "key.voxymap.waypoint_list", InputConstants.Type.KEYBOARD, InputConstants.KEY_U, CATEGORY));
         temporaryWaypointKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.voxymap.temporary_waypoint", InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(), CATEGORY));
+        ServerRules.onConnectionChange(() -> WaypointWorlds.refreshServerKey(Minecraft.getInstance()));
         WaypointBeaconRenderer.register();
         WaypointChatShare.register();
         MinimapOverlays.register();
@@ -103,6 +104,7 @@ public class VoxyMapClient implements ClientModInitializer {
                     TemporaryWaypoints.placeAtLookTarget(client);
                 }
             }
+            ServerRules.tick(client);
             DimensionLinks.tick(client);
             VanillaSquadWebMap.rememberCurrentWorld(client);
             TemporaryWaypoints.tick(client);
@@ -117,7 +119,7 @@ public class VoxyMapClient implements ClientModInitializer {
         });
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> AtomicPropertiesWriter.flush());
 
-        LOGGER.info("[VoxyMap] Loaded. Press M to open the map.");
+        LOGGER.ready("press M to open the map");
     }
 
     public static boolean isAddWaypointKey(KeyEvent event) {
@@ -139,9 +141,8 @@ public class VoxyMapClient implements ClientModInitializer {
         ticksInWorld++;
         if (ticksInWorld >= HUD_HOOK_WATCHDOG_TICKS) {
             hudHookWatchdogReported = true;
-            LOGGER.error("[VoxyMap] Minimap HUD hook never fired after {} ticks in-world - HudMixin failed to "
-                    + "apply (Minecraft update or mapping mismatch?); the minimap overlay will not render.",
-                    HUD_HOOK_WATCHDOG_TICKS);
+            LOGGER.error("Minimap HUD hook never fired after {} ticks in a world; HudMixin did not apply "
+                    + "and the minimap is not drawn", HUD_HOOK_WATCHDOG_TICKS);
         }
     }
 

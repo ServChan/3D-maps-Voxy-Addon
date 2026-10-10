@@ -36,6 +36,7 @@ public final class WaypointChatShare {
     public static void register() {
         ClientReceiveMessageEvents.CHAT.register((message, signed, sender, params, timestamp) -> onMessage(message));
         ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+            ServerRules.onSystemMessage(message);
             if (!overlay) {
                 onMessage(message);
             }

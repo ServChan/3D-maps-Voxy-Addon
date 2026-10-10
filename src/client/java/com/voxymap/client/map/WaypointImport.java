@@ -101,7 +101,7 @@ public final class WaypointImport {
                         xaeroDimension(dimensionFolder.getFileName().toString()), waypoints));
             }
         } catch (IOException | RuntimeException exception) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not scan Xaero waypoints in {}", root, exception);
+            VoxyMapClient.LOGGER.warn("Could not scan Xaero waypoints in {}", root, exception);
         }
     }
 
@@ -127,13 +127,13 @@ public final class WaypointImport {
                 try {
                     parseJourneyMap(Files.readString(file, StandardCharsets.UTF_8), byDimension);
                 } catch (IOException | RuntimeException exception) {
-                    VoxyMapClient.LOGGER.debug("[VoxyMap] Skipped JourneyMap file {}", file, exception);
+                    VoxyMapClient.LOGGER.debug("Skipped JourneyMap file {}", file, exception);
                 }
             }
             byWorld.forEach((world, byDimension) -> byDimension.forEach((dimension, waypoints) ->
                     found.add(new Found(Source.JOURNEYMAP, world, "", dimension, List.copyOf(waypoints)))));
         } catch (IOException | RuntimeException exception) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not scan JourneyMap waypoints in {}", root, exception);
+            VoxyMapClient.LOGGER.warn("Could not scan JourneyMap waypoints in {}", root, exception);
         }
     }
 

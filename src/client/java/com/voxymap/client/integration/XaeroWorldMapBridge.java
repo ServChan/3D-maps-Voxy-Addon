@@ -28,20 +28,20 @@ public final class XaeroWorldMapBridge {
         try {
             Object session = ACCESSOR.getCurrentSession.invoke(null);
             if (session == null) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Xaero World Map session is not ready yet.");
+                VoxyMapClient.LOGGER.warn("Could not open Xaero's World Map; its session is not ready yet");
                 return false;
             }
 
             Object mapProcessor = ACCESSOR.getMapProcessor.invoke(session);
             if (mapProcessor == null) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Xaero World Map session has no active map processor.");
+                VoxyMapClient.LOGGER.warn("Could not open Xaero's World Map; its session has no map processor");
                 return false;
             }
 
             Constructor<?> constructor = findGuiMapConstructor(
                     ACCESSOR.constructors, mapProcessor.getClass(), client.player.getClass());
             if (constructor == null) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Xaero World Map GUI constructor is incompatible.");
+                VoxyMapClient.LOGGER.warn("Could not open Xaero's World Map; no compatible GuiMap constructor");
                 return false;
             }
 
@@ -50,7 +50,7 @@ public final class XaeroWorldMapBridge {
             return true;
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
 
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Could not open Xaero World Map from VoxyMap: {}", exception.toString());
+            VoxyMapClient.LOGGER.warn("Could not open Xaero's World Map", exception);
             return false;
         }
     }
@@ -66,8 +66,7 @@ public final class XaeroWorldMapBridge {
             Constructor<?>[] constructors = Class.forName("xaero.map.gui.GuiMap").getConstructors();
             return new Accessor(getCurrentSession, getMapProcessor, constructors);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] Xaero World Map is installed but its API is incompatible: {}",
-                    exception.toString());
+            VoxyMapClient.LOGGER.warn("Could not find a compatible Xaero's World Map API; the integration is off", exception);
             return null;
         }
     }

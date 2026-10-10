@@ -1,6 +1,7 @@
 package com.voxymap.client.mixin;
 
 import com.voxymap.client.VoxyMapClient;
+import com.voxymap.client.map.GraphicsBackend;
 import com.voxymap.client.map.NetherRoofController;
 import com.voxymap.client.map.NetherRoofState;
 import com.voxymap.client.map.OreMaskTexture;
@@ -48,10 +49,8 @@ public abstract class MDICSectionRendererMixin {
                     GL20C.glGetUniformLocation(id, "voxymapApertureRadius"),
                     GL20C.glGetUniformLocation(id, "voxymapOreMaskEnabled"));
             if (locations.enabled() < 0) {
-                VoxyMapClient.LOGGER.warn("[VoxyMap] Roof-removal uniform 'voxymapCutawayEnabled' was not found "
-                        + "in the compiled Voxy shader (program {}, expected location {}) - the shader source "
-                        + "patch applied, but the driver's linker did not expose the uniform where expected, so "
-                        + "the Nether roof removal will not affect rendering on this shader.",
+                VoxyMapClient.LOGGER.warn("Voxy shader program {} has no voxymapCutawayEnabled uniform at location {}; "
+                        + "the Nether roof cut does not apply to it",
                         id, VoxyShaderPatcher.ENABLED_UNIFORM_LOCATION);
             }
             return locations;
@@ -83,7 +82,7 @@ public abstract class MDICSectionRendererMixin {
     }
 
     private static void voxymap$setRoofCutUniforms(Shader shader) {
-        if (!VoxyShaderPatcher.isSupported()) {
+        if (!VoxyShaderPatcher.isSupported() || !GraphicsBackend.openGl()) {
             return;
         }
         VoxymapUniformLocations locations = voxymap$locationsFor(shader.id());
@@ -111,7 +110,7 @@ public abstract class MDICSectionRendererMixin {
     }
 
     private static int voxymap$setOreMaskUniforms(Shader shader) {
-        if (!VoxyShaderPatcher.isSupported()) {
+        if (!VoxyShaderPatcher.isSupported() || !GraphicsBackend.openGl()) {
             return -1;
         }
         VoxymapUniformLocations locations = voxymap$locationsFor(shader.id());
