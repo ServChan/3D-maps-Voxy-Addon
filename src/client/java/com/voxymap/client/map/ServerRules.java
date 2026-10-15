@@ -96,10 +96,15 @@ public final class ServerRules {
 
     public static void onSystemMessage(Component message) {
         if (message == null) return;
+        syncConnection(Minecraft.getInstance());
         rules = apply(rules, message.getString());
     }
 
     public static void tick(Minecraft minecraft) {
+        syncConnection(minecraft);
+    }
+
+    private static void syncConnection(Minecraft minecraft) {
         ClientPacketListener connection = minecraft.getConnection();
         if (connection == lastConnection) return;
         lastConnection = connection;

@@ -22,6 +22,17 @@ class MapProjectionTest {
     }
 
     @Test
+    void exactProjectionKeepsTheDirectionOfFarOffscreenPoints() {
+        double[] exact = MapProjection.projectExact(
+                1.0E12, 5.0E11, 0.1001, 0, 0, 0,
+                0, 0, 1, 1, 0, 0, 1, 0,
+                1, 1, 800, 600);
+        assertNotNull(exact);
+        double ratio = (exact[1] - 300.0) / (exact[0] - 400.0);
+        assertEquals(0.5 * 300.0 / 400.0, ratio, 1.0E-9);
+    }
+
+    @Test
     void clampsEdgeOnProjectionBeforeIntegerNarrowing() {
         MapProjection.Point point = MapProjection.project(
                 1.0E12, 0, 0.1001, 0, 0, 0,

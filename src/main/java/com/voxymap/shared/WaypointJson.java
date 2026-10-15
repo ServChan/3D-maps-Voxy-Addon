@@ -32,19 +32,38 @@ public final class WaypointJson {
 
     public static List<WaypointDto> readList(String json) {
         try {
-            Object root = new Parser(json).parseValue();
-            if (!(root instanceof Map<?, ?> map) || !(map.get("waypoints") instanceof List<?> list)) {
-                return List.of();
-            }
-            List<WaypointDto> result = new ArrayList<>();
-            for (Object element : list) {
-                WaypointDto waypoint = toWaypoint(element, null);
-                if (waypoint != null) result.add(waypoint);
-            }
-            return result;
+            return readListStrict(json);
         } catch (RuntimeException ignored) {
             return List.of();
         }
+    }
+
+    public static List<WaypointDto> readListStrict(String json) {
+        Object root = new Parser(json).parseValue();
+        if (!(root instanceof Map<?, ?> map) || !(map.get("waypoints") instanceof List<?> list)) {
+            throw new IllegalArgumentException("Expected an object with a waypoints array");
+        }
+        List<WaypointDto> result = new ArrayList<>();
+        for (Object element : list) {
+            WaypointDto waypoint = toWaypoint(element, null);
+            if (waypoint != null) result.add(waypoint);
+        }
+        return result;
+    }
+
+    public static boolean wellFormedText(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (Character.isHighSurrogate(c)) {
+                if (i + 1 >= text.length() || !Character.isLowSurrogate(text.charAt(i + 1))) {
+                    return false;
+                }
+                i++;
+            } else if (Character.isLowSurrogate(c)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static WaypointDto readOne(String json, String fallbackId) {

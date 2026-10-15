@@ -5,6 +5,7 @@ import com.voxymap.client.map.GraphicsBackend;
 import com.voxymap.client.map.NetherRoofController;
 import com.voxymap.client.map.NetherRoofState;
 import com.voxymap.client.map.OreMaskTexture;
+import com.voxymap.client.map.VoxyRenderGate;
 import com.voxymap.client.map.VoxyShaderPatcher;
 import me.cortex.voxy.client.core.gl.shader.Shader;
 import me.cortex.voxy.client.core.rendering.section.backend.mdic.MDICSectionRenderer;
@@ -57,8 +58,12 @@ public abstract class MDICSectionRendererMixin {
         });
     }
 
-    @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"), require = 0)
+    @Inject(method = "renderOpaque(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"), cancellable = true, require = 0)
     private void voxymap$setOpaqueRoofCut(MDICViewport viewport, CallbackInfo ci) {
+        if (!VoxyRenderGate.voxyVisible()) {
+            ci.cancel();
+            return;
+        }
         voxymap$setRoofCutUniforms(terrainShader);
         voxymap$opaquePreviousOreTexture = voxymap$setOreMaskUniforms(terrainShader);
     }
@@ -69,8 +74,12 @@ public abstract class MDICSectionRendererMixin {
         voxymap$opaquePreviousOreTexture = -1;
     }
 
-    @Inject(method = "renderTranslucent(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"), require = 0)
+    @Inject(method = "renderTranslucent(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"), cancellable = true, require = 0)
     private void voxymap$setTranslucentRoofCut(MDICViewport viewport, CallbackInfo ci) {
+        if (!VoxyRenderGate.voxyVisible()) {
+            ci.cancel();
+            return;
+        }
         voxymap$setRoofCutUniforms(translucentTerrainShader);
         voxymap$translucentPreviousOreTexture = voxymap$setOreMaskUniforms(translucentTerrainShader);
     }
@@ -79,6 +88,13 @@ public abstract class MDICSectionRendererMixin {
     private void voxymap$restoreTranslucentTexture(MDICViewport viewport, CallbackInfo ci) {
         voxymap$restoreTexture(voxymap$translucentPreviousOreTexture, OreMaskTexture.TEXTURE_UNIT);
         voxymap$translucentPreviousOreTexture = -1;
+    }
+
+    @Inject(method = "renderTemporal(Lme/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport;)V", at = @At("HEAD"), cancellable = true, require = 0)
+    private void voxymap$skipTemporalWhileHidden(MDICViewport viewport, CallbackInfo ci) {
+        if (!VoxyRenderGate.voxyVisible()) {
+            ci.cancel();
+        }
     }
 
     private static void voxymap$setRoofCutUniforms(Shader shader) {

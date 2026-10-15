@@ -121,7 +121,9 @@ player-list key is held, or dots); mobs and players more than 3 blocks above or 
 the sprite's first frame (`SpriteContentsAccessor.originalImage`), caches it per `BlockState` until the
 `BlockStateModelSet` instance changes (resource reload), and multiplies biome tint through `BlockColors.getTintSource`.
 Water is blended over the floor by depth, and slopes are lit from the north-west (`MapColorMath`). Any failure
-switches texture colours off for the session and falls back to `MapColor`; `MinimapColors.CLASSIC` keeps the old
+switches texture colours off for the session (only when it happens on the main thread) and falls back to `MapColor`;
+2D tile workers sample sprites too, so `SpriteContentsMixin` makes `SpriteContents.close()` wait for
+`SpriteReadLock` readers and samples are stored per `BlockStateModelSet`; `MinimapColors.CLASSIC` keeps the old
 vanilla-map look. The minimap texture covers 33x33 chunks and computes at most `TILE_COMPUTE_BUDGET` new tiles
 per frame, nearest first.
 
@@ -188,6 +190,41 @@ same name and block, keeping Xaero symbols and disabled flags and skipping death
 The big map (M) draws the chunk grid and slime chunk outlines with `draw3DLine` at the camera focus height and
 limits both to what is on screen (`visibleGroundBounds`); G opens the go-to-coordinates input.
 
+## Waypoint sync and map share relay
+
+`WaypointSyncClient` keeps every shared add/edit/delete in `pendingPuts`/`pendingDeletes` and sends them one at a
+time per world and address (`State.sending`), so two changes to one waypoint can never reach the server out of order.
+The cached list is the server list with the pending changes laid over it. A 2xx (and 404 for a delete) drops the
+pending entry and sends the next one; 400/403/404/413 can never succeed, so the entry is dropped, the error stays in
+the status, and a rejected new waypoint is kept as a local one (`keepLocally`); 401, 429 and network errors stop the
+queue until the 30 s retry. A GET can no longer make a failed change vanish with "OK". Timestamps start at
+`Long.MIN_VALUE / 2`: `now - Long.MIN_VALUE` overflows to a negative number, which is why the first GET never ran
+before. The GET body is capped at 4 MB and parsed with `WaypointJson.readListStrict`. ASCII passwords go in
+`X-VoxyMap-Password`; anything else goes Base64(UTF-8) in `X-VoxyMap-Password-B64`, because the JDK HTTP/1.1 client
+writes header values as US-ASCII and turns other characters into `?`.
+
+The server prefers `X-VoxyMap-Password-B64`, compares bytes, reserves a failed-password slot atomically
+(`RelayClaimRateLimiter.tryReserve`, 10 per address per minute, released on success) before comparing, saves a copy of
+a world's list before swapping it in, moves an unparseable world file to `<id>.json.corrupt-<time>` (other read errors
+keep the file and make that world refuse writes), and rejects names with lone surrogates. The relay keeps at most 4
+waiting senders per address and cancels the oldest one (410) when a fifth arrives, since a client that stopped sharing
+cannot cancel its server-side wait; a sender waits at most `DATA_CONNECT_TIMEOUT_SECONDS` for the receiver to start
+downloading, and the pending entry is removed before the sender gets its answer. The client picks a new share code
+only when the very first `/wait` of a share gets 409, and the code swap and start/stop are synchronized. Map share
+protocol v5 carries the sender's dimension key; the receiver refuses a stream from another dimension instead of
+writing it into its own Voxy world.
+
+## Voxy engine references
+
+Voxy frees a `WorldEngine` (and closes its RocksDB storage) once `isWorldUsed()` is false, which only counts
+`acquireRef` and loaded sections. Every read of Voxy data off the render thread therefore holds a reference through
+`VoxySectionBridge.holdRef`/`dropRef` for the duration of one short read: a 2D tile scan (`Map2dTiles.build`), a
+cursor pick (`VoxyMapPicker.pick`), a padded section read (`VoxyWorldData.chunkSectionPadded`), one section export or
+import, and the key scan of a map share. Never hold one while writing to a network pipe or waiting on another
+thread, or disconnecting waits for it. Map share collects its section keys first (`exportedSectionKeys`), so no
+RocksDB iterator stays open during a transfer, and stops when the engine is gone. When the client has no level,
+`MinimapRenderer.forgetLevel()` drops the static references to the previous world.
+
 ## Shader-pack fog patches (`ShaderPackFogPatcher`)
 
 Fog suppression works by rewriting each supported pack's small fog include as Iris loads it
@@ -214,6 +251,79 @@ the matching part of a coarser loaded tile. Waypoints of another world come from
 Keep tile math in `WebMapGeometry` (unit tested) and do not route these lines through `MapProjection.clipLine`: its
 long-segment rejection is for perspective projection and would drop long flat territory edges.
 
+## 2D map (Tab on the big map)
+
+`MapScreen` switches between 3D and 2D with V or the 3D/2D buttons in the toolbar; the choice is saved as `map2d`.
+In 2D the camera controller stays active, `MapViewMode.flat()` is true, and `projectToScreen`/`mapPointAt`/`draw3DLine`
+switch to a north-up orthographic projection, so every overlay (waypoints, players, grid, flags, schematics) works in
+both modes. Picking in 2D casts a vertical ray through `VoxyMapPicker` (from the top of the world, or from the cave
+slice in dimensions with a ceiling). Tiles come from Voxy's own data, not from loaded chunks: `Map2dScanner` reads
+level-L Voxy sections (L = 0..4, 8x8 section columns per 256 px tile) top-down and colours the first voxel through
+`MinimapBlockColors` with a fake `Map2dTintGetter` for biome tint; levels 5..6 are 2x2 downsamples of the level below.
+`Map2dTiles` builds tiles on two background threads, caches PNGs in `<game>/voxymap/map2d/<voxy world id>/<surface|caveY>/`,
+shows a disk tile at once and rescans it once per session, and rescans tiles 4 s after `ClientLevelMixin` reports a block
+change or chunk load. All tile textures are released when the map closes. The cave scan keeps the anti-xray rule: at
+most 8 blocks (at least one voxel) of solid rock below the slice before the column is left empty. Never colour anything
+with `Xm*`-style code copied from Xaero's (see the VoxyMap Bobby fork notes).
+
+## Map weather, entity models, Voxy outside the map
+
+- `mapWeather` (clear/rain/thunder/auto) drives `LevelMixin` while the map is open; `WeatherEffectRendererMixin` always hides vanilla rain on the map and
+  `MapWeatherOverlay` draws rain streaks on the map because vanilla rain only falls around the far-away camera.
+- `mapEntityModels`: `EntityRenderDispatcherMixin` and `LevelExtractorMixin` (which skips the compiled-section check
+  of `LevelExtractor.isEntityVisible`, so players at the edge of the server view distance still render) force players
+  and mobs to render on the 3D map without a frustum test: vanilla builds the cull frustum from the player's own eye
+  in `Camera.update` before `CameraMixin` moves the camera, so testing against it hid every model behind the player.
+  With a shader pack Voxy's LODs write no vanilla depth, so nothing on the map hides
+  an entity behind terrain by itself: while the map is open both mixins drop every entity for which
+  `MapEntityOcclusion.visible` finds no clear ray from its head or middle to the map camera within 96 blocks
+  (`VoxelRayPicker` over the client level; a block blocks the ray when its occlusion shape fills at least half the
+  cell, so fences, rails, trapdoors, glass, leaves and fluids do not; blocks above the Nether roof cut are open).
+  Results are reused for 250 ms per entity while neither it nor the camera moved. Particles have the same depth
+  problem and are far too many to ray-test, so `ParticleEngineMixin` skips particle extraction (campfire smoke,
+  splashes) while the map is open. `SoundEngineMixin` keeps the sound listener at the player's eyes while the map
+  camera is far away, and `OptionsMixin` makes `Options.save` write the player's own cloud setting while
+  `MapRenderSettingsGuard` has clouds switched off for the map. Then
+  `LivingEntityRendererMixin` enlarges them (`MapEntityScale`, at least 14 px for players and 8 px for mobs, at most
+  8x; a model that would need more is left to its marker). Growth is computed from the standing height
+  (`getDimensions(Pose.STANDING)`), never the current hitbox: gliding, swimming and sleeping shrink the hitbox and
+  used to blow the model up threefold or more. Both follow `ServerRules.radarAllowed()` and the radar categories; the local player skips the radar rules but not the occlusion check.
+- `voxyInWorld`: when off, `VoxyRenderGate` cancels Voxy's MDIC passes outside the 3D map (and always in 2D), runs
+  `VoxyRenderSystem.renderOpaque` only every 30th frame, and `FogSetupBefore/AfterVoxyMixin` put the vanilla fog back.
+- `.\gradlew.bat bundledJar` builds `voxy-map-<version>-bundled.jar` with `voxy_jar` nested in `META-INF/jars`. It is a
+  personal build only (Voxy is All Rights Reserved: "Do not redistribute"); it is not part of `build`/`assemble`.
+  The nested Voxy is repacked by `bundledVoxyJar` with its Sodium dependency widened to `bundled_sodium_range`
+  (default `>=0.9.2- <0.10`); before widening further, diff `javap -p -s -c` of every Sodium class Voxy references
+  between the old and the new Sodium jar (0.9.2 and 0.9.3-alpha.1 were identical for all 57 classes).
+
+## Minimap smoothness
+
+`MinimapRenderer` interpolates the player, mobs (`MobSnapshot.source`) and other players with the partial tick, shifts
+the terrain blit by the sub-texel remainder and draws markers at fractional positions through `g.pose()`. Changed
+chunks are queued by `ClientLevelMixin` (`blockChanged`/`markDirty`) and repainted up to 16 per frame.
+
+## Interface components (`gui/ui`)
+
+Every screen draws with the shared kit instead of hand-picked colours: `UiTheme` (colour, spacing and size tokens;
+`UiThemeTest` checks WCAG contrast of text and controls), `UiDraw` (cut-corner panels and outlines, focus ring,
+ellipsized text, key caps), `UiIcons` (9x9 pixel icons drawn with `fill`, no textures, so they work on Vulkan too; no
+emoji or font glyphs as icons), `UiMotion` (eased hover/toggle/compass motion, switched off by `uiAnimations`). Widgets
+extend vanilla ones so keyboard focus, Enter/Space and narration keep working: `UiButton` (primary, secondary, ghost,
+danger; selected, loading), `UiToggle`, `UiCycler` (Left/Right or a click on the left third steps back), `UiSlider`,
+`UiTextField` (an `EditBox` inside its own frame). The focus ring shows only after keyboard input.
+
+Settings are one `SettingsView` used by the big map drawer and the Mod Menu screen (`VoxyMapConfigScreen`): category
+column (or a cycler when narrow), search across all groups, a "changed" mark and per-row reset, "Reset all", and a
+description line read from `<label key>.desc` when it exists. `SettingsModel` maps each `SettingsCatalog.Entry` to a
+control and to the `voxymap.properties` key used for reset; `VoxyMapSettings.isDefault/reset/batch` compare against a
+snapshot of the field defaults taken at class load. A new setting needs its catalog entry, its control in
+`SettingsModel.control`, and its property key (`SettingsModelTest` fails otherwise).
+
+Big map chrome: info card top-left, toolbar top-right (3D/2D, settings, server worlds, Xaero, key help, then time and
+weather cyclers), compass and scale bar bottom-right, four key hints in the footer plus H for the full list. V switches
+3D/2D; Tab moves keyboard focus. Players can be hidden from the big map, the minimap radar and the 3D models with the eye
+in the object panel (`VoxyMapSettings.hiddenPlayers`). The waypoint form and list keep their old look on purpose.
+
 ## Optional-mod integration pattern
 
 Xaero's World Map is not a compile-time dependency (it is not published anywhere this project's
@@ -238,21 +348,19 @@ projects to a technically finite but wildly wrong screen coordinate - projection
 for points in front of the camera, and nothing downstream can recover a bad coordinate once produced.
 This bit twice and needs both fixes kept:
 
-1. `MapScreen#projectToScreen` clamps `screenX`/`screenY` to `±1.0E6` before rounding to `int`.
-   `Math.round(double)` returns a `long`; narrowing an unclamped astronomical value to `int` silently
-   wraps around instead of clamping, producing a coordinate that can still pass the line clipper's
-   checks and drive a per-pixel fill loop into hundreds of millions of iterations - a full render-
-   thread freeze, not a crash, hard to spot from a stack trace.
-2. `MapScreen#clipLineToViewport` rejects (`return null`) any clipped segment longer than roughly two
-   screen diagonals. Clamping alone is not enough: a bad-but-clamped coordinate is still a *valid*,
-   finite point that can legitimately fall inside the padded viewport rectangle, so the clipper accepts
-   it and returns a segment that streaks across (and past) the whole screen. One such line is a fill
-   loop of a few thousand iterations, not hundreds of millions - not a freeze, but with enough of them
-   in one frame (a long route or outline drawn across a wide area) it is a severe, silent
-   frame-time hit that reads as "FPS drops to 1 whenever that overlay is on screen."
+1. `MapScreen#projectToScreen` clamps `screenX`/`screenY` to `±1.0E6` before rounding to `int` for points
+   (markers, labels). `Math.round(double)` returns a `long`; narrowing an unclamped astronomical value to
+   `int` silently wraps around instead of clamping, producing a coordinate that can drive a per-pixel fill
+   loop into hundreds of millions of iterations - a full render-thread freeze, not a crash.
+2. Lines never go through the clamped point projection: `draw3DLine` clips the segment against the near
+   plane in world space, projects both ends with `MapProjection.projectExact` (unclamped doubles) and
+   `clipLineToViewport` clips them in double precision before anything is rounded. Clamping each end
+   separately bent the line (x and y clamped independently change its direction), and a clamped end could
+   streak across the whole screen; clipping the exact segment keeps both the direction and the length
+   bounded by the viewport.
 
-Any new screen-space overlay must reuse `projectToScreen`/`clipLineToViewport`, not reimplement
-projection or clipping math, and must not remove either guard. A route overlay (since removed) is
+Any new screen-space overlay must reuse `projectToScreen` for points and `draw3DLine`/`drawSegment` for lines,
+not reimplement projection or clipping math, and must not remove either guard. A route overlay (since removed) is
 what first surfaced both, because it drew points thousands of blocks from the player - territory
 outlines and player markers stay much closer together and rarely hit the edge case.
 

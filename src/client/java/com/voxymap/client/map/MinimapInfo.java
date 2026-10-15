@@ -25,6 +25,10 @@ public final class MinimapInfo {
     }
 
     private static Level cachedLevel;
+
+    static void forgetLevel() {
+        cachedLevel = null;
+    }
     private static long cachedTick = Long.MIN_VALUE;
     private static BlockPos cachedPos;
     private static Direction cachedFacing;

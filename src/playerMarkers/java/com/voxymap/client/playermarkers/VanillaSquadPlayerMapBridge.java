@@ -23,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
@@ -31,6 +32,7 @@ public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.So
     private static final List<String> MAP_IDS = List.of("build", "farm", "art");
     private static final long DEFAULT_INTERVAL_SECONDS = 15L;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
+    private static final long RESPONSE_TIMEOUT_SECONDS = 30;
     private static final int MAX_RESPONSE_CHARS = 2_000_000;
     private static final int MAX_PLAYERS = 2_048;
     private static final int MAX_NAME_LENGTH = 64;
@@ -83,6 +85,7 @@ public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.So
         String configuredMapId = VoxyMapSettings.vanillaSquadMap(context == null ? null : context.voxyWorldId()).mapId();
         if (configuredMapId != null) {
             activeMapId = configuredMapId;
+            autoResolved = false;
             if (VoxyMapSettings.vanillaSquadPlayersActive()) {
                 fetchIfNeeded(configuredMapId, context.generation());
             }
@@ -118,6 +121,7 @@ public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.So
                 .build();
         CLIENT.sendAsync(request, HttpResponse.BodyHandlers.limiting(
                         HttpResponse.BodyHandlers.ofString(), MAX_RESPONSE_CHARS))
+                .orTimeout(RESPONSE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .whenComplete((response, throwable) -> {
                     try {
                         if (generation != worldGeneration) {
@@ -156,6 +160,7 @@ public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.So
                 : VoxyMapSettings.vanillaSquadMap(context.voxyWorldId()).mapId();
         if (configuredMapId != null) {
             activeMapId = configuredMapId;
+            autoResolved = false;
             return;
         }
         if (context == null || context.generation() != worldGeneration
@@ -185,6 +190,7 @@ public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.So
         double bestDistanceSquared = Double.POSITIVE_INFINITY;
         double secondDistanceSquared = Double.POSITIVE_INFINITY;
         for (String mapId : MAP_IDS) {
+            double mapBestSquared = Double.POSITIVE_INFINITY;
             for (RemotePlayer player : playersByMap.getOrDefault(mapId, List.of())) {
                 Observer matchingObserver = matchingObserver(player, uuid, normalizedName, playerX, playerZ, observers);
                 if (!world.equals(player.world()) || matchingObserver == null) {
@@ -193,16 +199,16 @@ public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.So
                 double dx = player.x() - matchingObserver.x();
                 double dz = player.z() - matchingObserver.z();
                 double distanceSquared = dx * dx + dz * dz;
-                if (distanceSquared > 512.0 * 512.0) {
-                    continue;
+                if (distanceSquared <= 512.0 * 512.0) {
+                    mapBestSquared = Math.min(mapBestSquared, distanceSquared);
                 }
-                if (distanceSquared < bestDistanceSquared) {
-                    secondDistanceSquared = bestDistanceSquared;
-                    bestDistanceSquared = distanceSquared;
-                    bestMap = mapId;
-                } else if (distanceSquared < secondDistanceSquared) {
-                    secondDistanceSquared = distanceSquared;
-                }
+            }
+            if (mapBestSquared < bestDistanceSquared) {
+                secondDistanceSquared = bestDistanceSquared;
+                bestDistanceSquared = mapBestSquared;
+                bestMap = mapId;
+            } else if (mapBestSquared < secondDistanceSquared) {
+                secondDistanceSquared = mapBestSquared;
             }
         }
 
@@ -285,6 +291,11 @@ public final class VanillaSquadPlayerMapBridge implements RemotePlayerMarkers.So
     public List<RemotePlayer> playersInDimension(String dimensionId) {
         String mapId = activeMapId;
         if (dimensionId == null || mapId == null) {
+            return List.of();
+        }
+        SelectionContext context = selectionContext;
+        boolean configured = context != null && VoxyMapSettings.vanillaSquadMap(context.voxyWorldId()).mapId() != null;
+        if (!autoResolved && !configured) {
             return List.of();
         }
         String world = dimensionId.replace(':', '_');

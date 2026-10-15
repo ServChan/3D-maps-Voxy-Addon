@@ -1,6 +1,7 @@
 package com.voxymap.client.map;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.NeutralMob;
@@ -19,9 +20,22 @@ public final class MobMarkerCache {
     private static final int MAX_MARKERS = 150;
     private static final double MAX_RANGE_BLOCKS = 128.0;
 
-    public record MobSnapshot(double x, double y, double z, RadarCategory category, MobHeadIcons.Face face) {
+    public record MobSnapshot(double x, double y, double z, RadarCategory category, MobHeadIcons.Face face,
+                              Entity source) {
         public MobSnapshot(double x, double y, double z, RadarCategory category) {
-            this(x, y, z, category, null);
+            this(x, y, z, category, null, null);
+        }
+
+        public MobSnapshot(double x, double y, double z, RadarCategory category, MobHeadIcons.Face face) {
+            this(x, y, z, category, face, null);
+        }
+
+        public double xAt(float partialTick) {
+            return source == null ? x : Mth.lerp(partialTick, source.xo, source.getX());
+        }
+
+        public double zAt(float partialTick) {
+            return source == null ? z : Mth.lerp(partialTick, source.zo, source.getZ());
         }
     }
 
@@ -51,10 +65,10 @@ public final class MobMarkerCache {
         Map<MobSnapshot, Mob> sources = new IdentityHashMap<>();
         for (Entity entity : minecraft.level.entitiesForRendering()) {
             RadarCategory category = categoryOf(entity);
-            if (category == null || !shown.contains(category)) {
+            if (category == null || !shown.contains(category) || entity.isInvisibleTo(minecraft.player)) {
                 continue;
             }
-            MobSnapshot candidate = new MobSnapshot(entity.getX(), entity.getY(), entity.getZ(), category);
+            MobSnapshot candidate = new MobSnapshot(entity.getX(), entity.getY(), entity.getZ(), category, null, entity);
             candidates.add(candidate);
             if (entity instanceof Mob mob) {
                 sources.put(candidate, mob);
@@ -69,7 +83,7 @@ public final class MobMarkerCache {
         for (MobSnapshot mob : mobs) {
             Mob source = sources.get(mob);
             MobHeadIcons.Face face = source == null ? null : MobHeadIcons.faceOf(minecraft, source);
-            result.add(new MobSnapshot(mob.x(), mob.y(), mob.z(), mob.category(), face));
+            result.add(new MobSnapshot(mob.x(), mob.y(), mob.z(), mob.category(), face, mob.source()));
         }
         return List.copyOf(result);
     }

@@ -1,6 +1,8 @@
 package com.voxymap.client.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.voxymap.client.gui.ui.UiDraw;
+import com.voxymap.client.gui.ui.UiTheme;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
@@ -11,7 +13,6 @@ final class MapContextMenu {
     private static final int ROW_H = 18;
     private static final int HEADER_H = 16;
     private static final int PAD_X = 8;
-    private static final int ACCENT = 0xFF3BA4FF;
 
     record Item(Component label, boolean enabled, Runnable action) {
     }
@@ -59,18 +60,20 @@ final class MapContextMenu {
             highlighted = hovered;
             keyboardHighlight = false;
         }
-        g.fill(x, y, x + w, y + h, 0xF00D141F);
-        g.outline(x, y, w, h, ACCENT);
-        g.fill(x, y, x + 2, y + h, ACCENT);
-        g.text(font, header, x + PAD_X, y + 5, 0xFF7894AA);
+        UiDraw.panel(g, x, y, w, h, UiTheme.SURFACE_RAISED);
+        UiDraw.outline(g, x, y, w, h, UiTheme.BORDER_STRONG);
+        UiDraw.text(g, font, header.getString(), x + PAD_X, y + 5, w - PAD_X * 2, UiTheme.TEXT_MUTED);
+        UiDraw.divider(g, x + 4, y + HEADER_H - 1, w - 8);
         for (int i = 0; i < items.size(); i++) {
             Item item = items.get(i);
             int rowY = y + HEADER_H + i * ROW_H;
             if (i == highlighted && item.enabled()) {
-                g.fill(x + 2, rowY, x + w - 1, rowY + ROW_H, 0xFF17334A);
-                g.fill(x + 2, rowY, x + 4, rowY + ROW_H, 0xFFFFC94D);
+                UiDraw.panel(g, x + 2, rowY, w - 4, ROW_H, UiTheme.CONTROL_SELECTED);
+                if (keyboardHighlight) {
+                    UiDraw.outline(g, x + 2, rowY, w - 4, ROW_H, UiTheme.FOCUS);
+                }
             }
-            g.text(font, item.label(), x + PAD_X, rowY + 5, item.enabled() ? 0xFFE9F2FF : 0xFF66717A);
+            g.text(font, item.label(), x + PAD_X, rowY + 5, item.enabled() ? UiTheme.TEXT : UiTheme.TEXT_DISABLED);
         }
     }
 
@@ -103,7 +106,7 @@ final class MapContextMenu {
 
     private void moveHighlight(int step) {
         if (items.isEmpty()) return;
-        int index = highlighted;
+        int index = highlighted >= 0 ? highlighted : step > 0 ? -1 : 0;
         for (int tries = 0; tries < items.size(); tries++) {
             index = Math.floorMod(index + step, items.size());
             if (items.get(index).enabled()) {

@@ -145,6 +145,12 @@ class ShaderPackFogPatcherTest {
                 "vec3 get_fog_main(vec3 ScreenPos, vec3 Color, float Dither, bool IsDH) {\n    return Color;\n}\n");
 
         assertEquals("if (voxymapMapView > 0.5) return Color;", firstStatement(patched, "vec3 get_fog_main("));
+
+        String mellow34 = ShaderPackFogPatcher.patch("/global/atmosphere/fog.glsl",
+                "vec3 get_fog_main(vec3 ScreenPos, vec3 PlayerPos, vec3 Color, float Depth, vec3 SkyColor, float VdotL,"
+                        + " float Dither, bool IsDH) {\n    float Dist = length(PlayerPos);\n    return Color;\n}\n");
+
+        assertEquals("if (voxymapMapView > 0.5) return Color;", firstStatement(mellow34, "vec3 get_fog_main("));
     }
 
     @Test

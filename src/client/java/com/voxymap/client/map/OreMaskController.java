@@ -41,6 +41,11 @@ public final class OreMaskController {
         return MODEL_SERVICE_FIELD != null && !accessFailureLogged;
     }
 
+    static void forgetModels() {
+        lastModelFactory = null;
+        lastWorldId = null;
+    }
+
     public static void tick(Minecraft minecraft) {
         if (minecraft == null || minecraft.level == null || MODEL_SERVICE_FIELD == null || !GraphicsBackend.openGl()) {
             return;

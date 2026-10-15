@@ -65,6 +65,7 @@ public final class WaypointListScreen extends Screen {
     private final String worldId;
     private final List<Row> rows = new ArrayList<>();
     private EditBox searchBox;
+    private Button sortButton;
     private String query = "";
     private String pendingDeleteId;
     private Component status;
@@ -105,7 +106,7 @@ public final class WaypointListScreen extends Screen {
                 rebuildRowsKeepingSearchFocus();
             }
         });
-        addRenderableWidget(Button.builder(sortLabel(), pressed -> {
+        sortButton = addRenderableWidget(Button.builder(sortLabel(), pressed -> {
             sort = sort == Sort.DISTANCE ? Sort.NAME : Sort.DISTANCE;
             rebuildRowsKeepingSearchFocus();
         }).bounds(contentLeft + searchW + 4, toolbarY, sortW, CONTROL_HEIGHT).build());
@@ -170,8 +171,17 @@ public final class WaypointListScreen extends Screen {
     }
 
     private void rebuildRowsKeepingSearchFocus() {
+        boolean sortFocused = sortButton != null && getFocused() == sortButton;
+        int cursor = searchBox == null ? -1 : searchBox.getCursorPosition();
         rebuildWidgets();
+        if (sortFocused) {
+            setFocused(sortButton);
+            return;
+        }
         setFocused(searchBox);
+        if (cursor >= 0) {
+            searchBox.setCursorPosition(Math.min(cursor, searchBox.getValue().length()));
+        }
     }
 
     private List<Listed> filtered(List<Listed> waypoints) {
@@ -428,6 +438,16 @@ public final class WaypointListScreen extends Screen {
         if (key == InputConstants.KEY_PAGEUP) {
             scrollTo(scroll - viewportHeight());
             return true;
+        }
+        if (key == InputConstants.KEY_TAB) {
+            for (Row row : rows) {
+                for (Button button : List.of(row.edit(), row.share(), row.visibility(), row.delete())) {
+                    button.visible = true;
+                }
+            }
+            boolean handled = super.keyPressed(event);
+            layoutRows();
+            return handled;
         }
         return super.keyPressed(event);
     }

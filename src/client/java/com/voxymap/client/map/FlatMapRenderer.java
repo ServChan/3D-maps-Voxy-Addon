@@ -146,7 +146,8 @@ public final class FlatMapRenderer {
     private static void drawPlayers(GuiGraphicsExtractor g, Minecraft minecraft, View view, Player self) {
         boolean heads = MinimapHeads.shown(minecraft);
         for (Player other : minecraft.level.players()) {
-            if (other == self || !ServerRules.radarAllowed()) {
+            if (other == self || !ServerRules.radarAllowed() || !VoxyMapSettings.radarShows(RadarCategory.PLAYERS)
+                    || VoxyMapSettings.playerHidden(other.getUUID()) || other.isInvisibleTo(self)) {
                 continue;
             }
             double sx = view.screenX(other.getX());

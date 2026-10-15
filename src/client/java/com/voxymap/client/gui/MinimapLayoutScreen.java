@@ -1,25 +1,30 @@
 package com.voxymap.client.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.voxymap.client.gui.ui.UiButton;
+import com.voxymap.client.gui.ui.UiDraw;
+import com.voxymap.client.gui.ui.UiIcons;
+import com.voxymap.client.gui.ui.UiTheme;
 import com.voxymap.client.map.MinimapPlacement;
 import com.voxymap.client.map.MinimapRenderer;
 import com.voxymap.client.map.VoxyMapSettings;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 public final class MinimapLayoutScreen extends Screen {
-    private static final int ACCENT = 0xFF7DEBFF;
-    private static final int BUTTON_WIDTH = 100;
-    private static final int BUTTON_HEIGHT = 20;
+    private static final int BUTTON_WIDTH = 104;
+    private static final int CARD_WIDTH = 240;
+    private static final int CARD_HEIGHT = 74;
 
     private final Screen parent;
     private boolean dragging;
     private double grabOffsetX;
     private double grabOffsetY;
+    private int guideX = MinimapPlacement.Snap.NONE;
+    private int guideY = MinimapPlacement.Snap.NONE;
 
     public MinimapLayoutScreen(Screen parent) {
         super(Component.translatable("screen.voxymap.layout.title"));
@@ -28,13 +33,13 @@ public final class MinimapLayoutScreen extends Screen {
 
     @Override
     protected void init() {
-        int centerX = width / 2;
-        int y = height / 2 + 20;
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), pressed -> onClose())
-                .bounds(centerX - BUTTON_WIDTH - 4, y, BUTTON_WIDTH, BUTTON_HEIGHT).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.voxymap.layout.reset"), pressed ->
-                        VoxyMapSettings.resetMinimapPosition())
-                .bounds(centerX + 4, y, BUTTON_WIDTH, BUTTON_HEIGHT).build());
+        int cardY = (height - CARD_HEIGHT) / 2;
+        int buttonY = cardY + CARD_HEIGHT - UiTheme.CONTROL_HEIGHT - UiTheme.SPACE_M;
+        addRenderableWidget(new UiButton(width / 2 - BUTTON_WIDTH - UiTheme.SPACE_S / 2, buttonY, BUTTON_WIDTH,
+                UiTheme.CONTROL_HEIGHT, Component.translatable("gui.done"), UiButton.Variant.PRIMARY, button -> onClose()));
+        addRenderableWidget(new UiButton(width / 2 + UiTheme.SPACE_S / 2, buttonY, BUTTON_WIDTH, UiTheme.CONTROL_HEIGHT,
+                Component.translatable("screen.voxymap.layout.reset"), UiButton.Variant.SECONDARY,
+                button -> VoxyMapSettings.resetMinimapPosition()).icon(UiIcons.Icon.RESET));
     }
 
     private int mapSize() {
@@ -52,22 +57,47 @@ public final class MinimapLayoutScreen extends Screen {
 
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float tickDelta) {
-        graphics.fill(0, 0, width, height, 0x40000000);
+        graphics.fill(0, 0, width, height, 0x50000000);
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float tickDelta) {
         MinimapPlacement.Placement placement = placement();
         int size = mapSize();
-        int x = placement.x() - 3;
-        int y = placement.y() - 3;
-        int outer = size + 6;
+        if (dragging) {
+            if (guideX != MinimapPlacement.Snap.NONE) {
+                drawDashed(graphics, guideX, 0, guideX, height);
+            }
+            if (guideY != MinimapPlacement.Snap.NONE) {
+                drawDashed(graphics, 0, guideY, width, guideY);
+            }
+        }
         boolean hot = dragging || inside(mouseX, mouseY, placement, size);
-        graphics.outline(x, y, outer, outer, hot ? 0xFFFFFFFF : ACCENT);
-        graphics.centeredText(font, title, width / 2, height / 2 - 26, 0xFFFFFFFF);
-        graphics.centeredText(font, Component.translatable("screen.voxymap.layout.hint"), width / 2, height / 2 - 12,
-                0xFFB8C7D9);
+        UiDraw.outline(graphics, placement.x() - 4, placement.y() - 4, size + 8, size + 8,
+                hot ? UiTheme.FOCUS : UiTheme.ACCENT_BRIGHT);
+        int cardX = (width - CARD_WIDTH) / 2;
+        int cardY = (height - CARD_HEIGHT) / 2;
+        UiDraw.panel(graphics, cardX, cardY, CARD_WIDTH, CARD_HEIGHT, UiTheme.SURFACE_RAISED);
+        UiDraw.outline(graphics, cardX, cardY, CARD_WIDTH, CARD_HEIGHT, UiTheme.BORDER_STRONG);
+        UiDraw.centeredText(graphics, font, title.getString(), width / 2, cardY + 9, CARD_WIDTH - 16, UiTheme.TEXT);
+        UiDraw.centeredText(graphics, font, Component.translatable("screen.voxymap.layout.hint").getString(), width / 2,
+                cardY + 22, CARD_WIDTH - 16, UiTheme.TEXT_SECONDARY);
+        UiDraw.centeredText(graphics, font, Component.translatable("screen.voxymap.layout.snap").getString(), width / 2,
+                cardY + 33, CARD_WIDTH - 16, UiTheme.TEXT_MUTED);
         super.extractRenderState(graphics, mouseX, mouseY, tickDelta);
+    }
+
+    private static void drawDashed(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2) {
+        boolean vertical = x1 == x2;
+        int length = vertical ? y2 - y1 : x2 - x1;
+        for (int step = 0; step < length; step += 8) {
+            int end = Math.min(length, step + 4);
+            if (vertical) {
+                graphics.fill(x1, y1 + step, x1 + 1, y1 + end, UiTheme.ACCENT_BRIGHT);
+            } else {
+                graphics.fill(x1 + step, y1, x1 + end, y1 + 1, UiTheme.ACCENT_BRIGHT);
+            }
+        }
     }
 
     private static boolean inside(double mouseX, double mouseY, MinimapPlacement.Placement placement, int size) {
@@ -93,7 +123,20 @@ public final class MinimapLayoutScreen extends Screen {
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double deltaX, double deltaY) {
         if (dragging) {
-            moveTo(event.x() - grabOffsetX, event.y() - grabOffsetY, false);
+            int size = mapSize();
+            int x = (int) Math.round(event.x() - grabOffsetX);
+            int y = (int) Math.round(event.y() - grabOffsetY);
+            guideX = MinimapPlacement.Snap.NONE;
+            guideY = MinimapPlacement.Snap.NONE;
+            if (!event.hasAltDown()) {
+                MinimapPlacement.Snap snapX = MinimapPlacement.snap(x, width, size);
+                MinimapPlacement.Snap snapY = MinimapPlacement.snap(y, height, size);
+                x = snapX.position();
+                y = snapY.position();
+                guideX = snapX.guide();
+                guideY = snapY.guide();
+            }
+            moveTo(x, y, false);
             return true;
         }
         return super.mouseDragged(event, deltaX, deltaY);

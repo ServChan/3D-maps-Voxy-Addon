@@ -24,6 +24,11 @@ public final class WaypointManager {
     private static final Path TEMP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
 
     private static boolean loaded = false;
+    private static final int REMEMBERED_PREFS = 32;
+    private static final Map<String, RemovedPrefs> REMOVED_PREFS = new java.util.LinkedHashMap<>();
+
+    private record RemovedPrefs(WaypointDisplay display, String symbol) {
+    }
     private static final Map<String, List<Waypoint>> byWorld = new ConcurrentHashMap<>();
     private static final Map<String, List<Waypoint>> temporaryByWorld = new ConcurrentHashMap<>();
     private static final String TEMPORARY_PREFIX = "temp-";
@@ -156,7 +161,10 @@ public final class WaypointManager {
         }
         if (!arrived.isEmpty()) {
             temporary.removeAll(arrived);
-            arrived.forEach(waypoint -> armedTemporaryIds.remove(waypoint.id()));
+            arrived.forEach(waypoint -> {
+                armedTemporaryIds.remove(waypoint.id());
+                WaypointPrefs.forget(waypoint.id());
+            });
             localVersion++;
         }
         return arrived;
@@ -166,9 +174,9 @@ public final class WaypointManager {
         return waypoint != null && (!waypoint.shared() || canShare(worldId));
     }
 
-    public static void update(String worldId, String id, String name, double x, double y, double z, int color) {
+    public static boolean update(String worldId, String id, String name, double x, double y, double z, int color) {
         load();
-        if (!WaypointCodec.validWorldId(worldId) || id == null || name == null || name.isBlank()) return;
+        if (!WaypointCodec.validWorldId(worldId) || id == null || name == null || name.isBlank()) return false;
 
         for (Map<String, List<Waypoint>> store : List.of(byWorld, temporaryByWorld)) {
             List<Waypoint> list = store.get(worldId);
@@ -181,21 +189,22 @@ public final class WaypointManager {
                     if (store == byWorld) {
                         save();
                     }
-                    return;
+                    return true;
                 }
             }
         }
 
         String address = WaypointSyncSettings.address(worldId);
-        if (address == null) return;
+        if (address == null) return false;
         String password = WaypointSyncSettings.password(worldId);
-        if (password == null) return;
+        if (password == null) return false;
         for (Waypoint current : WaypointSyncClient.cached(worldId, address)) {
             if (current.id().equals(id)) {
                 WaypointSyncClient.add(worldId, address, password, new Waypoint(current.id(), name.trim(), x, y, z, color, true));
-                return;
+                return true;
             }
         }
+        return false;
     }
 
     public static int suggestedColor(String worldId) {
@@ -211,10 +220,15 @@ public final class WaypointManager {
     public static void remove(String worldId, String id) {
         load();
         if (!WaypointCodec.validWorldId(worldId) || id == null) return;
+        REMOVED_PREFS.put(id, new RemovedPrefs(WaypointPrefs.display(id), WaypointPrefs.customSymbol(id)));
+        while (REMOVED_PREFS.size() > REMEMBERED_PREFS) {
+            REMOVED_PREFS.remove(REMOVED_PREFS.keySet().iterator().next());
+        }
         WaypointPrefs.forget(id);
 
         List<Waypoint> temporary = temporaryByWorld.get(worldId);
         if (temporary != null && temporary.removeIf(w -> w.id().equals(id))) {
+            armedTemporaryIds.remove(id);
             localVersion++;
             return;
         }
@@ -237,6 +251,11 @@ public final class WaypointManager {
         load();
         if (!WaypointCodec.validWorldId(worldId) || waypoint == null) return false;
         if (forWorld(worldId).stream().anyMatch(existing -> existing.id().equals(waypoint.id()))) return true;
+        RemovedPrefs prefs = REMOVED_PREFS.remove(waypoint.id());
+        if (prefs != null) {
+            WaypointPrefs.setDisplay(waypoint.id(), prefs.display());
+            WaypointPrefs.setSymbol(waypoint.id(), prefs.symbol());
+        }
         if (waypoint.shared()) {
             String address = WaypointSyncSettings.address(worldId);
             String password = address != null ? WaypointSyncSettings.password(worldId) : null;
@@ -259,7 +278,7 @@ public final class WaypointManager {
         if (loaded) return;
         loaded = true;
 
-        Properties properties = readProperties(CONFIG_PATH);
+        Properties properties = AtomicPropertiesWriter.looksTruncated(CONFIG_PATH) ? null : readProperties(CONFIG_PATH);
         if (properties == null) {
             properties = readProperties(BACKUP_PATH);
             if (properties != null) {

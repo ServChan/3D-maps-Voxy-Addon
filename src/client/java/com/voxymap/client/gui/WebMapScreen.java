@@ -1,6 +1,7 @@
 package com.voxymap.client.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.compat.MinecraftCompat;
 import com.voxymap.client.integration.VanillaSquadWebMap;
 import com.voxymap.client.map.FlatMapRenderer;
@@ -352,7 +353,7 @@ public final class WebMapScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int keyCode = event.key();
-        if (keyCode == InputConstants.KEY_ESCAPE || keyCode == InputConstants.KEY_M) {
+        if (keyCode == InputConstants.KEY_ESCAPE || VoxyMapClient.isOpenMapKey(event)) {
             onClose();
             return true;
         }

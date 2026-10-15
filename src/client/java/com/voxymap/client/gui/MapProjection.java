@@ -14,6 +14,21 @@ final class MapProjection {
                          double upX, double upY, double upZ,
                          double tanX, double tanY,
                          int viewportWidth, int viewportHeight) {
+        double[] exact = projectExact(worldX, worldY, worldZ, cameraX, cameraY, cameraZ, forwardX, forwardY, forwardZ,
+                rightX, rightZ, upX, upY, upZ, tanX, tanY, viewportWidth, viewportHeight);
+        if (exact == null) return null;
+        double screenX = clamp(exact[0], -MAX_PROJECTED_COORDINATE, MAX_PROJECTED_COORDINATE);
+        double screenY = clamp(exact[1], -MAX_PROJECTED_COORDINATE, MAX_PROJECTED_COORDINATE);
+        return new Point((int) Math.round(screenX), (int) Math.round(screenY));
+    }
+
+    static double[] projectExact(double worldX, double worldY, double worldZ,
+                                 double cameraX, double cameraY, double cameraZ,
+                                 double forwardX, double forwardY, double forwardZ,
+                                 double rightX, double rightZ,
+                                 double upX, double upY, double upZ,
+                                 double tanX, double tanY,
+                                 int viewportWidth, int viewportHeight) {
         double relativeX = worldX - cameraX;
         double relativeY = worldY - cameraY;
         double relativeZ = worldZ - cameraZ;
@@ -25,10 +40,7 @@ final class MapProjection {
         double screenX = viewportWidth * 0.5 * (1.0 - horizontal / (depth * tanX));
         double screenY = viewportHeight * 0.5 * (1.0 - vertical / (depth * tanY));
         if (!Double.isFinite(screenX) || !Double.isFinite(screenY)) return null;
-
-        screenX = clamp(screenX, -MAX_PROJECTED_COORDINATE, MAX_PROJECTED_COORDINATE);
-        screenY = clamp(screenY, -MAX_PROJECTED_COORDINATE, MAX_PROJECTED_COORDINATE);
-        return new Point((int) Math.round(screenX), (int) Math.round(screenY));
+        return new double[]{screenX, screenY};
     }
 
     static double[] clipLine(double x1, double y1, double x2, double y2,

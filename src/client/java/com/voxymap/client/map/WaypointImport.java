@@ -96,9 +96,13 @@ public final class WaypointImport {
                 if (worldFolder == null) {
                     continue;
                 }
-                List<Candidate> waypoints = parseXaero(readLines(file));
-                found.add(new Found(Source.XAERO, worldFolder.getFileName().toString(), xaeroSetName(file),
-                        xaeroDimension(dimensionFolder.getFileName().toString()), waypoints));
+                try {
+                    List<Candidate> waypoints = parseXaero(readLines(file));
+                    found.add(new Found(Source.XAERO, worldFolder.getFileName().toString(), xaeroSetName(file),
+                            xaeroDimension(dimensionFolder.getFileName().toString()), waypoints));
+                } catch (IOException | RuntimeException exception) {
+                    VoxyMapClient.LOGGER.warn("Could not read Xaero waypoints from {}", file, exception);
+                }
             }
         } catch (IOException | RuntimeException exception) {
             VoxyMapClient.LOGGER.warn("Could not scan Xaero waypoints in {}", root, exception);

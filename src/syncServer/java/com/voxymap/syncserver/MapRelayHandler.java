@@ -6,7 +6,9 @@ import com.sun.net.httpserver.HttpHandler;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.ArrayDeque;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -34,8 +36,10 @@ final class MapRelayHandler implements HttpHandler {
     private static final long MAX_ESTIMATED_BYTES = 1L << 40;
     private static final int CLAIM_ATTEMPTS_PER_MINUTE = 120;
     private static final int MAX_PENDING_SENDERS = 4096;
+    private static final int MAX_PENDING_SENDERS_PER_ADDRESS = 4;
 
     private final ConcurrentHashMap<String, PendingSender> pending = new ConcurrentHashMap<>();
+    private final Map<String, ArrayDeque<PendingSender>> waitingByAddress = new HashMap<>();
     private final RelayClaimRateLimiter claimRateLimiter =
             new RelayClaimRateLimiter(CLAIM_ATTEMPTS_PER_MINUTE, 1, TimeUnit.MINUTES);
     private final ScheduledExecutorService reaper = Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -71,6 +75,8 @@ final class MapRelayHandler implements HttpHandler {
 
         final AtomicBoolean dataFetchStarted = new AtomicBoolean(false);
         final AtomicBoolean dataUploadStarted = new AtomicBoolean(false);
+        final CountDownLatch fetchStarted = new CountDownLatch(1);
+        volatile boolean cancelled = false;
 
         final String senderToken = generateToken();
         final String receiverToken = generateToken();
@@ -144,7 +150,37 @@ final class MapRelayHandler implements HttpHandler {
     }
 
     private void handleSendWait(HttpExchange exchange, String code) throws IOException {
+        String address = exchange.getRemoteAddress().getAddress().getHostAddress();
         PendingSender sender = new PendingSender();
+        PendingSender evicted = null;
+        synchronized (waitingByAddress) {
+            ArrayDeque<PendingSender> waiting =
+                    waitingByAddress.computeIfAbsent(address, ignored -> new ArrayDeque<>());
+            if (waiting.size() >= MAX_PENDING_SENDERS_PER_ADDRESS) {
+                evicted = waiting.pollFirst();
+            }
+            waiting.addLast(sender);
+        }
+        if (evicted != null) {
+            evicted.cancelled = true;
+            evicted.claimed.countDown();
+        }
+        try {
+            waitForReceiver(exchange, code, sender);
+        } finally {
+            synchronized (waitingByAddress) {
+                ArrayDeque<PendingSender> waiting = waitingByAddress.get(address);
+                if (waiting != null) {
+                    waiting.remove(sender);
+                    if (waiting.isEmpty()) {
+                        waitingByAddress.remove(address);
+                    }
+                }
+            }
+        }
+    }
+
+    private void waitForReceiver(HttpExchange exchange, String code, PendingSender sender) throws IOException {
         sender.estimatedBytes = parseEstimatedBytes(exchange);
         if (sender.estimatedBytes < 0) {
             respond(exchange, 400);
@@ -161,6 +197,11 @@ final class MapRelayHandler implements HttpHandler {
         if (!await(sender.claimed, SENDER_WAIT_TIMEOUT_SECONDS)) {
             pending.remove(code, sender);
             respond(exchange, 408);
+            return;
+        }
+        if (sender.cancelled && !sender.claimedFlag.get()) {
+            pending.remove(code, sender);
+            respond(exchange, 410);
             return;
         }
 
@@ -265,8 +306,13 @@ final class MapRelayHandler implements HttpHandler {
         try {
             sender.dataExchange = exchange;
             sender.dataReady.countDown();
-
+            if (!await(sender.fetchStarted, DATA_CONNECT_TIMEOUT_SECONDS)) {
+                pending.remove(code, sender);
+                respond(exchange, 502);
+                return;
+            }
             await(sender.finished, TRANSFER_TIMEOUT_SECONDS);
+            pending.remove(code, sender);
             respond(exchange, sender.transferSucceeded ? 200 : 502);
         } finally {
             pending.remove(code, sender);
@@ -291,6 +337,7 @@ final class MapRelayHandler implements HttpHandler {
             respond(exchange, 409);
             return;
         }
+        sender.fetchStarted.countDown();
         try {
             if (!await(sender.dataReady, DATA_CONNECT_TIMEOUT_SECONDS)) {
 

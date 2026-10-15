@@ -48,6 +48,16 @@ sourceSets {
     }
 }
 
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "voxymap_gametest"
+        enableGameTests = false
+        enableClientGameTests = true
+        eula = false
+    }
+}
+
 loom {
     mods {
         "voxymap" {
@@ -79,6 +89,23 @@ dependencies {
     } else {
         compileOnly("com.terraformersmc:modmenu:${project.modmenu_version}") { transitive = false }
     }
+    if (providers.gradleProperty("devClient").isPresent()) {
+        localRuntime "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+        localRuntime(localVoxy.isFile() ? files(localVoxy) : "maven.modrinth:voxy:${project.voxy_version}")
+        localRuntime("maven.modrinth:sodium:${project.sodium_version}") { transitive = false }
+        def clientBridge = file("../ClientBridge/build/libs/client-bridge-1.0.0.jar")
+        if (clientBridge.isFile()) {
+            localRuntime files(clientBridge)
+        }
+    }
+    gametestImplementation sourceSets.client.output
+    gametestImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    if (localVoxy.isFile()) {
+        gametestRuntimeOnly files(localVoxy)
+    } else {
+        gametestRuntimeOnly("maven.modrinth:voxy:${project.voxy_version}") { transitive = false }
+    }
+    gametestRuntimeOnly("maven.modrinth:sodium:${project.sodium_version}") { transitive = false }
     testImplementation sourceSets.client.output
     testImplementation sourceSets.playerMarkers.output
     testImplementation sourceSets.syncServer.output
@@ -167,6 +194,85 @@ def playerMarkersJar = tasks.register("playerMarkersJar", Zip) {
 
 tasks.named("assemble") {
     dependsOn playerMarkersJar
+}
+
+def bundledSodiumRange = project.findProperty("bundled_sodium_range") ?: ">=0.9.2- <0.10"
+
+def bundledVoxyModJson = tasks.register("bundledVoxyModJson") {
+    group = "build"
+    description = "Writes Voxy's fabric.mod.json with a wider Sodium range for the personal bundled jar."
+    def target = layout.buildDirectory.file("bundled-voxy-metadata/fabric.mod.json")
+    def sodiumRange = bundledSodiumRange
+    inputs.file(localVoxy)
+    inputs.property("sodiumRange", sodiumRange)
+    outputs.file(target)
+    onlyIf { localVoxy.isFile() }
+    doLast {
+        def text = zipTree(localVoxy).matching { include "fabric.mod.json" }.singleFile.getText("UTF-8")
+        def metadata = new groovy.json.JsonSlurper().parseText(text)
+        if (metadata.depends?.sodium != null) {
+            metadata.depends.sodium = sodiumRange
+        }
+        def file = target.get().asFile
+        file.parentFile.mkdirs()
+        file.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(metadata))
+    }
+}
+
+def bundledVoxyJar = tasks.register("bundledVoxyJar", Zip) {
+    group = "build"
+    description = "Repacks the local Voxy jar with the wider Sodium range for the personal bundled jar."
+    dependsOn bundledVoxyModJson
+    onlyIf { localVoxy.isFile() }
+    archiveFileName = localVoxy.name
+    destinationDirectory = layout.buildDirectory.dir("bundled-voxy")
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    from(zipTree(localVoxy)) {
+        exclude "fabric.mod.json"
+    }
+    from(layout.buildDirectory.dir("bundled-voxy-metadata"))
+}
+
+def bundledModJson = tasks.register("bundledModJson") {
+    group = "build"
+    description = "Writes fabric.mod.json for the personal jar with Voxy nested inside."
+    dependsOn tasks.named("processResources")
+    def source = layout.buildDirectory.file("resources/main/fabric.mod.json")
+    def target = layout.buildDirectory.file("bundled-metadata/fabric.mod.json")
+    def voxyName = localVoxy.name
+    inputs.file(source)
+    inputs.property("voxyName", voxyName)
+    outputs.file(target)
+    doLast {
+        def metadata = new groovy.json.JsonSlurper().parse(source.get().asFile)
+        metadata.jars = [[file: "META-INF/jars/" + voxyName]]
+        metadata.description = metadata.description + " Personal build with Voxy nested inside: Voxy is All Rights Reserved, do not share this jar."
+        def file = target.get().asFile
+        file.parentFile.mkdirs()
+        file.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(metadata))
+    }
+}
+
+tasks.register("bundledJar", Zip) {
+    group = "build"
+    description = "Builds a personal voxy-map jar with the local Voxy jar nested inside. Never publish it: Voxy is All Rights Reserved."
+    dependsOn tasks.named("jar"), bundledModJson, bundledVoxyJar
+    onlyIf { localVoxy.isFile() }
+    archiveBaseName = project.archives_base_name
+    archiveVersion = modVersion
+    archiveClassifier = "bundled"
+    archiveExtension = "jar"
+    destinationDirectory = tasks.named("jar", Jar).flatMap { it.destinationDirectory }
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    from(zipTree(tasks.named("jar", Jar).flatMap { it.archiveFile })) {
+        exclude "fabric.mod.json"
+    }
+    from(layout.buildDirectory.dir("bundled-metadata"))
+    from(bundledVoxyJar.flatMap { it.archiveFile }) {
+        into "META-INF/jars"
+    }
 }
 
 publishing {

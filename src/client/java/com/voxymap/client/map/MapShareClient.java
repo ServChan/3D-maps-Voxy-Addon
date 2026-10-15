@@ -37,7 +37,8 @@ import java.util.zip.GZIPOutputStream;
 public final class MapShareClient {
     private static final int MAGIC = 0x564D4150;
     private static final java.util.Set<String> REPORTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
-    private static final byte PROTOCOL_VERSION = 4;
+    private static final byte PROTOCOL_VERSION = 5;
+    private static final int FIRST_VERSION_WITH_DIMENSION = 5;
     private static final int FIRST_VERSION_WITH_END_MARKER = 4;
     private static final int END_OF_SECTIONS = Integer.MIN_VALUE;
     private static final byte MIN_SUPPORTED_PROTOCOL_VERSION = 2;
@@ -139,7 +140,7 @@ public final class MapShareClient {
         return startSharing(minecraft, serverAddress, null);
     }
 
-    public static String startSharing(Minecraft minecraft, String serverAddress, MapShareBounds bounds) {
+    public static synchronized String startSharing(Minecraft minecraft, String serverAddress, MapShareBounds bounds) {
         WorldIdentifier worldId = VoxySectionBridge.currentWorldIdentifier(minecraft);
         if (worldId == null) return null;
         if (sharingActive) {
@@ -160,7 +161,7 @@ public final class MapShareClient {
         return code;
     }
 
-    public static void stopSharing() {
+    public static synchronized void stopSharing() {
         sharingActive = false;
         shareStatus = ShareStatus.IDLE;
         shareCode = null;
@@ -192,16 +193,31 @@ public final class MapShareClient {
         return sharingActive && code.equals(shareCode);
     }
 
-    private static void shareLoop(WorldIdentifier worldId, MapShareBounds bounds, String baseUrl, String code) {
+    private static void shareLoop(WorldIdentifier worldId, MapShareBounds bounds, String baseUrl, String initialCode) {
+        String code = initialCode;
+        boolean[] owned = {false};
         while (isCurrentShare(code) && !Thread.currentThread().isInterrupted()) {
             shareStatus = ShareStatus.WAITING;
             try {
-                if (!sendOnce(worldId, bounds, baseUrl, code) && isCurrentShare(code)) {
+                if (!sendOnce(worldId, bounds, baseUrl, code, owned) && isCurrentShare(code)) {
                     sleepQuietly(SHARE_RETRY_DELAY_MILLIS);
                 }
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 break;
+            } catch (CodeTakenException exception) {
+                if (owned[0]) {
+                    sleepQuietly(SHARE_RETRY_DELAY_MILLIS);
+                    continue;
+                }
+                synchronized (MapShareClient.class) {
+                    if (!isCurrentShare(code)) {
+                        break;
+                    }
+                    String fresh = generateCode();
+                    shareCode = fresh;
+                    code = fresh;
+                }
             } catch (ShareRejectedException exception) {
                 if (isCurrentShare(code)) {
                     shareError = exception.getMessage();
@@ -233,7 +249,8 @@ public final class MapShareClient {
         }
     }
 
-    private static boolean sendOnce(WorldIdentifier worldId, MapShareBounds bounds, String baseUrl, String code) throws IOException, InterruptedException {
+    private static boolean sendOnce(WorldIdentifier worldId, MapShareBounds bounds, String baseUrl, String code,
+                                    boolean[] owned) throws IOException, InterruptedException {
         shareSectionsSentThisAttempt = 0;
         shareSectionsTotalThisAttempt = 0;
         shareEstimatedBytes = 0;
@@ -251,6 +268,10 @@ public final class MapShareClient {
                 .build();
         shareStatus = ShareStatus.WAITING;
         HttpResponse<Void> waitResponse = HTTP.send(waitRequest, HttpResponse.BodyHandlers.discarding());
+        if (waitResponse.statusCode() == 409) {
+            throw new CodeTakenException();
+        }
+        owned[0] = true;
         if (waitResponse.statusCode() == 408) {
             return true;
         }
@@ -352,9 +373,14 @@ public final class MapShareClient {
         return null;
     }
 
+    static String dimensionKey(WorldIdentifier worldId) {
+        return worldId == null || worldId.key == null ? "" : worldId.key.identifier().toString();
+    }
+
     private static void writeExport(DataOutputStream out, WorldIdentifier worldId, MapShareBounds bounds, String code) throws IOException {
         out.writeInt(MAGIC);
         out.writeByte(PROTOCOL_VERSION);
+        out.writeUTF(dimensionKey(worldId));
 
         List<VoxySectionBridge.MappingRow> mappings = VoxySectionBridge.exportMappings(worldId);
         out.writeInt(MapShareProtocolLimits.mappingCount(mappings.size()));
@@ -385,43 +411,37 @@ public final class MapShareClient {
         out.writeInt(total);
 
         int[] sent = {0};
-        IOException[] failure = new IOException[1];
-        VoxySectionBridge.forEachExportedSectionKey(worldId, bounds, sectionKey -> {
-            if (failure[0] != null || !isCurrentShare(code) || Thread.currentThread().isInterrupted()
-                    || sent[0] + 8 > total) {
-                return;
+        for (long sectionKey : VoxySectionBridge.exportedSectionKeys(worldId, bounds, total / 8 + 1)) {
+            if (!isCurrentShare(code) || Thread.currentThread().isInterrupted() || sent[0] + 8 > total) {
+                break;
             }
-            try {
-                long[] data = VoxySectionBridge.exportSectionData(worldId, sectionKey);
-                if (data == null) {
-                    return;
+            long[] data = VoxySectionBridge.exportSectionData(worldId, sectionKey);
+            if (data == null) {
+                if (VoxySectionBridge.liveEngine(worldId) == null) {
+                    throw new IOException("The Voxy world closed during the map share");
                 }
-                int wx = WorldEngine.getX(sectionKey);
-                int wy = WorldEngine.getY(sectionKey);
-                int wz = WorldEngine.getZ(sectionKey);
-                long[][] chunks = VoxySectionBridge.splitIntoChunkSections(data);
-                for (int sub = 0; sub < 8; sub++) {
-                    int chunkX = (wx << 1) | (sub & 1);
-                    int chunkZ = (wz << 1) | ((sub >> 1) & 1);
-                    int chunkY = (wy << 1) | ((sub >> 2) & 1);
-                    out.writeInt(chunkX);
-                    out.writeInt(chunkY);
-                    out.writeInt(chunkZ);
-                    for (long voxel : chunks[sub]) {
-                        out.writeLong(voxel);
-                    }
-                    sent[0]++;
-                    shareSectionsSentThisAttempt = sent[0];
-                    if (sent[0] % PROGRESS_LOG_INTERVAL == 0) {
-                        VoxyMapClient.LOGGER.debug("Map share {}: sent {} chunk sections", code, sent[0]);
-                    }
-                }
-            } catch (IOException exception) {
-                failure[0] = exception;
+                continue;
             }
-        });
-        if (failure[0] != null) {
-            throw failure[0];
+            int wx = WorldEngine.getX(sectionKey);
+            int wy = WorldEngine.getY(sectionKey);
+            int wz = WorldEngine.getZ(sectionKey);
+            long[][] chunks = VoxySectionBridge.splitIntoChunkSections(data);
+            for (int sub = 0; sub < 8; sub++) {
+                int chunkX = (wx << 1) | (sub & 1);
+                int chunkZ = (wz << 1) | ((sub >> 1) & 1);
+                int chunkY = (wy << 1) | ((sub >> 2) & 1);
+                out.writeInt(chunkX);
+                out.writeInt(chunkY);
+                out.writeInt(chunkZ);
+                for (long voxel : chunks[sub]) {
+                    out.writeLong(voxel);
+                }
+                sent[0]++;
+                shareSectionsSentThisAttempt = sent[0];
+                if (sent[0] % PROGRESS_LOG_INTERVAL == 0) {
+                    VoxyMapClient.LOGGER.debug("Map share {}: sent {} chunk sections", code, sent[0]);
+                }
+            }
         }
         if (!isCurrentShare(code) || Thread.currentThread().isInterrupted()) {
             throw new IOException("Map share stopped before the export finished");
@@ -636,6 +656,13 @@ public final class MapShareClient {
         if (version < MIN_SUPPORTED_PROTOCOL_VERSION || version > PROTOCOL_VERSION) {
             throw new IOException("Unsupported protocol version " + version);
         }
+        if (version >= FIRST_VERSION_WITH_DIMENSION) {
+            String senderDimension = in.readUTF();
+            String here = dimensionKey(worldId);
+            if (!senderDimension.equals(here)) {
+                throw new IOException("The shared map is from " + senderDimension + ", but you are in " + here);
+            }
+        }
 
         int mappingCount = MapShareProtocolLimits.mappingCount(in.readInt());
         List<VoxySectionBridge.MappingRow> mappings = new ArrayList<>(mappingCount);
@@ -713,6 +740,9 @@ public final class MapShareClient {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private static final class CodeTakenException extends IOException {
     }
 
     private static String generateCode() {

@@ -1,5 +1,7 @@
 package com.voxymap.client.map;
 
+import com.voxymap.client.VoxyMapClient;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
 import me.cortex.voxy.common.voxelization.VoxelizedSection;
 import me.cortex.voxy.common.voxelization.WorldVoxilizedSectionMipper;
 import me.cortex.voxy.common.world.WorldEngine;
@@ -35,6 +37,23 @@ final class VoxySectionBridge {
         return minecraft.level == null ? null : WorldIdentifier.of(minecraft.level);
     }
 
+    static boolean holdRef(WorldEngine engine) {
+        try {
+            engine.acquireRef();
+            return true;
+        } catch (IllegalStateException notLive) {
+            return false;
+        }
+    }
+
+    static void dropRef(WorldEngine engine) {
+        try {
+            engine.releaseRef();
+        } catch (IllegalStateException alreadyFreed) {
+            VoxyMapClient.LOGGER.debug("Voxy world was freed while VoxyMap still held a reference");
+        }
+    }
+
     static WorldEngine liveEngine(WorldIdentifier worldId) {
         if (worldId == null) return null;
         VoxyInstance instance = VoxyCommon.getInstance();
@@ -46,10 +65,14 @@ final class VoxySectionBridge {
 
     static List<MappingRow> exportMappings(WorldIdentifier worldId) {
         WorldEngine engine = liveEngine(worldId);
-        if (engine == null) return List.of();
-        List<MappingRow> rows = new ArrayList<>();
-        engine.storage.getIdMappingsData().forEach((key, bytes) -> rows.add(new MappingRow(key, bytes)));
-        return rows;
+        if (engine == null || !holdRef(engine)) return List.of();
+        try {
+            List<MappingRow> rows = new ArrayList<>();
+            engine.storage.getIdMappingsData().forEach((key, bytes) -> rows.add(new MappingRow(key, bytes)));
+            return rows;
+        } finally {
+            dropRef(engine);
+        }
     }
 
     static long exportedSectionCount(WorldIdentifier worldId, MapShareBounds bounds) {
@@ -64,26 +87,36 @@ final class VoxySectionBridge {
         return count[0];
     }
 
-    static void forEachExportedSectionKey(WorldIdentifier worldId, MapShareBounds bounds,
-                                           java.util.function.LongConsumer action) {
+    static long[] exportedSectionKeys(WorldIdentifier worldId, MapShareBounds bounds, int limit) {
         WorldEngine engine = liveEngine(worldId);
-        if (engine == null) return;
-        engine.storage.iteratePositions(0, key -> {
-            if (bounds == null || bounds.containsSection(WorldEngine.getX(key), WorldEngine.getZ(key))) {
-                action.accept(key);
-            }
-        });
+        if (engine == null || !holdRef(engine)) return new long[0];
+        try {
+            LongArrayList keys = new LongArrayList();
+            engine.storage.iteratePositions(0, key -> {
+                if (keys.size() < limit
+                        && (bounds == null || bounds.containsSection(WorldEngine.getX(key), WorldEngine.getZ(key)))) {
+                    keys.add(key);
+                }
+            });
+            return keys.toLongArray();
+        } finally {
+            dropRef(engine);
+        }
     }
 
     static long[] exportSectionData(WorldIdentifier worldId, long sectionKey) {
         WorldEngine engine = liveEngine(worldId);
-        if (engine == null) return null;
-        WorldSection section = engine.acquireIfExists(sectionKey);
-        if (section == null) return null;
+        if (engine == null || !holdRef(engine)) return null;
         try {
-            return section.copyData();
+            WorldSection section = engine.acquireIfExists(sectionKey);
+            if (section == null) return null;
+            try {
+                return section.copyData();
+            } finally {
+                section.release();
+            }
         } finally {
-            section.release();
+            dropRef(engine);
         }
     }
 
@@ -105,14 +138,18 @@ final class VoxySectionBridge {
 
     static int occupiedChunkSectionMask(WorldIdentifier worldId, int x, int y, int z) {
         WorldEngine engine = liveEngine(worldId);
-        if (engine == null) return 0xFF;
-        WorldSection existing = engine.acquireIfExists(0, x, y, z);
-        if (existing == null) return 0;
+        if (engine == null || !holdRef(engine)) return 0xFF;
         long[] data;
         try {
-            data = existing.copyData();
+            WorldSection existing = engine.acquireIfExists(0, x, y, z);
+            if (existing == null) return 0;
+            try {
+                data = existing.copyData();
+            } finally {
+                existing.release();
+            }
         } finally {
-            existing.release();
+            dropRef(engine);
         }
         return occupiedChunkSectionMask(data, Mapper::isAir);
     }
@@ -199,8 +236,15 @@ final class VoxySectionBridge {
             nonAir++;
         }
         section.lvl0NonAirCount = nonAir;
-        WorldVoxilizedSectionMipper.mipSection(section, engine.getMapper());
-        WorldUpdater.insertUpdate(engine, section);
+        if (!holdRef(engine)) {
+            return false;
+        }
+        try {
+            WorldVoxilizedSectionMipper.mipSection(section, engine.getMapper());
+            WorldUpdater.insertUpdate(engine, section);
+        } finally {
+            dropRef(engine);
+        }
         return true;
     }
 }

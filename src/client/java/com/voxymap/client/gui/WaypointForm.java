@@ -312,8 +312,8 @@ public final class WaypointForm {
         double[] position = previewPosition();
         WaypointManager.Waypoint result;
         if (existing != null) {
-            WaypointManager.update(worldId, existing.id(), trimmed, position[0], position[1], position[2], color);
-            result = existing;
+            result = WaypointManager.update(worldId, existing.id(), trimmed, position[0], position[1], position[2], color)
+                    ? existing : null;
         } else if (temporary) {
             result = WaypointManager.addTemporary(worldId, trimmed, position[0], position[1], position[2], color);
         } else {

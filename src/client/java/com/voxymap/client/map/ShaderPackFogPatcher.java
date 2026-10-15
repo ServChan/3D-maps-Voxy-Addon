@@ -125,6 +125,9 @@ public final class ShaderPackFogPatcher {
             Map.entry("/global/fog.glsl", List.of(
                     new Flavor("Mellow", List.of(new EntryReturn("vec3 get_fog_main(",
                             "if (" + IN_MAP + ") return Color;"))))),
+            Map.entry("/global/atmosphere/fog.glsl", List.of(
+                    new Flavor("Mellow 3.4", List.of(new EntryReturn("vec3 get_fog_main(",
+                            "if (" + IN_MAP + ") return Color;"))))),
 
             Map.entry("/include/fog/simple_fog.glsl", List.of(
                     new Flavor("Photon", List.of(

@@ -17,6 +17,20 @@ class WaypointStoreTest {
     private static final String WORLD_B = "abcdefabcdefabcdefabcdefabcdefab";
 
     @Test
+    void anUnreadableWorldFileIsMovedAsideInsteadOfOverwritten(@TempDir Path dir) throws IOException {
+        Path broken = dir.resolve(WORLD_A + ".json");
+        java.nio.file.Files.writeString(broken, "{\"waypoints\": [ {\"id\": \"a\",");
+
+        WaypointStore store = new WaypointStore(dir);
+        store.put(WORLD_A, new WaypointDto("id-1", "Base", 1.0, 2.0, 3.0, 0xFF62E7FF));
+
+        try (var files = java.nio.file.Files.list(dir)) {
+            assertTrue(files.anyMatch(file -> file.getFileName().toString().startsWith(WORLD_A + ".json.corrupt-")));
+        }
+        assertEquals(1, store.list(WORLD_A).size());
+    }
+
+    @Test
     void putThenListReturnsTheSavedWaypoint(@TempDir Path dir) throws IOException {
         WaypointStore store = new WaypointStore(dir);
         WaypointDto waypoint = new WaypointDto("id-1", "Base", 1.0, 2.0, 3.0, 0xFF62E7FF);

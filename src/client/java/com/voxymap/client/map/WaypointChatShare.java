@@ -23,6 +23,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public final class WaypointChatShare {
+    static final String UNKNOWN_HEIGHT = "unknown";
     private static final long ECHO_WINDOW_MILLIS = 15_000L;
     private static final int MAX_PENDING = 9;
 
@@ -113,7 +114,7 @@ public final class WaypointChatShare {
                     converted.x(), converted.z()).withStyle(ChatFormatting.YELLOW));
         }
         String command = "/voxymap waypoint add " + shared.dimension().id() + " " + shared.x() + " "
-                + (shared.y() == null ? "~" : shared.y()) + " " + shared.z() + " " + shared.colorIndex() + " " + shared.name();
+                + (shared.y() == null ? UNKNOWN_HEIGHT : shared.y()) + " " + shared.z() + " " + shared.colorIndex() + " " + shared.name();
         Component button = Component.translatable("message.voxymap.waypoint.add_button")
                 .withStyle(Style.EMPTY.withColor(ChatFormatting.GREEN).withUnderlined(true)
                         .withClickEvent(new ClickEvent.RunCommand(command))
@@ -148,7 +149,7 @@ public final class WaypointChatShare {
         String rawY = StringArgumentType.getString(context, "y");
         double y;
         try {
-            y = "~".equals(rawY) ? minecraft.player.getY() : Integer.parseInt(rawY);
+            y = "~".equals(rawY) || UNKNOWN_HEIGHT.equals(rawY) ? minecraft.player.getY() : Integer.parseInt(rawY);
         } catch (NumberFormatException exception) {
             y = minecraft.player.getY();
         }

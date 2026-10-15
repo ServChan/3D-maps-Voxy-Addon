@@ -47,6 +47,35 @@ public final class MinimapPlacement {
         return free == 0 ? 0.0 : clamp01((position - MARGIN) / (double) free);
     }
 
+    public static final int SNAP_DISTANCE = 6;
+
+    public record Snap(int position, int guide) {
+        public static final int NONE = Integer.MIN_VALUE;
+
+        public boolean snapped() {
+            return guide != NONE;
+        }
+    }
+
+    public static Snap snap(int position, int guiExtent, int size) {
+        int start = MARGIN;
+        int end = guiExtent - MARGIN - size;
+        int center = (guiExtent - size) / 2;
+        int best = position;
+        int guide = Snap.NONE;
+        int bestDistance = SNAP_DISTANCE + 1;
+        int[][] targets = {{start, start}, {end, end + size}, {center, guiExtent / 2}};
+        for (int[] target : targets) {
+            int distance = Math.abs(position - target[0]);
+            if (distance <= SNAP_DISTANCE && distance < bestDistance) {
+                best = target[0];
+                guide = target[1];
+                bestDistance = distance;
+            }
+        }
+        return new Snap(best, guide);
+    }
+
     public static double nightBrightness(int skyDarken) {
         double darkness = Math.max(0, Math.min(MAX_SKY_DARKEN, skyDarken)) / (double) MAX_SKY_DARKEN;
         return 1.0 - darkness * (1.0 - MIN_NIGHT_BRIGHTNESS);

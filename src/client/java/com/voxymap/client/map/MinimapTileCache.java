@@ -30,6 +30,11 @@ final class MinimapTileCache {
 
     private Level currentLevel;
 
+    void forget() {
+        tiles.clear();
+        currentLevel = null;
+    }
+
     int[] tileFor(Level level, int chunkX, int chunkZ, ScanMode mode, int playerY, boolean forceRefresh) {
         if (level != currentLevel) {
             tiles.clear();
@@ -43,7 +48,7 @@ final class MinimapTileCache {
 
         ChunkAccess chunk = level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
         if (chunk == null) {
-            return cached == null ? null : cached.colors();
+            return cached == null || cached.mode() != mode ? null : cached.colors();
         }
 
         int[] colors = computeTile(level, chunk, chunkX, chunkZ, mode, playerY);

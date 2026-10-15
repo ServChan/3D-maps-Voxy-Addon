@@ -40,9 +40,10 @@ public final class DeathWaypointTracker {
 
         float health = minecraft.player.getHealth();
         if (VoxyMapSettings.deathPointsEnabled() && lastHealth > 0.0f && health <= 0.0f) {
+            String waypointWorldId = WaypointWorlds.effective(worldId.getWorldId());
             String name = Component.translatable("screen.voxymap.waypoint.death_name").getString();
             List<WaypointManager.Waypoint> previousDeaths = new ArrayList<>();
-            for (WaypointManager.Waypoint wp : WaypointManager.forWorld(worldId.getWorldId())) {
+            for (WaypointManager.Waypoint wp : WaypointManager.forWorld(waypointWorldId)) {
                 if (!wp.shared() && name.equals(wp.name())) {
                     previousDeaths.add(wp);
                 }
@@ -50,9 +51,9 @@ public final class DeathWaypointTracker {
 
             while (previousDeaths.size() >= MAX_DEATH_WAYPOINTS) {
                 WaypointManager.Waypoint oldest = previousDeaths.remove(0);
-                WaypointManager.remove(worldId.getWorldId(), oldest.id());
+                WaypointManager.remove(waypointWorldId, oldest.id());
             }
-            WaypointManager.add(worldId.getWorldId(), name,
+            WaypointManager.add(waypointWorldId, name,
                     minecraft.player.getX(), minecraft.player.getY(), minecraft.player.getZ(),
                     DEATH_COLOR, false);
         }

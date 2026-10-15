@@ -18,6 +18,21 @@ class AtomicPropertiesWriterTest {
     Path tempDir;
 
     @Test
+    void zeroedFilesCountAsTruncatedButAnEmptySaveDoesNot() throws Exception {
+        Path zeroed = tempDir.resolve("zeroed.properties");
+        Files.write(zeroed, new byte[64]);
+        Path empty = tempDir.resolve("empty.properties");
+        Files.write(empty, new byte[0]);
+        Path saved = tempDir.resolve("saved.properties");
+        Files.writeString(saved, "#VoxyMap waypoints\n#Thu Oct 15 17:40:00 MSK 2026\n");
+
+        assertTrue(AtomicPropertiesWriter.looksTruncated(zeroed));
+        assertTrue(AtomicPropertiesWriter.looksTruncated(empty));
+        assertFalse(AtomicPropertiesWriter.looksTruncated(saved));
+        assertFalse(AtomicPropertiesWriter.looksTruncated(tempDir.resolve("missing.properties")));
+    }
+
+    @Test
     void coalescesSnapshotsAndKeepsThePreviousValidFileAsBackup() throws Exception {
         Path target = tempDir.resolve("config.properties");
         Path backup = tempDir.resolve("config.properties.bak");

@@ -22,12 +22,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 public final class VanillaSquadWebMap {
     private static final String BASE_URL = "https://vanillasquad.com/map/proxy/";
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
+    private static final long RESPONSE_TIMEOUT_SECONDS = 30;
     private static final long REFRESH_NANOS = 10L * 60L * 1_000_000_000L;
     private static final long RETRY_NANOS = 30L * 1_000_000_000L;
     private static final int MAX_RESPONSE_CHARS = 200_000;
@@ -185,6 +187,7 @@ public final class VanillaSquadWebMap {
                 .build();
         return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.limiting(
                         HttpResponse.BodyHandlers.ofString(), MAX_RESPONSE_CHARS))
+                .orTimeout(RESPONSE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .thenApply(response -> {
                     if (response.statusCode() != 200) {
                         throw new IllegalStateException("HTTP " + response.statusCode() + " for " + url);

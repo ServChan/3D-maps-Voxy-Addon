@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.PlayerSkin;
 
@@ -23,6 +24,11 @@ public final class PlayerHeadIcon {
         }
         PlayerSkin skin = info.getSkin();
         return skin == null || skin.body() == null ? null : skin.body().texturePath();
+    }
+
+    public static boolean isDefaultSkin(UUID uuid, Identifier texture) {
+        PlayerSkin fallback = DefaultPlayerSkin.get(uuid);
+        return fallback != null && fallback.body() != null && fallback.body().texturePath().equals(texture);
     }
 
     public static void draw(GuiGraphicsExtractor g, Identifier skin, int x, int y, int size) {

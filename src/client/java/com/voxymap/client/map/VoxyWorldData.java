@@ -38,11 +38,13 @@ public final class VoxyWorldData {
             return null;
         }
         WorldSection[] held = new WorldSection[8];
+        WorldEngine referenced = null;
         try {
             WorldEngine engine = WorldIdentifier.ofEngineNullable(level);
-            if (engine == null) {
+            if (engine == null || !VoxySectionBridge.holdRef(engine)) {
                 return null;
             }
+            referenced = engine;
             int startX = (sectionX << 4) - 1;
             int startY = (sectionY << 4) - 1;
             int startZ = (sectionZ << 4) - 1;
@@ -106,6 +108,9 @@ public final class VoxyWorldData {
                 if (section != null) {
                     section.release();
                 }
+            }
+            if (referenced != null) {
+                VoxySectionBridge.dropRef(referenced);
             }
         }
     }

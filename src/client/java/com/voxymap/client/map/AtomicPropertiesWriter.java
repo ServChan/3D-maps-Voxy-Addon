@@ -2,6 +2,7 @@ package com.voxymap.client.map;
 
 import com.voxymap.client.VoxyMapClient;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -78,8 +79,11 @@ public final class AtomicPropertiesWriter {
     private static void persist(PendingWrite write) {
         try {
             Files.createDirectories(write.target.getParent());
-            try (Writer writer = new OutputStreamWriter(Files.newOutputStream(write.temporary), StandardCharsets.UTF_8)) {
+            try (FileOutputStream output = new FileOutputStream(write.temporary.toFile());
+                 Writer writer = new OutputStreamWriter(output, StandardCharsets.UTF_8)) {
                 write.properties.store(writer, write.comment);
+                writer.flush();
+                output.getFD().sync();
             }
             if (isReadableProperties(write.target)) {
                 Files.copy(write.target, write.backup, StandardCopyOption.REPLACE_EXISTING);
@@ -95,8 +99,25 @@ public final class AtomicPropertiesWriter {
         }
     }
 
+    public static boolean looksTruncated(Path path) {
+        try {
+            if (!Files.exists(path)) {
+                return false;
+            }
+            byte[] bytes = Files.readAllBytes(path);
+            for (byte value : bytes) {
+                if (value != 0 && !Character.isWhitespace(value)) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (IOException exception) {
+            return false;
+        }
+    }
+
     private static boolean isReadableProperties(Path path) {
-        if (!Files.exists(path)) return false;
+        if (!Files.exists(path) || looksTruncated(path)) return false;
         try (Reader reader = new InputStreamReader(Files.newInputStream(path), StandardCharsets.UTF_8)) {
             new Properties().load(reader);
             return true;

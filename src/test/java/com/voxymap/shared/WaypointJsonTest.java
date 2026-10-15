@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -36,6 +37,20 @@ class WaypointJsonTest {
         WaypointDto parsed = WaypointJson.readOne(bodyWithoutId, "from-url");
         assertEquals("from-url", parsed.id());
         assertEquals("Base", parsed.name());
+    }
+
+    @Test
+    void loneSurrogatesAreNotWellFormedText() {
+        assertTrue(WaypointJson.wellFormedText("Base \uD83C\uDFE0"));
+        assertFalse(WaypointJson.wellFormedText("broken \uD800"));
+        assertFalse(WaypointJson.wellFormedText("\uDC00 broken"));
+    }
+
+    @Test
+    void strictReadingRejectsWhatLenientReadingTurnsIntoAnEmptyList() {
+        org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
+                () -> WaypointJson.readListStrict("<html>not found</html>"));
+        assertTrue(WaypointJson.readListStrict("{\"waypoints\":[]}").isEmpty());
     }
 
     @Test

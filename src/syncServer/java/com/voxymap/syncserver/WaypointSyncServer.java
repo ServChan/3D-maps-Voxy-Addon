@@ -12,7 +12,9 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
 
 public final class WaypointSyncServer {
@@ -68,6 +70,8 @@ public final class WaypointSyncServer {
     }
 
     private record WaypointHandler(WaypointStore store, String password) implements HttpHandler {
+        private static final RelayClaimRateLimiter AUTH_FAILURES = new RelayClaimRateLimiter(10, 1, TimeUnit.MINUTES);
+
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             try {
@@ -110,12 +114,12 @@ public final class WaypointSyncServer {
         }
 
         private void handlePut(HttpExchange exchange, String worldId, String id) throws IOException {
-            if (!authorized(exchange)) {
-                respond(exchange, password == null || password.isEmpty() ? 403 : 401, "");
+            if (!checkAuthorization(exchange)) {
                 return;
             }
             WaypointDto submitted = WaypointJson.readOne(readBody(exchange), id);
-            if (submitted == null || submitted.name().length() > MAX_WAYPOINT_NAME_LENGTH) {
+            if (submitted == null || submitted.name().length() > MAX_WAYPOINT_NAME_LENGTH
+                    || !WaypointJson.wellFormedText(submitted.name()) || !WaypointJson.wellFormedText(id)) {
                 respond(exchange, 400, "");
                 return;
             }
@@ -125,18 +129,46 @@ public final class WaypointSyncServer {
         }
 
         private void handleDelete(HttpExchange exchange, String worldId, String id) throws IOException {
-            if (!authorized(exchange)) {
-                respond(exchange, password == null || password.isEmpty() ? 403 : 401, "");
+            if (!checkAuthorization(exchange)) {
                 return;
             }
             respond(exchange, store.delete(worldId, id) ? 204 : 404, "");
         }
 
+        private boolean checkAuthorization(HttpExchange exchange) throws IOException {
+            if (password == null || password.isEmpty()) {
+                respond(exchange, 403, "");
+                return false;
+            }
+            String address = exchange.getRemoteAddress().getAddress().getHostAddress();
+            if (!AUTH_FAILURES.tryReserve(address)) {
+                respond(exchange, 429, "");
+                return false;
+            }
+            if (!authorized(exchange)) {
+                AUTH_FAILURES.prune();
+                respond(exchange, 401, "");
+                return false;
+            }
+            AUTH_FAILURES.release(address);
+            return true;
+        }
+
         private boolean authorized(HttpExchange exchange) {
-            if (password == null || password.isEmpty()) return false;
-            String presented = exchange.getRequestHeaders().getFirst("X-VoxyMap-Password");
-            if (presented == null) return false;
-            return MessageDigest.isEqual(password.getBytes(StandardCharsets.UTF_8), presented.getBytes(StandardCharsets.UTF_8));
+            byte[] presented;
+            String encoded = exchange.getRequestHeaders().getFirst("X-VoxyMap-Password-B64");
+            if (encoded != null) {
+                try {
+                    presented = Base64.getDecoder().decode(encoded.trim());
+                } catch (IllegalArgumentException malformed) {
+                    return false;
+                }
+            } else {
+                String plain = exchange.getRequestHeaders().getFirst("X-VoxyMap-Password");
+                if (plain == null) return false;
+                presented = plain.getBytes(StandardCharsets.UTF_8);
+            }
+            return MessageDigest.isEqual(password.getBytes(StandardCharsets.UTF_8), presented);
         }
 
         private static String readBody(HttpExchange exchange) throws IOException {

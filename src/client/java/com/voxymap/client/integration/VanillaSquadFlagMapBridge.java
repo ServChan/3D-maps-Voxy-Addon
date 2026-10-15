@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
@@ -26,6 +27,7 @@ public final class VanillaSquadFlagMapBridge {
     private static final String BANNER_SET_ID = "banners";
     private static final long DEFAULT_INTERVAL_SECONDS = 60L;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
+    private static final long RESPONSE_TIMEOUT_SECONDS = 30;
     private static final int MAX_RESPONSE_CHARS = 8_000_000;
     private static final int MAX_FLAGS = 25_000;
     private static final int MAX_LABEL_LENGTH = 96;
@@ -69,6 +71,7 @@ public final class VanillaSquadFlagMapBridge {
                 .build();
         CLIENT.sendAsync(request, HttpResponse.BodyHandlers.limiting(
                         HttpResponse.BodyHandlers.ofString(), MAX_RESPONSE_CHARS))
+                .orTimeout(RESPONSE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .whenComplete((response, throwable) -> {
                     try {
                         if (throwable != null) {
@@ -129,8 +132,12 @@ public final class VanillaSquadFlagMapBridge {
                 }
                 if (!markerElement.isJsonObject()) continue;
                 JsonObject marker = markerElement.getAsJsonObject();
-                JsonObject point = marker.has("point") ? marker.getAsJsonObject("point") : null;
-                if (point == null || !point.has("x") || !point.has("z")) {
+                JsonElement pointElement = marker.get("point");
+                if (pointElement == null || !pointElement.isJsonObject()) {
+                    continue;
+                }
+                JsonObject point = pointElement.getAsJsonObject();
+                if (!point.has("x") || !point.has("z")) {
                     continue;
                 }
                 try {

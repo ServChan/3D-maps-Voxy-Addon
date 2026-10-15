@@ -119,7 +119,10 @@ public final class MobHeadIcons {
 
     private static Entry request(Identifier texture, Object model) {
         if (ENTRIES.size() >= MAX_ICONS) {
-            clear(Minecraft.getInstance());
+            ENTRIES.values().removeIf(existing -> existing.face == null && existing.pending == null);
+            if (ENTRIES.size() >= MAX_ICONS) {
+                return null;
+            }
         }
         Entry entry = new Entry();
         ENTRIES.put(texture, entry);

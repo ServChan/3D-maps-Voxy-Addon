@@ -1,6 +1,8 @@
 package com.voxymap.client.map;
 
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import com.mojang.blaze3d.platform.NativeImage;
@@ -10,6 +12,8 @@ import com.voxymap.client.gui.PlayerHeadIcon;
 import com.voxymap.client.gui.MinimapLayoutScreen;
 import com.voxymap.client.gui.WaypointIcons;
 import com.voxymap.client.gui.WindowMapScreen;
+import com.voxymap.client.gui.ui.UiDraw;
+import com.voxymap.client.gui.ui.UiTheme;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -20,6 +24,7 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -43,8 +48,8 @@ public final class MinimapRenderer {
     private static final double OFFSCREEN_EDGE_INSET = 9.0;
     private static final int INFO_LINE_HEIGHT = 10;
     private static final int EFFECT_ROW_HEIGHT = 26;
-    private static final int BACKGROUND_COLOR = 0xAA030914;
-    private static final int FRAME_COLOR = 0xFF3BA4FF;
+    private static final int BACKGROUND_COLOR = UiTheme.SURFACE;
+    private static final int FRAME_COLOR = UiTheme.BORDER_STRONG;
     private static final Identifier TEXTURE_ID = Identifier.fromNamespaceAndPath("voxymap", "minimap_dynamic");
 
     private static final double MAX_BLIT_RADIUS = (GRID_CHUNKS / 2) * 16.0 - 4.0;
@@ -92,8 +97,18 @@ public final class MinimapRenderer {
     private static volatile boolean hudHookFired = false;
     private static int lastDisplaySize = 128;
     private static MinimapPlacement.Placement lastPlacement;
+    private static long lastPlacementNanos;
+    private static final long PLACEMENT_FRESH_NANOS = 200_000_000L;
     private static int terrainTint = 0xFFFFFFFF;
     private static float backgroundAlpha = 1.0f;
+    private static final int DIRTY_TILES_PER_FRAME = 16;
+    private static final long DIRTY_REFRESH_MILLIS = 100L;
+    private static long nextDirtyRefreshAtMillis = 0L;
+    private static final Set<Long> DIRTY_TILES = new HashSet<>();
+    private static float partialTick;
+    private static double renderX;
+    private static double renderY;
+    private static double renderZ;
 
     private MinimapRenderer() {
     }
@@ -125,6 +140,14 @@ public final class MinimapRenderer {
             return centerY + (int) Math.round(rotatedZ(dx, dz, cosA, sinA) * scale);
         }
 
+        double exactX(double dx, double dz) {
+            return centerX + rotatedX(dx, dz, cosA, sinA) * scale;
+        }
+
+        double exactY(double dx, double dz) {
+            return centerY + rotatedZ(dx, dz, cosA, sinA) * scale;
+        }
+
         boolean rotated() {
             return !(cosA == 1.0 && sinA == 0.0);
         }
@@ -139,6 +162,10 @@ public final class MinimapRenderer {
 
         Player player = minecraft.player;
         Level level = minecraft.level;
+        partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        renderX = Mth.lerp(partialTick, player.xo, player.getX());
+        renderY = Mth.lerp(partialTick, player.yo, player.getY());
+        renderZ = Mth.lerp(partialTick, player.zo, player.getZ());
         int playerChunkX = Math.floorDiv((int) Math.floor(player.getX()), 16);
         int playerChunkZ = Math.floorDiv((int) Math.floor(player.getZ()), 16);
         int playerY = (int) Math.floor(player.getY());
@@ -160,9 +187,10 @@ public final class MinimapRenderer {
         boolean circle = VoxyMapSettings.minimapShape() == VoxyMapSettings.MinimapShape.CIRCLE;
 
         double rotation = 0.0;
+        float yaw = player.getViewYRot(partialTick);
         if (VoxyMapSettings.minimapRotates()) {
-            double dirX = PlayerViewConeGeometry.directionX(player.getYRot());
-            double dirZ = PlayerViewConeGeometry.directionZ(player.getYRot());
+            double dirX = PlayerViewConeGeometry.directionX(yaw);
+            double dirZ = PlayerViewConeGeometry.directionZ(yaw);
             rotation = Math.atan2(-dirX, -dirZ);
         }
         double worldRadius = displaySize / 2.0 / scale;
@@ -170,16 +198,7 @@ public final class MinimapRenderer {
         double blitRadius = Math.min(worldRadius * diagonalFactor, MAX_BLIT_RADIUS);
         visibleTileCount = visibleTileCount(blitRadius);
 
-        MinimapTileCache.ScanMode autoMode = MinimapTileCache.scanMode(level.dimensionType().hasCeiling(), playerY,
-                level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                        (int) Math.floor(player.getX()), (int) Math.floor(player.getZ())));
-        MinimapTileCache.ScanMode wantedMode = switch (VoxyMapSettings.caveMode()) {
-            case AUTO -> autoMode;
-            case OFF -> level.dimensionType().hasCeiling() ? autoMode : MinimapTileCache.ScanMode.SURFACE;
-            case ALWAYS -> MinimapTileCache.ScanMode.CAVE;
-        };
-        MinimapTileCache.ScanMode mode = ServerRules.caveMapsAllowed(dimension.equals(Level.NETHER))
-                ? wantedMode : MinimapTileCache.ScanMode.SURFACE;
+        MinimapTileCache.ScanMode mode = scanMode(level, player);
         TileLook look = new TileLook(VoxyMapSettings.minimapColors(), VoxyMapSettings.mapOverlays(),
                 VoxyMapSettings.overlayShown(MapOverlay.SLIME_CHUNKS) ? MinimapOverlays.slimeSeed(level) : null);
         boolean changedColors = !look.equals(lastLook);
@@ -199,6 +218,9 @@ public final class MinimapRenderer {
             lastMode = mode;
             lastRebuildPlayerY = playerY;
             rebuild(level, playerChunkX, playerChunkZ, mode, playerY, Refresh.FULL_WINDOW);
+        } else if (!DIRTY_TILES.isEmpty() && now >= nextDirtyRefreshAtMillis) {
+            nextDirtyRefreshAtMillis = now + DIRTY_REFRESH_MILLIS;
+            refreshDirty(level, mode);
         } else if (hasMissingTiles && now >= nextRetryAtMillis) {
             rebuild(level, centerChunkX, centerChunkZ, mode, lastRebuildPlayerY, Refresh.MISSING);
         } else if (now >= nextBackgroundRefreshAtMillis) {
@@ -209,6 +231,7 @@ public final class MinimapRenderer {
         MinimapPlacement.Placement placement = MinimapPlacement.place(g.guiWidth(), g.guiHeight(), displaySize, infoHeight,
                 corner, VoxyMapSettings.minimapX(), VoxyMapSettings.minimapY(), topOffset);
         lastPlacement = placement;
+        lastPlacementNanos = System.nanoTime();
         int screenX = placement.x();
         int screenY = placement.y();
         float opacity = VoxyMapSettings.minimapOpacity().alpha();
@@ -221,10 +244,10 @@ public final class MinimapRenderer {
                 scale, Math.cos(rotation), Math.sin(rotation), circle);
 
         drawBackground(g, view);
-        drawTerrain(g, view, player, blitRadius, rotation);
+        drawTerrain(g, view, blitRadius, rotation);
         g.enableScissor(screenX, screenY, screenX + displaySize, screenY + displaySize);
-        drawChunkGrid(g, player, view, worldRadius);
-        drawMarkers(g, minecraft, view, worldRadius);
+        drawChunkGrid(g, view, worldRadius);
+        drawMarkers(g, minecraft, view, worldRadius, yaw);
         drawCardinalLetters(g, minecraft, view);
         g.disableScissor();
         drawFrame(g, view);
@@ -241,8 +264,29 @@ public final class MinimapRenderer {
         return lastDisplaySize;
     }
 
+    public static void forgetLevel() {
+        lastLevel = null;
+        TILES.forget();
+        MinimapInfo.forgetLevel();
+        OreMaskController.forgetModels();
+    }
+
+    public static MinimapTileCache.ScanMode scanMode(Level level, Player player) {
+        MinimapTileCache.ScanMode autoMode = MinimapTileCache.scanMode(level.dimensionType().hasCeiling(),
+                (int) Math.floor(player.getY()),
+                level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                        (int) Math.floor(player.getX()), (int) Math.floor(player.getZ())));
+        MinimapTileCache.ScanMode wantedMode = switch (VoxyMapSettings.caveMode()) {
+            case AUTO -> autoMode;
+            case OFF -> level.dimensionType().hasCeiling() ? autoMode : MinimapTileCache.ScanMode.SURFACE;
+            case ALWAYS -> MinimapTileCache.ScanMode.CAVE;
+        };
+        return ServerRules.caveMapsAllowed(level.dimension().equals(Level.NETHER))
+                ? wantedMode : MinimapTileCache.ScanMode.SURFACE;
+    }
+
     public static MinimapPlacement.Placement lastPlacement() {
-        return lastPlacement;
+        return System.nanoTime() - lastPlacementNanos < PLACEMENT_FRESH_NANOS ? lastPlacement : null;
     }
 
     public static boolean hiddenByScreen(Minecraft minecraft) {
@@ -282,8 +326,7 @@ public final class MinimapRenderer {
 
     private static void drawBackground(GuiGraphicsExtractor g, View view) {
         if (!view.circle()) {
-            g.fill(view.screenX() - 2, view.screenY() - 2, view.screenX() + view.size() + 2,
-                    view.screenY() + view.size() + 2, backgroundColor());
+            UiDraw.panel(g, view.screenX() - 3, view.screenY() - 3, view.size() + 6, view.size() + 6, backgroundColor());
             return;
         }
         drawDisc(g, view.centerX(), view.centerY(), view.radius() + 1.0, 0.0, backgroundColor());
@@ -291,7 +334,8 @@ public final class MinimapRenderer {
 
     private static void drawFrame(GuiGraphicsExtractor g, View view) {
         if (!view.circle()) {
-            g.outline(view.screenX() - 2, view.screenY() - 2, view.size() + 4, view.size() + 4, FRAME_COLOR);
+            UiDraw.outline(g, view.screenX() - 3, view.screenY() - 3, view.size() + 6, view.size() + 6, FRAME_COLOR);
+            g.outline(view.screenX() - 1, view.screenY() - 1, view.size() + 2, view.size() + 2, 0x66000000);
             return;
         }
         drawDisc(g, view.centerX(), view.centerY(), view.radius() + 2.0, view.radius() + 1.0, FRAME_COLOR);
@@ -329,18 +373,24 @@ public final class MinimapRenderer {
         return squared > 0.0 ? Math.sqrt(squared) : 0.0;
     }
 
-    private static void drawTerrain(GuiGraphicsExtractor g, View view, Player player, double blitRadius, double rotation) {
-        int sourceSize = 2 * (int) Math.ceil(blitRadius);
+    private record TerrainBlit(int x, int y, float u, float v, int screenSize, int sourceSize, float shiftX,
+                               float shiftY) {
+    }
+
+    private static void drawTerrain(GuiGraphicsExtractor g, View view, double blitRadius, double rotation) {
+        int sourceSize = 2 * (int) Math.ceil(blitRadius) + 2;
         int screenSize = (int) Math.round(sourceSize * view.scale());
         double originX = (double) ((centerChunkX - GRID_CHUNKS / 2) << 4);
         double originZ = (double) ((centerChunkZ - GRID_CHUNKS / 2) << 4);
-        float u = (float) (player.getX() - sourceSize / 2.0 - originX);
-        float v = (float) (player.getZ() - sourceSize / 2.0 - originZ);
-        int blitX = view.centerX() - screenSize / 2;
-        int blitY = view.centerY() - screenSize / 2;
+        double exactU = renderX - sourceSize / 2.0 - originX;
+        double exactV = renderZ - sourceSize / 2.0 - originZ;
+        float u = (float) Math.floor(exactU);
+        float v = (float) Math.floor(exactV);
+        TerrainBlit blit = new TerrainBlit(view.centerX() - screenSize / 2, view.centerY() - screenSize / 2, u, v,
+                screenSize, sourceSize, (float) ((exactU - u) * view.scale()), (float) ((exactV - v) * view.scale()));
         if (!view.circle()) {
             g.enableScissor(view.screenX(), view.screenY(), view.screenX() + view.size(), view.screenY() + view.size());
-            blitTerrain(g, view, blitX, blitY, u, v, screenSize, sourceSize, rotation);
+            blitTerrain(g, view, blit, rotation);
             g.disableScissor();
             return;
         }
@@ -352,24 +402,22 @@ public final class MinimapRenderer {
             }
             int y = view.screenY() + row;
             g.enableScissor((int) Math.floor(view.centerX() - half), y, (int) Math.ceil(view.centerX() + half), y + 1);
-            blitTerrain(g, view, blitX, blitY, u, v, screenSize, sourceSize, rotation);
+            blitTerrain(g, view, blit, rotation);
             g.disableScissor();
         }
     }
 
-    private static void blitTerrain(GuiGraphicsExtractor g, View view, int blitX, int blitY, float u, float v,
-                                    int screenSize, int sourceSize, double rotation) {
+    private static void blitTerrain(GuiGraphicsExtractor g, View view, TerrainBlit blit, double rotation) {
+        g.pose().pushMatrix();
         if (rotation != 0.0) {
-            g.pose().pushMatrix();
             g.pose().translate(view.centerX(), view.centerY());
             g.pose().rotate((float) rotation);
             g.pose().translate(-view.centerX(), -view.centerY());
         }
-        g.blit(RenderPipelines.GUI_TEXTURED, TEXTURE_ID, blitX, blitY, u, v, screenSize, screenSize,
-                sourceSize, sourceSize, TEXTURE_SIZE, TEXTURE_SIZE, terrainTint);
-        if (rotation != 0.0) {
-            g.pose().popMatrix();
-        }
+        g.pose().translate(-blit.shiftX(), -blit.shiftY());
+        g.blit(RenderPipelines.GUI_TEXTURED, TEXTURE_ID, blit.x(), blit.y(), blit.u(), blit.v(), blit.screenSize(),
+                blit.screenSize(), blit.sourceSize(), blit.sourceSize(), TEXTURE_SIZE, TEXTURE_SIZE, terrainTint);
+        g.pose().popMatrix();
     }
 
     private static void drawInfoBar(GuiGraphicsExtractor g, Minecraft minecraft, List<MinimapInfo.Line> lines,
@@ -382,8 +430,9 @@ public final class MinimapRenderer {
             width = Math.max(width, minecraft.font.width(line.text()) + 8);
         }
         int x = anchorRight ? anchorX - width : anchorX;
-        g.fill(x, y, x + width, y + 4 + lines.size() * INFO_LINE_HEIGHT, 0xCC030914);
-        g.fill(x, y, x + width, y + 1, FRAME_COLOR);
+        int barHeight = 4 + lines.size() * INFO_LINE_HEIGHT;
+        UiDraw.panel(g, x, y, width, barHeight, UiTheme.scaleAlpha(UiTheme.SURFACE, backgroundAlpha));
+        UiDraw.outline(g, x, y, width, barHeight, UiTheme.BORDER);
         for (int i = 0; i < lines.size(); i++) {
             MinimapInfo.Line line = lines.get(i);
             g.centeredText(minecraft.font, line.text(), x + width / 2, y + 3 + i * INFO_LINE_HEIGHT, line.color());
@@ -433,6 +482,55 @@ public final class MinimapRenderer {
     }
 
     private enum Refresh { FULL_WINDOW, MISSING, NEXT_BATCH }
+
+    public static void blockChanged(int blockX, int blockZ) {
+        int chunkX = blockX >> 4;
+        int chunkZ = blockZ >> 4;
+        markDirty(chunkX, chunkZ);
+        if ((blockX & 15) == 15) {
+            markDirty(chunkX + 1, chunkZ);
+        }
+        if ((blockZ & 15) == 15) {
+            markDirty(chunkX, chunkZ + 1);
+        }
+    }
+
+    public static void markDirty(int chunkX, int chunkZ) {
+        if (texture == null || Math.abs(chunkX - centerChunkX) > GRID_CHUNKS / 2
+                || Math.abs(chunkZ - centerChunkZ) > GRID_CHUNKS / 2) {
+            return;
+        }
+        DIRTY_TILES.add(MinimapTileCache.key(chunkX, chunkZ));
+    }
+
+    private static void refreshDirty(Level level, MinimapTileCache.ScanMode mode) {
+        NativeImage pixels = texture.getPixels();
+        int half = GRID_CHUNKS / 2;
+        int tileSize = MinimapTileCache.TILE_SIZE;
+        int budget = DIRTY_TILES_PER_FRAME;
+        boolean painted = false;
+        Iterator<Long> iterator = DIRTY_TILES.iterator();
+        while (iterator.hasNext() && budget > 0) {
+            long key = iterator.next();
+            iterator.remove();
+            int cx = MinimapTileCache.keyX(key) - centerChunkX;
+            int cz = MinimapTileCache.keyZ(key) - centerChunkZ;
+            if (Math.abs(cx) > half || Math.abs(cz) > half) {
+                continue;
+            }
+            int[] tile = TILES.tileFor(level, cx + centerChunkX, cz + centerChunkZ, mode, lastRebuildPlayerY, true);
+            if (tile == null) {
+                continue;
+            }
+            budget--;
+            missingMask[(cz + half) * GRID_CHUNKS + cx + half] = false;
+            paintTile(pixels, (cx + half) * tileSize, (cz + half) * tileSize, tileSize, tile);
+            painted = true;
+        }
+        if (painted) {
+            texture.upload();
+        }
+    }
 
     private static void rebuild(Level level, int chunkX, int chunkZ, MinimapTileCache.ScanMode mode, int playerY,
                                 Refresh refresh) {
@@ -525,7 +623,8 @@ public final class MinimapRenderer {
         return (a << 24) | (b << 16) | (gr << 8) | r;
     }
 
-    private static void drawMarkers(GuiGraphicsExtractor g, Minecraft minecraft, View view, double worldRadius) {
+    private static void drawMarkers(GuiGraphicsExtractor g, Minecraft minecraft, View view, double worldRadius,
+                                    float yaw) {
         Player player = minecraft.player;
         boolean heads = MinimapHeads.shown(minecraft);
 
@@ -536,12 +635,16 @@ public final class MinimapRenderer {
             int radius = category == RadarCategory.ITEMS ? 0 : MOB_MARKER_RADIUS;
             for (MobMarkerCache.MobSnapshot mob : mobs) {
                 if (mob.category() != category) continue;
-                double dx = mob.x() - player.getX();
-                double dz = mob.z() - player.getZ();
-                int px = view.screenX(dx, dz);
-                int py = view.screenY(dx, dz);
+                double dx = mob.xAt(partialTick) - renderX;
+                double dz = mob.zAt(partialTick) - renderZ;
+                double ex = view.exactX(dx, dz);
+                double ey = view.exactY(dx, dz);
+                int px = (int) Math.floor(ex);
+                int py = (int) Math.floor(ey);
                 if (!view.contains(px, py)) continue;
-                int alpha = verticalAlpha(mob.y(), player.getY());
+                int alpha = verticalAlpha(mob.y(), renderY);
+                g.pose().pushMatrix();
+                g.pose().translate((float) (ex - px), (float) (ey - py));
                 int extent;
                 if (heads && mob.face() != null) {
                     extent = drawMobHead(g, mob.face(), px, py, outlineFor(category), alpha);
@@ -549,38 +652,48 @@ public final class MinimapRenderer {
                     drawDot(g, px, py, radius, scaleAlpha(category.color(), alpha));
                     extent = radius;
                 }
-                int hint = heightHint(mob.y() - player.getY());
+                int hint = heightHint(mob.y() - renderY);
                 if (category != RadarCategory.ITEMS && hint != 0) {
                     drawHeightArrow(g, px, hint > 0 ? py - extent - 3 : py + extent + 3, hint, alpha);
                 }
+                g.pose().popMatrix();
             }
         }
 
         boolean showPlayers = radar && VoxyMapSettings.radarShows(RadarCategory.PLAYERS);
         for (Player other : minecraft.level.players()) {
-            if (other == player || !showPlayers) continue;
-            double dx = other.getX() - player.getX();
-            double dz = other.getZ() - player.getZ();
-            int px = view.screenX(dx, dz);
-            int py = view.screenY(dx, dz);
+            if (other == player || !showPlayers || VoxyMapSettings.playerHidden(other.getUUID())
+                    || other.isInvisibleTo(player)) continue;
+            double otherX = Mth.lerp(partialTick, other.xo, other.getX());
+            double otherY = Mth.lerp(partialTick, other.yo, other.getY());
+            double otherZ = Mth.lerp(partialTick, other.zo, other.getZ());
+            double dx = otherX - renderX;
+            double dz = otherZ - renderZ;
+            double ex = view.exactX(dx, dz);
+            double ey = view.exactY(dx, dz);
+            int px = (int) Math.floor(ex);
+            int py = (int) Math.floor(ey);
             if (!view.contains(px, py)) continue;
-            int alpha = verticalAlpha(other.getY(), player.getY());
+            int alpha = verticalAlpha(otherY, renderY);
+            g.pose().pushMatrix();
+            g.pose().translate((float) (ex - px), (float) (ey - py));
             drawPlayerMarker(g, minecraft, other, px, py, alpha, heads);
-            int hint = heightHint(other.getY() - player.getY());
+            int hint = heightHint(otherY - renderY);
             if (hint != 0) {
                 drawHeightArrow(g, px + (heads ? PLAYER_HEAD_SIZE / 2 + 1 : MARKER_RADIUS) + 4, py, hint, alpha);
             }
+            g.pose().popMatrix();
         }
 
         String worldId = currentWorldId(minecraft);
         if (worldId != null && VoxyMapSettings.waypointsEnabled()) {
             for (DimensionLinks.Foreign foreign : DimensionLinks.foreignWaypoints(minecraft)) {
                 if (WaypointPrefs.shownOn(foreign.original().id(), WaypointDisplay.Surface.MINIMAP)) {
-                    drawWaypoint(g, minecraft, view, player, foreign.local(), WaypointIcons.OTHER_DIMENSION_ALPHA);
+                    drawWaypoint(g, minecraft, view, foreign.local(), WaypointIcons.OTHER_DIMENSION_ALPHA);
                 }
             }
             for (WaypointManager.Waypoint waypoint : WaypointManager.visibleForWorld(worldId, WaypointDisplay.Surface.MINIMAP)) {
-                drawWaypoint(g, minecraft, view, player, waypoint, 0xFF);
+                drawWaypoint(g, minecraft, view, waypoint, 0xFF);
             }
         }
 
@@ -595,22 +708,21 @@ public final class MinimapRenderer {
             double x1 = placement.maxX();
             double z1 = placement.maxZ();
             double reach = worldRadius * 1.5;
-            if (x1 < player.getX() - reach || x0 > player.getX() + reach || z1 < player.getZ() - reach
-                    || z0 > player.getZ() + reach) {
+            if (x1 < renderX - reach || x0 > renderX + reach || z1 < renderZ - reach || z0 > renderZ + reach) {
                 continue;
             }
-            x0 = Math.max(x0, player.getX() - reach);
-            x1 = Math.min(x1, player.getX() + reach);
-            z0 = Math.max(z0, player.getZ() - reach);
-            z1 = Math.min(z1, player.getZ() + reach);
-            drawGridLine(g, player, view, x0, z0, x1, z0, color);
-            drawGridLine(g, player, view, x1, z0, x1, z1, color);
-            drawGridLine(g, player, view, x1, z1, x0, z1, color);
-            drawGridLine(g, player, view, x0, z1, x0, z0, color);
+            x0 = Math.max(x0, renderX - reach);
+            x1 = Math.min(x1, renderX + reach);
+            z0 = Math.max(z0, renderZ - reach);
+            z1 = Math.min(z1, renderZ + reach);
+            drawGridLine(g, view, x0, z0, x1, z0, color);
+            drawGridLine(g, view, x1, z0, x1, z1, color);
+            drawGridLine(g, view, x1, z1, x0, z1, color);
+            drawGridLine(g, view, x0, z1, x0, z0, color);
         }
 
         if (!view.rotated()) {
-            drawFacingIndicator(g, view.centerX(), view.centerY(), player.getYRot());
+            drawFacingIndicator(g, view.centerX(), view.centerY(), yaw);
         } else {
             drawFacingIndicator(g, view.centerX(), view.centerY(), 0.0, -1.0);
         }
@@ -618,17 +730,22 @@ public final class MinimapRenderer {
         drawDot(g, view.centerX(), view.centerY(), MARKER_RADIUS, 0xFF55E7FF);
     }
 
-    private static void drawWaypoint(GuiGraphicsExtractor g, Minecraft minecraft, View view, Player player,
+    private static void drawWaypoint(GuiGraphicsExtractor g, Minecraft minecraft, View view,
                                      WaypointManager.Waypoint waypoint, int alpha) {
-        double dx = rotatedX(waypoint.x() - player.getX(), waypoint.z() - player.getZ(), view.cosA(), view.sinA())
+        double dx = rotatedX(waypoint.x() - renderX, waypoint.z() - renderZ, view.cosA(), view.sinA())
                 * view.scale();
-        double dz = rotatedZ(waypoint.x() - player.getX(), waypoint.z() - player.getZ(), view.cosA(), view.sinA())
+        double dz = rotatedZ(waypoint.x() - renderX, waypoint.z() - renderZ, view.cosA(), view.sinA())
                 * view.scale();
-        int px = view.centerX() + (int) Math.round(dx);
-        int py = view.centerY() + (int) Math.round(dz);
+        double ex = view.centerX() + dx;
+        double ey = view.centerY() + dz;
+        int px = (int) Math.floor(ex);
+        int py = (int) Math.floor(ey);
         if (view.contains(px, py)) {
+            g.pose().pushMatrix();
+            g.pose().translate((float) (ex - px), (float) (ey - py));
             WaypointIcons.drawCentered(g, minecraft.font, px, py, WAYPOINT_ICON_SIZE, waypoint.color(),
                     waypoint.initial(), alpha);
+            g.pose().popMatrix();
         } else {
             drawOffscreenWaypoint(g, view, view.radius() - OFFSCREEN_EDGE_INSET, dx, dz,
                     scaleAlpha(0xFF000000 | waypoint.color(), alpha));
@@ -675,29 +792,29 @@ public final class MinimapRenderer {
         return dx * sinA + dz * cosA;
     }
 
-    private static void drawChunkGrid(GuiGraphicsExtractor g, Player player, View view, double worldRadius) {
+    private static void drawChunkGrid(GuiGraphicsExtractor g, View view, double worldRadius) {
         if (!VoxyMapSettings.chunkGridEnabled()) {
             return;
         }
         double radius = worldRadius * (view.rotated() ? 1.4143 : 1.0) + 2.0;
-        double minX = player.getX() - radius, maxX = player.getX() + radius;
-        double minZ = player.getZ() - radius, maxZ = player.getZ() + radius;
+        double minX = renderX - radius, maxX = renderX + radius;
+        double minZ = renderZ - radius, maxZ = renderZ + radius;
         int color = 0x2AFFFFFF;
 
         int startGx = (int) (Math.floor(minX / 16.0) * 16);
         for (int gx = startGx; gx <= maxX; gx += 16) {
-            drawGridLine(g, player, view, gx, minZ, gx, maxZ, color);
+            drawGridLine(g, view, gx, minZ, gx, maxZ, color);
         }
         int startGz = (int) (Math.floor(minZ / 16.0) * 16);
         for (int gz = startGz; gz <= maxZ; gz += 16) {
-            drawGridLine(g, player, view, minX, gz, maxX, gz, color);
+            drawGridLine(g, view, minX, gz, maxX, gz, color);
         }
     }
 
-    private static void drawGridLine(GuiGraphicsExtractor g, Player player, View view,
+    private static void drawGridLine(GuiGraphicsExtractor g, View view,
                                       double worldX1, double worldZ1, double worldX2, double worldZ2, int color) {
-        double dx1 = worldX1 - player.getX(), dz1 = worldZ1 - player.getZ();
-        double dx2 = worldX2 - player.getX(), dz2 = worldZ2 - player.getZ();
+        double dx1 = worldX1 - renderX, dz1 = worldZ1 - renderZ;
+        double dx2 = worldX2 - renderX, dz2 = worldZ2 - renderZ;
         double x1 = view.centerX() + rotatedX(dx1, dz1, view.cosA(), view.sinA()) * view.scale();
         double y1 = view.centerY() + rotatedZ(dx1, dz1, view.cosA(), view.sinA()) * view.scale();
         double x2 = view.centerX() + rotatedX(dx2, dz2, view.cosA(), view.sinA()) * view.scale();
@@ -712,14 +829,18 @@ public final class MinimapRenderer {
             x2 = clipped[2];
             y2 = clipped[3];
         }
-        int ix1 = (int) Math.round(x1);
-        int iy1 = (int) Math.round(y1);
-        int ix2 = (int) Math.round(x2);
-        int iy2 = (int) Math.round(y2);
         if (!view.rotated()) {
-            g.fill(Math.min(ix1, ix2), Math.min(iy1, iy2), Math.max(ix1, ix2) + 1, Math.max(iy1, iy2) + 1, color);
+            double left = Math.min(x1, x2);
+            double top = Math.min(y1, y2);
+            int baseX = (int) Math.floor(left);
+            int baseY = (int) Math.floor(top);
+            g.pose().pushMatrix();
+            g.pose().translate((float) (left - baseX), (float) (top - baseY));
+            g.fill(baseX, baseY, baseX + Math.max(1, (int) Math.round(Math.abs(x2 - x1))),
+                    baseY + Math.max(1, (int) Math.round(Math.abs(y2 - y1))), color);
+            g.pose().popMatrix();
         } else {
-            drawLine(g, ix1, iy1, ix2, iy2, color);
+            drawLine(g, (int) Math.round(x1), (int) Math.round(y1), (int) Math.round(x2), (int) Math.round(y2), color);
         }
     }
 
@@ -750,10 +871,13 @@ public final class MinimapRenderer {
 
     private static void drawCardinalLetters(GuiGraphicsExtractor g, Minecraft minecraft, View view) {
         double radius = view.radius() - 8.0;
-        drawCardinalLetter(g, minecraft, view, 0.0, -radius, "N", 0xFFFF6B5B);
-        drawCardinalLetter(g, minecraft, view, radius, 0.0, "E", 0xFFDFF8FF);
-        drawCardinalLetter(g, minecraft, view, 0.0, radius, "S", 0xFFDFF8FF);
-        drawCardinalLetter(g, minecraft, view, -radius, 0.0, "W", 0xFFDFF8FF);
+        drawCardinalLetter(g, minecraft, view, radius, 0.0, "E", UiTheme.TEXT_SECONDARY);
+        drawCardinalLetter(g, minecraft, view, 0.0, radius, "S", UiTheme.TEXT_SECONDARY);
+        drawCardinalLetter(g, minecraft, view, -radius, 0.0, "W", UiTheme.TEXT_SECONDARY);
+        int x = view.centerX() + (int) Math.round(rotatedX(0.0, -radius, view.cosA(), view.sinA()));
+        int y = view.centerY() + (int) Math.round(rotatedZ(0.0, -radius, view.cosA(), view.sinA()));
+        UiDraw.panel(g, x - 5, y - 6, 11, 11, UiTheme.DANGER_FILL);
+        g.text(minecraft.font, "N", x - minecraft.font.width("N") / 2 + 1, y - 4, UiTheme.TEXT);
     }
 
     private static void drawCardinalLetter(GuiGraphicsExtractor g, Minecraft minecraft, View view,

@@ -32,14 +32,20 @@ final class MinimapBlockColors {
         static final Sample NONE = new Sample(0, -1);
     }
 
-    private static final Map<BlockState, Sample> SAMPLES = new ConcurrentHashMap<>();
-    private static volatile BlockStateModelSet sampledModels;
+    private record Samples(BlockStateModelSet models, Map<BlockState, Sample> byState) {
+    }
+
+    private static volatile Samples samples = new Samples(null, new ConcurrentHashMap<>());
     private static volatile boolean disabled;
 
     private MinimapBlockColors() {
     }
 
     static int blockColor(Level level, BlockState state, BlockPos pos) {
+        return blockColor(level instanceof BlockAndTintGetter tintGetter ? tintGetter : null, state, pos);
+    }
+
+    static int blockColor(BlockAndTintGetter tintGetter, BlockState state, BlockPos pos) {
         if (disabled) {
             return 0;
         }
@@ -48,16 +54,26 @@ final class MinimapBlockColors {
             if (sample.argb() == 0) {
                 return 0;
             }
-            if (sample.tintIndex() < 0 || !(level instanceof BlockAndTintGetter tintGetter)) {
+            if (sample.tintIndex() < 0 || tintGetter == null) {
                 return sample.argb();
             }
             BlockTintSource source = Minecraft.getInstance().getBlockColors().getTintSource(state, sample.tintIndex());
             return source == null ? sample.argb()
                     : MapColorMath.multiply(sample.argb(), source.colorInWorld(state, tintGetter, pos));
         } catch (RuntimeException | LinkageError exception) {
-            disable(exception);
+            if (Minecraft.getInstance().isSameThread()) {
+                disable(exception);
+            }
             return 0;
         }
+    }
+
+    static int waterColor(int biomeWaterRgb) {
+        return MapColorMath.scale(0xFF000000 | biomeWaterRgb, WATER_BRIGHTNESS);
+    }
+
+    static boolean enabled() {
+        return !disabled;
     }
 
     static int waterColor(Level level, BlockPos pos) {
@@ -85,16 +101,17 @@ final class MinimapBlockColors {
         if (models == null) {
             return Sample.NONE;
         }
-        if (models != sampledModels) {
-            SAMPLES.clear();
-            sampledModels = models;
+        Samples current = samples;
+        if (current.models() != models) {
+            current = new Samples(models, new ConcurrentHashMap<>());
+            samples = current;
         }
-        Sample cached = SAMPLES.get(state);
+        Sample cached = current.byState().get(state);
         if (cached != null) {
             return cached;
         }
         Sample sampled = sampleModel(models.get(state));
-        SAMPLES.put(state, sampled);
+        current.byState().put(state, sampled);
         return sampled;
     }
 
@@ -145,15 +162,20 @@ final class MinimapBlockColors {
         if (image == null) {
             return 0;
         }
-        int width = Math.min(contents.width(), image.getWidth());
-        int height = Math.min(contents.height(), image.getHeight());
-        int[] pixels = new int[width * height];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                pixels[y * width + x] = image.getPixel(x, y);
+        SpriteReadLock.LOCK.readLock().lock();
+        try {
+            int width = Math.min(contents.width(), image.getWidth());
+            int height = Math.min(contents.height(), image.getHeight());
+            int[] pixels = new int[width * height];
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    pixels[y * width + x] = image.getPixel(x, y);
+                }
             }
+            return MapColorMath.averageArgb(pixels);
+        } finally {
+            SpriteReadLock.LOCK.readLock().unlock();
         }
-        return MapColorMath.averageArgb(pixels);
     }
 
     private static void disable(Throwable cause) {

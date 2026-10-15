@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "voxymap_gametest",
+  "version": "1.0.0",
+  "name": "VoxyMap Game Tests",
+  "environment": "client",
+  "license": "MIT",
+  "entrypoints": {
+    "fabric-client-gametest": ["com.voxymap.gametest.VoxyMapGameTest"]
+  },
+  "depends": {
+    "voxymap": "*",
+    "fabric-client-gametest-api-v1": "*"
+  }
+}

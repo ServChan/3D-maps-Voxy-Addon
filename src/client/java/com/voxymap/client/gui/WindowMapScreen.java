@@ -2,8 +2,12 @@ package com.voxymap.client.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.compat.MinecraftCompat;
+import com.voxymap.client.map.RadarCategory;
+import com.voxymap.client.map.MinimapRenderer;
 import com.voxymap.client.map.FlatMapRenderer;
+import com.voxymap.client.map.FlatMapTerrain;
 import com.voxymap.client.map.NetherRoofController;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapSettings;
@@ -11,7 +15,6 @@ import com.voxymap.client.map.ServerRules;
 import com.voxymap.client.map.WaypointDisplay;
 import com.voxymap.client.map.WaypointManager;
 import com.voxymap.client.map.WindowMapRenderer;
-import me.cortex.voxy.commonImpl.WorldIdentifier;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -198,7 +201,8 @@ public final class WindowMapScreen extends Screen {
             }
         }
         for (Player other : minecraft.level.players()) {
-            if (other == player || !ServerRules.radarAllowed()) {
+            if (other == player || !ServerRules.radarAllowed() || !VoxyMapSettings.radarShows(RadarCategory.PLAYERS)
+                    || VoxyMapSettings.playerHidden(other.getUUID()) || other.isInvisibleTo(player)) {
                 continue;
             }
             int[] point = project(view, other.getX(), other.getY(), other.getZ());
@@ -238,8 +242,7 @@ public final class WindowMapScreen extends Screen {
     }
 
     private String worldId() {
-        WorldIdentifier identifier = WorldIdentifier.of(minecraft.level);
-        return identifier == null ? null : identifier.getWorldId();
+        return MinimapRenderer.currentWorldId(minecraft);
     }
 
     private void moveWithKeyboard() {
@@ -363,7 +366,7 @@ public final class WindowMapScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int keyCode = event.key();
-        if (keyCode == InputConstants.KEY_ESCAPE || keyCode == InputConstants.KEY_M) {
+        if (keyCode == InputConstants.KEY_ESCAPE || VoxyMapClient.isOpenMapKey(event)) {
             onClose();
             return true;
         }
@@ -392,6 +395,9 @@ public final class WindowMapScreen extends Screen {
     public void removed() {
         NetherRoofController.deactivate();
         WindowMapRenderer.release();
+        if (minecraft != null) {
+            FlatMapTerrain.clear(minecraft);
+        }
         super.removed();
     }
 

@@ -8,7 +8,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
-import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -58,9 +57,7 @@ public final class FlatMapTerrain {
             level = current;
         }
         int playerY = (int) Math.floor(player.getY());
-        MinimapTileCache.ScanMode scanMode = MinimapTileCache.scanMode(current.dimensionType().hasCeiling(), playerY,
-                current.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                        (int) Math.floor(player.getX()), (int) Math.floor(player.getZ())));
+        MinimapTileCache.ScanMode scanMode = MinimapRenderer.scanMode(current, player);
         if (scanMode != mode || (scanMode == MinimapTileCache.ScanMode.CAVE
                 && Math.abs(playerY - modeY) >= MinimapTileCache.Y_TOLERANCE_BLOCKS)) {
             mode = scanMode;

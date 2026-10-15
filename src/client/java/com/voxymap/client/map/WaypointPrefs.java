@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class WaypointPrefs {
     public static final int MAX_SYMBOL_LENGTH = 2;
+    private static final String TEMPORARY_ID_PREFIX = ".temp-";
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("voxymap-waypoint-prefs.properties");
     private static final Path BACKUP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".bak");
     private static final Path TEMP_PATH = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
@@ -85,17 +86,24 @@ public final class WaypointPrefs {
         }
     }
 
+    public static void preload() {
+        load();
+    }
+
     private static void load() {
         if (loaded) return;
         synchronized (WaypointPrefs.class) {
             if (loaded) return;
-            Properties properties = read(CONFIG_PATH);
+            Properties properties = AtomicPropertiesWriter.looksTruncated(CONFIG_PATH) ? null : read(CONFIG_PATH);
             if (properties == null) {
                 properties = read(BACKUP_PATH);
             }
             if (properties != null) {
                 for (String key : properties.stringPropertyNames()) {
                     String value = properties.getProperty(key);
+                    if (key.contains(TEMPORARY_ID_PREFIX)) {
+                        continue;
+                    }
                     if (key.startsWith(LEGACY_HIDDEN_PREFIX) && "true".equals(value)) {
                         DISPLAYS.putIfAbsent(key.substring(LEGACY_HIDDEN_PREFIX.length()), WaypointDisplay.HIDDEN);
                     } else if (key.startsWith(DISPLAY_PREFIX)) {

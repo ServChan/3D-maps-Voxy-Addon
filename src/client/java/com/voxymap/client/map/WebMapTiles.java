@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -34,6 +35,7 @@ public final class WebMapTiles {
     private static final long FAILED_RETRY_NANOS = 20L * 1_000_000_000L;
     private static final long SWEEP_INTERVAL_NANOS = 1_000_000_000L;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    private static final long RESPONSE_TIMEOUT_SECONDS = 30;
 
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .connectTimeout(REQUEST_TIMEOUT)
@@ -105,13 +107,16 @@ public final class WebMapTiles {
                 .GET()
                 .build();
         CompletableFuture<HttpResponse<byte[]>> future = CLIENT.sendAsync(request, HttpResponse.BodyHandlers.limiting(
-                HttpResponse.BodyHandlers.ofByteArray(), MAX_TILE_BYTES));
+                HttpResponse.BodyHandlers.ofByteArray(), MAX_TILE_BYTES)).orTimeout(RESPONSE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         REQUESTS.add(future);
         future.whenComplete((response, throwable) -> {
             try {
                 Result result = decode(key, requestGeneration, response, throwable);
                 if (result.generation() == generation) {
                     RESULTS.add(result);
+                    if (result.generation() != generation && RESULTS.remove(result) && result.image() != null) {
+                        result.image().close();
+                    }
                 } else if (result.image() != null) {
                     result.image().close();
                 }

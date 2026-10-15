@@ -91,8 +91,11 @@ public final class WebMapRenderer {
     }
 
     private static void requestTile(VanillaSquadWebMap.World world, int zoom, int tileX, int tileZ) {
-        WebMapTiles.request(new WebMapTiles.TileKey(world.mapId(), world.name(), zoom, tileX, tileZ),
-                world.tileUrl(zoom, tileX, tileZ));
+        WebMapTiles.TileKey key = new WebMapTiles.TileKey(world.mapId(), world.name(), zoom, tileX, tileZ);
+        WebMapTiles.request(key, world.tileUrl(zoom, tileX, tileZ));
+        if (zoom == 0) {
+            WebMapTiles.texture(key);
+        }
     }
 
     private static List<int[]> visibleTiles(FlatMapRenderer.View view, int zoom, int maxZoom) {
@@ -189,7 +192,8 @@ public final class WebMapRenderer {
         }
         boolean heads = MinimapHeads.shown(minecraft);
         for (Player other : minecraft.level.players()) {
-            if (other == self || !ServerRules.radarAllowed()) {
+            if (other == self || !ServerRules.radarAllowed() || !VoxyMapSettings.radarShows(RadarCategory.PLAYERS)
+                    || VoxyMapSettings.playerHidden(other.getUUID()) || other.isInvisibleTo(self)) {
                 continue;
             }
             double sx = view.screenX(other.getX());

@@ -10,6 +10,7 @@ import com.voxymap.client.compat.MinecraftCompat;
 import com.voxymap.client.map.AtomicPropertiesWriter;
 import com.voxymap.client.map.DeathWaypointTracker;
 import com.voxymap.client.map.DimensionLinks;
+import com.voxymap.client.map.MapEnvironmentRefresh;
 import com.voxymap.client.map.MapShareClient;
 import com.voxymap.client.map.MinimapOverlays;
 import com.voxymap.client.map.MinimapRenderer;
@@ -20,12 +21,16 @@ import com.voxymap.client.map.TemporaryWaypoints;
 import com.voxymap.client.map.WaypointChatShare;
 import com.voxymap.client.map.VoxyMapSettings;
 import com.voxymap.client.map.WaypointBeaconRenderer;
+import com.voxymap.client.map.WaypointManager;
+import com.voxymap.client.map.WaypointPrefs;
+import com.voxymap.client.map.WaypointSyncSettings;
 import com.voxymap.client.map.WaypointWorlds;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.minecraft.network.chat.Component;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.KeyEvent;
@@ -53,6 +58,10 @@ public class VoxyMapClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         VoxyMapSettings.load();
+        WaypointManager.load();
+        WaypointPrefs.preload();
+        WaypointWorlds.preload();
+        WaypointSyncSettings.load();
         openMapKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.voxymap.open_map", InputConstants.Type.KEYBOARD, InputConstants.KEY_M, CATEGORY));
         minimapZoomKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
@@ -111,10 +120,14 @@ public class VoxyMapClient implements ClientModInitializer {
             WaypointChatShare.tick(client);
 
             MapShareClient.stopIfWorldChanged(client);
+            if (client.level == null) {
+                MinimapRenderer.forgetLevel();
+            }
 
             OreMaskController.tick(client);
             DeathWaypointTracker.tick(client);
             MobMarkerCache.tick(client);
+            MapEnvironmentRefresh.tick(client);
             watchHudHook(client);
         });
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> AtomicPropertiesWriter.flush());
@@ -124,6 +137,14 @@ public class VoxyMapClient implements ClientModInitializer {
 
     public static boolean isAddWaypointKey(KeyEvent event) {
         return addWaypointKey != null && addWaypointKey.matches(event);
+    }
+
+    public static boolean isOpenMapKey(KeyEvent event) {
+        return openMapKey != null && openMapKey.matches(event);
+    }
+
+    public static Component addWaypointKeyName() {
+        return addWaypointKey == null ? Component.literal("N") : addWaypointKey.getTranslatedKeyMessage();
     }
 
     private static void watchHudHook(Minecraft client) {

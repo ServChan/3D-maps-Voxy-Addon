@@ -38,7 +38,7 @@ public final class VoxyMapPicker {
 
     private static Hit pick(WorldIdentifier worldId, Ray ray, double maxDistance, int minBlockY, int maxBlockYExclusive) {
         WorldEngine engine = VoxySectionBridge.liveEngine(worldId);
-        if (engine == null) return null;
+        if (engine == null || !VoxySectionBridge.holdRef(engine)) return null;
 
         try (SectionReader reader = new SectionReader(engine, minBlockY, maxBlockYExclusive)) {
             VoxelRayPicker.Hit hit = VoxelRayPicker.pick(
@@ -53,6 +53,8 @@ public final class VoxyMapPicker {
                 VoxyMapClient.LOGGER.warn("Could not pick the Voxy surface under the cursor", exception);
             }
             return null;
+        } finally {
+            VoxySectionBridge.dropRef(engine);
         }
     }
 

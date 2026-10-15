@@ -5,6 +5,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -54,7 +55,33 @@ public final class WaypointWorlds {
     }
 
     public static void refreshServerKey(Minecraft minecraft) {
-        currentServerKey = serverKey(minecraft);
+        String key = serverKey(minecraft);
+        IntegratedServer local = minecraft == null ? null : minecraft.getSingleplayerServer();
+        if (key != null && local != null && minecraft.getCurrentServer() == null) {
+            adoptLegacyLocalKey(key, "local:" + local.getWorldData().getLevelName());
+        }
+        currentServerKey = key;
+    }
+
+    static void adoptLegacyLocalKey(String key, String legacyKey) {
+        load();
+        if (NAMES.containsKey(key) || SELECTED.containsKey(key)) {
+            return;
+        }
+        boolean changed = false;
+        Map<String, String> names = NAMES.get(legacyKey);
+        if (names != null && !names.isEmpty()) {
+            NAMES.put(key, new ConcurrentHashMap<>(names));
+            changed = true;
+        }
+        String selected = SELECTED.get(legacyKey);
+        if (selected != null) {
+            SELECTED.put(key, selected);
+            changed = true;
+        }
+        if (changed) {
+            save();
+        }
     }
 
     static String serverKey(Minecraft minecraft) {
@@ -65,7 +92,8 @@ public final class WaypointWorlds {
         }
         IntegratedServer local = minecraft.getSingleplayerServer();
         if (local != null) {
-            return "local:" + local.getWorldData().getLevelName();
+            Path folder = local.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().getFileName();
+            return folder == null ? "local:" + local.getWorldData().getLevelName() : "localdir:" + folder;
         }
         return null;
     }
@@ -155,11 +183,15 @@ public final class WaypointWorlds {
         return trimmed.length() > MAX_NAME_LENGTH ? trimmed.substring(0, MAX_NAME_LENGTH) : trimmed;
     }
 
+    public static void preload() {
+        load();
+    }
+
     private static void load() {
         if (loaded) return;
         synchronized (WaypointWorlds.class) {
             if (loaded) return;
-            Properties properties = read(CONFIG_PATH);
+            Properties properties = AtomicPropertiesWriter.looksTruncated(CONFIG_PATH) ? null : read(CONFIG_PATH);
             if (properties == null) {
                 properties = read(BACKUP_PATH);
             }

@@ -1,6 +1,7 @@
 package com.voxymap.client.mixin;
 
 import com.voxymap.client.map.MapScreenshot;
+import com.voxymap.client.map.MapViewMode;
 import com.voxymap.client.map.VoxyMapSettings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -15,7 +16,8 @@ public abstract class ScreenshotMixin {
     @Inject(method = "grab(Lnet/minecraft/client/Minecraft;Z)V", at = @At("HEAD"), cancellable = true,
             remap = false, require = 0)
     private static void voxymap$captureMapWithoutInterface(Minecraft minecraft, boolean panorama, CallbackInfo ci) {
-        boolean keepMarkers = VoxyMapSettings.screenshotContent() == VoxyMapSettings.ScreenshotContent.WITH_MARKERS;
+        boolean keepMarkers = VoxyMapSettings.screenshotContent() == VoxyMapSettings.ScreenshotContent.WITH_MARKERS
+                || MapViewMode.flat();
         if (MapScreenshot.begin(MapScreenshot.isMapOpen(minecraft), keepMarkers)) {
             ci.cancel();
         }

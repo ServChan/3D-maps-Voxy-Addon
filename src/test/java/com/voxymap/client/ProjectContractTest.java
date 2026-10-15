@@ -58,6 +58,15 @@ class ProjectContractTest {
     }
 
     @Test
+    void mapModelGrowthDoesNotDependOnThePose() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/client/java/com/voxymap/client/map/MapEntityScale.java"), StandardCharsets.UTF_8);
+        assertTrue(source.contains("getDimensions(Pose.STANDING).height()"),
+                "Growth must use the standing height, or gliding and swimming players grow threefold");
+        assertFalse(source.contains("requiredFactor(entity.getBbHeight()"));
+    }
+
+    @Test
     void recenterUsesThePlayersRealHeightAndMarkersUseTheCachedPlayerList() throws IOException {
         String source = Files.readString(Path.of(
                 "src/client/java/com/voxymap/client/gui/MapScreen.java"), StandardCharsets.UTF_8);

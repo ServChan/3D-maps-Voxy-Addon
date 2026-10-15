@@ -89,6 +89,9 @@ public final class VoxyShaderPatcher {
 
 
     public static String patchSafely(String resource, String source) {
+        if (unsupported) {
+            return source;
+        }
         try {
             return patch(resource, source);
         } catch (IllegalStateException exception) {

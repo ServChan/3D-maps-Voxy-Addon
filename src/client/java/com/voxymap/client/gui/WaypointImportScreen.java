@@ -4,10 +4,13 @@ import com.voxymap.client.map.WaypointChatShare;
 import com.voxymap.client.map.WaypointImport;
 import com.voxymap.client.map.WaypointLabels;
 import com.voxymap.client.map.WaypointText;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.network.chat.Component;
 
@@ -121,6 +124,36 @@ public final class WaypointImportScreen extends Screen {
             int y = viewportTop + row.top() - scroll + (ROW_HEIGHT - CONTROL_HEIGHT) / 2;
             row.button().setY(y);
             row.button().visible = y >= viewportTop && y + CONTROL_HEIGHT <= viewportBottom;
+        }
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == InputConstants.KEY_TAB) {
+            for (Row row : rows) {
+                row.button().visible = true;
+            }
+            boolean handled = super.keyPressed(event);
+            layoutRows();
+            return handled;
+        }
+        return super.keyPressed(event);
+    }
+
+    @Override
+    public void setFocused(GuiEventListener focused) {
+        super.setFocused(focused);
+        int viewport = viewportBottom - viewportTop;
+        for (Row row : rows) {
+            if (row.button() == focused) {
+                if (row.top() < scroll) {
+                    scroll = row.top();
+                } else if (row.top() + ROW_HEIGHT > scroll + viewport) {
+                    scroll = Math.min(maxScroll(), row.top() + ROW_HEIGHT - viewport);
+                }
+                layoutRows();
+                return;
+            }
         }
     }
 

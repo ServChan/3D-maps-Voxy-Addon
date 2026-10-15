@@ -72,7 +72,7 @@ public final class WaypointSyncSettings {
         if (loaded) return;
         loaded = true;
 
-        Properties properties = readProperties(CONFIG_PATH);
+        Properties properties = AtomicPropertiesWriter.looksTruncated(CONFIG_PATH) ? null : readProperties(CONFIG_PATH);
         if (properties == null) {
             properties = readProperties(BACKUP_PATH);
             if (properties != null) {

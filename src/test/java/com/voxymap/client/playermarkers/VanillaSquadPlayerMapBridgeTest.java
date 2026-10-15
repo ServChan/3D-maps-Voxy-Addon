@@ -62,6 +62,22 @@ class VanillaSquadPlayerMapBridgeTest {
     }
 
     @Test
+    void twoMatchingPlayersOnTheSameMapDoNotMakeItAmbiguous() {
+        String localUuid = "2f4c3b65811535398569b527957f6721";
+        String friendUuid = "770f80234155382b9bdee7e399cb92be";
+        Map<String, List<RemotePlayerMarkers.RemotePlayer>> snapshots = Map.of(
+                "build", List.of(
+                        new RemotePlayerMarkers.RemotePlayer("thost", "minecraft_overworld", 101, 64, 100, localUuid),
+                        new RemotePlayerMarkers.RemotePlayer("friend", "minecraft_overworld", 113, 64, 100, friendUuid)));
+
+        String selected = VanillaSquadPlayerMapBridge.selectMapId(
+                snapshots, "minecraft:overworld", localUuid, "thost", 100, 100,
+                List.of(new RemotePlayerMarkers.Observer(friendUuid, "friend", 110, 100)));
+
+        assertEquals("build", selected);
+    }
+
+    @Test
     void selectsRealmFromAnotherLoadedPlayerWhenTheLocalPlayerIsHiddenFromSquaremap() {
         String observerUuid = "770f80234155382b9bdee7e399cb92be";
         Map<String, List<RemotePlayerMarkers.RemotePlayer>> snapshots = Map.of(

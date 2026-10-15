@@ -2,7 +2,6 @@ package com.voxymap.client.map;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.voxymap.client.VoxyMapClient;
-import me.cortex.voxy.commonImpl.WorldIdentifier;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Camera;
@@ -46,8 +45,7 @@ public final class WaypointBeaconRenderer {
             return;
         }
 
-        WorldIdentifier identifier = WorldIdentifier.of(minecraft.level);
-        String worldId = identifier == null ? null : identifier.getWorldId();
+        String worldId = MinimapRenderer.currentWorldId(minecraft);
         if (worldId == null) {
             return;
         }
@@ -56,7 +54,8 @@ public final class WaypointBeaconRenderer {
         Vec3 cameraPos = camera.position();
         PoseStack poseStack = context.poseStack();
         SubmitNodeCollector collector = context.submitNodeCollector();
-        float animationTime = (float) minecraft.level.getGameTime();
+        float animationTime = Math.floorMod(minecraft.level.getGameTime(), 40L)
+                + minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         VoxyMapSettings.WaypointRange range = VoxyMapSettings.waypointRange();
         double maxDistanceSq = range.unlimited() ? MAX_RENDER_DISTANCE_SQ
                 : Math.min(MAX_RENDER_DISTANCE_SQ, (double) range.blocks() * range.blocks());

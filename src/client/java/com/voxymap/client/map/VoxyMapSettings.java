@@ -83,6 +83,15 @@ public final class VoxyMapSettings {
     private static boolean viewDirectionEnabled = true;
     private static ScreenshotContent screenshotContent = ScreenshotContent.NO_INTERFACE;
     private static FogSuppression fogSuppression = FogSuppression.ALWAYS;
+    private static MapWeather mapWeather = MapWeather.CLEAR;
+    private static MapEntityModels mapEntityModels = MapEntityModels.PLAYERS_AND_MOBS;
+    private static boolean voxyInWorld = true;
+    private static boolean map2d = false;
+    private static boolean uiAnimations = true;
+    private static final Set<String> hiddenPlayers = ConcurrentHashMap.newKeySet();
+    private static final Properties DEFAULTS = toProperties();
+    private static int batchDepth;
+    private static boolean savePending;
 
     private VoxyMapSettings() {
     }
@@ -91,7 +100,7 @@ public final class VoxyMapSettings {
         if (loaded) return;
         loaded = true;
 
-        Properties properties = readProperties(CONFIG_PATH);
+        Properties properties = AtomicPropertiesWriter.looksTruncated(CONFIG_PATH) ? null : readProperties(CONFIG_PATH);
         if (properties == null) {
             properties = readProperties(BACKUP_PATH);
             if (properties != null) {
@@ -99,7 +108,10 @@ public final class VoxyMapSettings {
             }
         }
         if (properties == null) properties = new Properties();
+        apply(properties);
+    }
 
+    private static void apply(Properties properties) {
         pauseSingleplayer = readBoolean(properties.getProperty("pauseSingleplayer"), pauseSingleplayer);
         cameraSpeedMultiplier = clamp(readDouble(properties.getProperty("cameraSpeedMultiplier"), cameraSpeedMultiplier), 0.25, 4.0);
         vanillaSquadPlayersEnabled = readBoolean(properties.getProperty("vanillaSquadPlayersEnabled"), vanillaSquadPlayersEnabled);
@@ -194,9 +206,72 @@ public final class VoxyMapSettings {
         screenshotContent = ScreenshotContent.parse(properties.getProperty("screenshotContent"));
         fogSuppression = FogSuppression.parse(properties.getProperty("fogSuppressionMode"),
                 properties.getProperty("fogSuppressionEnabled"));
+        mapWeather = parseEnum(MapWeather.class, properties.getProperty("mapWeather"), MapWeather.CLEAR);
+        mapEntityModels = parseEnum(MapEntityModels.class, properties.getProperty("mapEntityModels"),
+                MapEntityModels.PLAYERS_AND_MOBS);
+        voxyInWorld = readBoolean(properties.getProperty("voxyInWorld"), voxyInWorld);
+        map2d = readBoolean(properties.getProperty("map2d"), map2d);
+        uiAnimations = readBoolean(properties.getProperty("uiAnimations"), uiAnimations);
+        hiddenPlayers.clear();
+        String hidden = properties.getProperty("hiddenPlayers");
+        if (hidden != null) {
+            for (String part : hidden.split(",")) {
+                String uuid = part.trim().toLowerCase(Locale.ROOT);
+                if (!uuid.isEmpty()) {
+                    try {
+                        hiddenPlayers.add(java.util.UUID.fromString(uuid).toString());
+                    } catch (IllegalArgumentException ignored) {
+                    }
+                }
+            }
+        }
     }
 
     public static void save() {
+        if (batchDepth > 0) {
+            savePending = true;
+            return;
+        }
+        AtomicPropertiesWriter.save(CONFIG_PATH, BACKUP_PATH, TEMP_PATH, toProperties(), "VoxyMap client settings");
+    }
+
+    public static void batch(Runnable changes) {
+        load();
+        batchDepth++;
+        try {
+            changes.run();
+        } finally {
+            batchDepth--;
+            if (batchDepth == 0 && savePending) {
+                savePending = false;
+                save();
+            }
+        }
+    }
+
+    public static boolean isDefault(String key) {
+        load();
+        return java.util.Objects.equals(toProperties().getProperty(key), DEFAULTS.getProperty(key));
+    }
+
+    public static void reset(java.util.Collection<String> keys) {
+        load();
+        Properties properties = toProperties();
+        boolean changed = false;
+        for (String key : keys) {
+            String value = DEFAULTS.getProperty(key);
+            if (value != null && !value.equals(properties.getProperty(key))) {
+                properties.setProperty(key, value);
+                changed = true;
+            }
+        }
+        if (changed) {
+            apply(properties);
+            save();
+        }
+    }
+
+    private static Properties toProperties() {
         Properties properties = new Properties();
         properties.setProperty("pauseSingleplayer", Boolean.toString(pauseSingleplayer));
         properties.setProperty("cameraSpeedMultiplier", String.format(Locale.ROOT, "%.2f", cameraSpeedMultiplier));
@@ -244,8 +319,13 @@ public final class VoxyMapSettings {
         properties.setProperty("viewDirectionEnabled", Boolean.toString(viewDirectionEnabled));
         properties.setProperty("screenshotContent", screenshotContent.name().toLowerCase(Locale.ROOT));
         properties.setProperty("fogSuppressionMode", fogSuppression.name().toLowerCase(Locale.ROOT));
-
-        AtomicPropertiesWriter.save(CONFIG_PATH, BACKUP_PATH, TEMP_PATH, properties, "VoxyMap client settings");
+        properties.setProperty("mapWeather", mapWeather.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("mapEntityModels", mapEntityModels.name().toLowerCase(Locale.ROOT));
+        properties.setProperty("voxyInWorld", Boolean.toString(voxyInWorld));
+        properties.setProperty("map2d", Boolean.toString(map2d));
+        properties.setProperty("uiAnimations", Boolean.toString(uiAnimations));
+        properties.setProperty("hiddenPlayers", String.join(",", new java.util.TreeSet<>(hiddenPlayers)));
+        return properties;
     }
 
     public static boolean pauseSingleplayer() {
@@ -438,10 +518,7 @@ public final class VoxyMapSettings {
     }
 
     public static void cycleTimeOfDayMode() {
-        load();
-        TimeOfDay[] values = TimeOfDay.values();
-        timeOfDayMode = values[(timeOfDayMode.ordinal() + 1) % values.length];
-        save();
+        cycleTimeOfDayMode(1);
     }
 
     public static boolean mobsEnabled() {
@@ -862,6 +939,97 @@ public final class VoxyMapSettings {
         boolean nether = minecraft != null && minecraft.level != null
                 && "minecraft:the_nether".equals(minecraft.level.dimension().identifier().toString());
         return fogSuppressionMode().appliesIn(nether);
+    }
+
+    public static MapWeather mapWeather() {
+        load();
+        return mapWeather;
+    }
+
+    public static void cycleMapWeather(int direction) {
+        load();
+        MapWeather[] values = MapWeather.values();
+        mapWeather = values[Math.floorMod(mapWeather.ordinal() + direction, values.length)];
+        save();
+    }
+
+    public static MapWeather activeMapWeatherOverride() {
+        if (!VoxyMapCameraController.isActive()) {
+            return null;
+        }
+        MapWeather weather = mapWeather();
+        return weather == MapWeather.AUTO ? null : weather;
+    }
+
+    public static void cycleTimeOfDayMode(int direction) {
+        load();
+        TimeOfDay[] values = TimeOfDay.values();
+        timeOfDayMode = values[Math.floorMod(timeOfDayMode.ordinal() + direction, values.length)];
+        save();
+    }
+
+    public static MapEntityModels mapEntityModels() {
+        load();
+        return mapEntityModels;
+    }
+
+    public static void cycleMapEntityModels() {
+        load();
+        MapEntityModels[] values = MapEntityModels.values();
+        mapEntityModels = values[(mapEntityModels.ordinal() + 1) % values.length];
+        save();
+    }
+
+    public static boolean voxyInWorld() {
+        load();
+        return voxyInWorld;
+    }
+
+    public static void toggleVoxyInWorld() {
+        load();
+        voxyInWorld = !voxyInWorld;
+        save();
+    }
+
+    public static boolean playerHidden(java.util.UUID uuid) {
+        load();
+        return uuid != null && hiddenPlayers.contains(uuid.toString());
+    }
+
+    public static void togglePlayerHidden(java.util.UUID uuid) {
+        load();
+        if (uuid == null) {
+            return;
+        }
+        String key = uuid.toString();
+        if (!hiddenPlayers.remove(key)) {
+            hiddenPlayers.add(key);
+        }
+        save();
+    }
+
+    public static boolean uiAnimations() {
+        load();
+        return uiAnimations;
+    }
+
+    public static void toggleUiAnimations() {
+        load();
+        uiAnimations = !uiAnimations;
+        save();
+    }
+
+    public static boolean map2d() {
+        load();
+        return map2d;
+    }
+
+    public static void setMap2d(boolean enabled) {
+        load();
+        if (map2d != enabled) {
+            map2d = enabled;
+            save();
+        }
     }
 
     public static TimeOfDay activeMapLightingOverride() {
@@ -1292,11 +1460,68 @@ public final class VoxyMapSettings {
         }
     }
 
+    public enum MapWeather {
+        CLEAR("screen.voxymap.settings.weather.clear", 0.0f, 0.0f),
+        RAIN("screen.voxymap.settings.weather.rain", 1.0f, 0.0f),
+        THUNDER("screen.voxymap.settings.weather.thunder", 1.0f, 1.0f),
+        AUTO("screen.voxymap.settings.weather.auto", -1.0f, -1.0f);
+
+        private final String translationKey;
+        private final float rain;
+        private final float thunder;
+
+        MapWeather(String translationKey, float rain, float thunder) {
+            this.translationKey = translationKey;
+            this.rain = rain;
+            this.thunder = thunder;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        public float rain() {
+            return rain;
+        }
+
+        public float thunder() {
+            return thunder;
+        }
+    }
+
+    public enum MapEntityModels {
+        PLAYERS_AND_MOBS("screen.voxymap.settings.entitymodels.all", true, true),
+        PLAYERS("screen.voxymap.settings.entitymodels.players", true, false),
+        OFF("screen.voxymap.settings.off", false, false);
+
+        private final String translationKey;
+        private final boolean players;
+        private final boolean mobs;
+
+        MapEntityModels(String translationKey, boolean players, boolean mobs) {
+            this.translationKey = translationKey;
+            this.players = players;
+            this.mobs = mobs;
+        }
+
+        public String translationKey() {
+            return translationKey;
+        }
+
+        public boolean players() {
+            return players;
+        }
+
+        public boolean mobs() {
+            return mobs;
+        }
+    }
+
     public enum TimeOfDay {
         AUTO("screen.voxymap.settings.timeofday.auto", -1L, false),
         MORNING("screen.voxymap.settings.timeofday.morning", 1000L, false),
         DAY("screen.voxymap.settings.timeofday.day", 6000L, false),
-        EVENING("screen.voxymap.settings.timeofday.evening", 11000L, false),
+        EVENING("screen.voxymap.settings.timeofday.evening", 11800L, false),
         NIGHT("screen.voxymap.settings.timeofday.night", 18000L, true);
 
         private final String translationKey;
