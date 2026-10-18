@@ -3,7 +3,7 @@
 [![Minecraft](https://img.shields.io/badge/Minecraft-26.3-62B47A)](https://www.minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Fabric-0.19.5+-DBD0B4)](https://fabricmc.net/)
 [![Java](https://img.shields.io/badge/Java-25-E76F00)](https://adoptium.net/)
-[![Version](https://img.shields.io/badge/version-1.0.4--LTS.01-4C8BF5)](gradle.properties)
+[![Version](https://img.shields.io/badge/version-1.0.5--LTS.01-4C8BF5)](gradle.properties)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://github.com/raben12paste/3D-maps-Voxy-Addon). It opens a full-screen 3D map backed by Voxy LOD data for Minecraft 26.3.
@@ -17,10 +17,16 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 - Exact player centering plus projected markers and adaptive facing indicators for nearby active players.
 - Your own view direction: a translucent wedge for your real horizontal field of view with a bright centre ray and arrowhead, so you can see where you are looking from the map.
 - Stable near terrain: while the map is open, Voxy's cached LODs fill its normal player-centered hand-off zone instead of using Sodium's angle-dependent real-camera visibility set.
-- Clear view: while the map is open, rain, thunder and clouds are hidden, the shader pack's fog can be removed, and the map lighting can follow the game clock or be fixed to morning, day, evening or night.
+- 2D map: `V` or the 3D/2D toolbar buttons switch to a north-up flat map built from Voxy LOD sections. Tiles are cached as PNGs per world and slice and rescanned after block changes; markers, waypoints and overlays work in both views.
+- Map weather and time: rain and thunder are hidden by default, or the map shows always rain, always thunder or the real weather (rain and snow by biome); the map lighting follows the game clock or is fixed to morning, day, evening or night. Clouds are hidden, and the shader pack's fog can be removed. The world itself keeps its real weather.
+- Players and mobs on the 3D map are drawn as real models, enlarged with distance (at most 8x) and hidden when nothing connects them to the map camera. Setting "Models on the 3D map": players and mobs, players only, or off.
+- Map chrome: a toolbar, a compass, a scale bar, an info card for the selected object and a keyboard help overlay (`H`). `G` jumps to typed coordinates; a chunk grid and slime-chunk, spawn-light and biome overlays can be switched on.
+- Right-click menu on the map: add a waypoint or a temporary waypoint there, copy the coordinates, or teleport (needs operator rights).
+- Voxy outside the map can be switched off ("Voxy LODs outside the map"), so Voxy only draws far terrain while the map is open.
 - Whole-quad Nether roof removal clears the upper bedrock/anti-xray shell without slicing decoy LODs into a checkerboard, with a zoom-aware inspection aperture that opens deeper around the current map center at close range.
 - Ore masking: vanilla ores and ancient debris in Voxy's LODs are drawn plain grey, so distant terrain and the map cannot be used to spot ores.
-- Searchable Objects panel for players, waypoints and VanillaSquad territories, with center/edit/delete actions and live follow mode for a selected player.
+- Searchable Objects panel for players, waypoints and VanillaSquad territories, with center/edit/delete actions and live follow mode for a selected player. Players can be hidden from the map.
+- VanillaSquad server worlds: on VanillaSquad a Server worlds button opens the flat squaremap web map of the build, farm or art world, even one you have never visited; switch with the buttons or keys `1`-`9`. Tiles are only downloaded while that screen is open.
 - Map screenshot (`F2` with the map open): one frame without panels, HUD and chat, optionally keeping the markers.
 - Optional singleplayer pause and adjustable camera speed.
 - Optional handoff to Xaero's World Map with a return button.
@@ -28,7 +34,10 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 
 ### Waypoints
 
-- Double-click the actual visible Voxy surface to drop a named pin at that voxel, including caves and multi-level builds. Pick one of the palette colours in the name dialog.
+- Double-click the actual visible Voxy surface to drop a named pin at that voxel, including caves and multi-level builds; the add-waypoint key (`N`) does the same under the cursor. Pick one of the palette colours and an optional 1-2 letter symbol in the waypoint form; Enter saves, Esc cancels.
+- In the world: `N` drops a waypoint where you stand, `U` opens the waypoint list, and an unbound "Temporary waypoint where I look" key drops a temporary pin that disappears once you reach it.
+- Each waypoint can be shown everywhere, only on maps, only on the big map or nowhere (it stays in the `U` list); new waypoints follow the "Show new waypoints" setting. Waypoint look: square, circle or diamond icons, four icon sizes, solid, see-through or no label background, label size 75-200 %, a distance line and a fade-out range.
+- Overworld waypoints appear in the Nether and back, converted by 8. Waypoints can be shared in chat in the Xaero format with an [Add] link, and imported from Xaero's Minimap and JourneyMap (button in the `U` list).
 - Select a pin for explicit edit/delete actions; `Ctrl+Z` undoes a deletion. Overlapping labels are de-cluttered, and every object remains available in the Objects panel.
 - In the world, each waypoint within 512 blocks shows a beacon beam in its colour. Hiding waypoints in the settings hides the beams too.
 - Death points: each death drops a "Death point" waypoint; the five newest are kept per world.
@@ -39,8 +48,10 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 - Always-on minimap in the corner during normal gameplay, separate from the fullscreen map - nearby players, mobs and waypoints on top of terrain colored the same way vanilla's own map item is.
 - Built entirely client-side from already-loaded chunks (no server involved at all). Outdoors it shows the top surface, like Xaero's minimap; with a solid roof over your head (caves, buildings) and always in the Nether it shows the layer at your height.
 - The cached texture is rebuilt when you cross into a new chunk or switch between surface and cave view, and a few tiles are refreshed in the background every quarter second, so block changes show up within a few seconds.
-- Hold `Z` (rebindable, "Enlarge minimap") to draw it 1.6 times larger. Hold the player-list key (`Tab` by default) to swap the dots for player and mob heads.
-- Optional rotation with the player and a chunk grid.
+- Hold `Z` (rebindable, "Enlarge minimap") to draw it 1.6 times larger; `=` and `-` change the zoom.
+- Square or circle, four sizes, any screen corner or a free position dragged in the layout screen, opacity, darker at night, block-texture or classic map colours, cave view (automatic, never, always), optional rotation with the player and a chunk grid. It can hide behind inventories or behind any screen, and hides on F1.
+- Lines under the minimap: coordinates, Nether / Overworld coordinates, biome, light level, day and time, chunk, facing.
+- Radar: hostile, neutral and passive mobs, dropped items and players as separate categories, drawn as heads (or heads only while `Tab` is held, or dots). Overlays: slime chunks (servers need the seed: `/voxymap seed <seed>`), where mobs can spawn (light 0), biome colours.
 
 ### Multiplayer extras
 
@@ -75,6 +86,11 @@ Iris, Xaero's World Map, Litematica Plus LTS, Spatial GUI and Mod Menu are optio
 | `C` | Center on the player |
 | `O` | Open or close the Objects panel |
 | `F` | Follow or stop following the selected player; manual movement stops following |
+| `V` | Switch between the 3D and the 2D map |
+| `G` | Go to typed coordinates |
+| `N` (add-waypoint key) | Add a waypoint under the cursor |
+| Right click | Context menu: waypoint, temporary waypoint, copy coordinates, teleport |
+| `H` | Keyboard shortcuts overlay |
 | `F2` (screenshot key) | Save a screenshot of the map without the interface: for one frame every panel, the HUD and chat are hidden (and the markers too, unless the Map screenshot setting is "With markers"), then restored |
 | `Esc` | Close the map |
 
@@ -83,17 +99,25 @@ During normal gameplay:
 | Control | Action |
 | --- | --- |
 | `Z` (hold) | Enlarge the minimap; rebindable in Controls as "Enlarge minimap (hold)" |
-| Player-list key (`Tab`, hold) | Show player and mob heads on the minimap instead of dots |
+| `=` / `-` | Minimap zoom in / out |
+| `N` | Add a waypoint where you stand |
+| `U` | Waypoint list |
+| unbound | Temporary waypoint where you look |
+| Player-list key (`Tab`, hold) | Show player and mob heads on the minimap when the radar icons setting is "Heads while Tab is held" |
 
 ## Settings
 
-Settings are grouped the same way in the map's **Settings** panel and in the Mod Menu screen (Mods -> VoxyMap LTS -> Configure):
+Settings are grouped the same way in the map's **Settings** panel and in the Mod Menu screen (Mods -> VoxyMap LTS -> Configure). Both have a search field, categories, a hint for the setting under the cursor, a reset button on every row and Reset all:
 
 | Group | Contents |
 | --- | --- |
-| General | Pause in singleplayer, camera speed, map lighting (auto, morning, day, evening, night), fog suppression (on, Nether only, off), map screenshot (no interface / with markers); with Spatial GUI installed: M opens the map window, 3D view in that window |
-| Map layers | Waypoints, death points, your view direction; VanillaSquad players / flags / map, shown only while connected to the VanillaSquad server; schematics, shown only with Litematica Plus LTS installed |
-| Minimap | Minimap, rotation, mobs, chunk grid |
+| General | Pause in singleplayer, camera speed, map lighting (auto, morning, day, evening, night), map weather (clear, rain, thunder, auto), Voxy LODs outside the map, interface animations, fog suppression (on, Nether only, off), map screenshot (no interface / with markers); with Spatial GUI installed: M opens the map window, 3D view in that window |
+| Map layers | Waypoints, Overworld waypoints in the Nether and back, death points, your view direction, models on the 3D map; VanillaSquad players / flags / map, shown only while connected to the VanillaSquad server; schematics, shown only with Litematica Plus LTS installed |
+| Waypoint look | Where new waypoints show, icon shape and size, waypoints in the world (off, icons, name when aimed at, always), label background and size, distance, range, beacon beams |
+| Minimap | Minimap, rotation, colours, shape, size, corner, zoom, position, opacity, darker at night, cave view, with a screen open, chunk grid |
+| Under the minimap | Coordinates, Nether / Overworld coordinates, biome, light level, day and time, chunk, facing |
+| Minimap radar | Hostile, neutral, passive mobs, dropped items, players, icons |
+| Map overlays | Slime chunks, where mobs can spawn, biome colours |
 | Sync and sharing | Sync address, password and status, share map, receive map |
 | Diagnostics | Whether the Voxy shader patches loaded |
 
@@ -172,11 +196,17 @@ Minecraft 26.3, Java 25, Fabric Loader 0.19.5 или новее, Fabric API и V
 
 - Открывается клавишей `M`, её можно переназначить в стандартных настройках управления.
 - В ближней зоне карта берёт уже сохранённые LOD Voxy, поэтому её геометрия не зависит от направления обычной камеры и не заставляет игру грузить чанки.
-- Пока карта открыта, скрыты дождь, гроза и облака. Туман шейдерпака можно убрать, а освещение карты — привязать к игровому времени или зафиксировать на утре, дне, вечере или ночи.
+- 2D-карта: `V` или кнопки 3D/2D на панели переключают на плоскую карту севером вверх из секций LOD Voxy. Тайлы кешируются в PNG для каждого мира и среза и пересканируются после изменения блоков; метки, игроки и слои работают в обоих видах.
+- Погода и время на карте: по умолчанию дождь и гроза скрыты, но можно показывать всегда дождь, всегда грозу или настоящую погоду (дождь и снег по биому); освещение карты привязано к игровому времени или зафиксировано на утре, дне, вечере или ночи. Облака скрыты, туман шейдерпака можно убрать. В самом мире погода не меняется.
+- Игроки и мобы на 3D-карте рисуются настоящими моделями, увеличенными с расстоянием (не больше чем в 8 раз), и скрываются, если между ними и камерой карты ничего их не связывает. Настройка «Модели на 3D-карте»: игроки и мобы, только игроки или выкл.
+- Панель инструментов, компас, линейка масштаба, карточка выбранного объекта и подсказка по клавишам (`H`). `G` переносит камеру к введённым координатам; включаются сетка чанков и слои слайм-чанков, освещённости для спавна мобов и биомов.
+- Меню по ПКМ на карте: поставить метку или временную метку, скопировать координаты, телепортироваться (нужны права оператора).
+- Voxy вне карты можно выключить («LOD Voxy вне карты»): тогда Voxy рисует дальний рельеф только на открытой карте.
 - В Нижнем мире снимается бедроковая крыша. Убираются только целые полигоны выше порога, а не срез по плоскости, поэтому антиксрей-подделки сервера не превращаются в «шахматку» и высокие постройки под крышей остаются целыми. При сильном приближении вокруг центра карты открывается более глубокое окно.
 - Ванильные руды и древние обломки в LOD Voxy закрашиваются серым, поэтому по дальней прорисовке и по карте руды не найти.
 - Отмечены вы (с конусом направления взгляда по настоящему углу обзора) и загруженные игроки рядом. В плотной толпе конусы сворачиваются в короткие штрихи, а при наведении конус снова рисуется целиком.
-- Панель объектов (`O`) ищет игроков, метки и территории VanillaSquad. Объект можно показать, изменить, удалить, а за игроком — следить (`F`).
+- Панель объектов (`O`) ищет игроков, метки и территории VanillaSquad. Объект можно показать, изменить, удалить, а за игроком — следить (`F`). Игроков можно скрыть с карты.
+- Миры VanillaSquad: на сервере VanillaSquad кнопка «Миры сервера» открывает плоскую веб-карту squaremap мира build, farm или art, даже если вы там не были; переключение кнопками или клавишами `1`–`9`. Тайлы грузятся, только пока открыт этот экран.
 - `F2` на открытой карте сохраняет скриншот без панелей, HUD и чата. Метки остаются на снимке, только если в настройках выбрано «С метками».
 - Кнопка перехода в Xaero's World Map, если он установлен, и кнопка возврата обратно.
 - Если установлен Litematica Plus LTS, размещения схем видны на карте рамкой с названием и процентом готовности, в панели «Объекты» (фильтр «Схемы») и контуром на миникарте. Клик по подписи выбирает размещение, повторный клик или «Править» открывает его редактор, «Центр» переносит камеру карты к нему. Слой «Схемы (Litematica Plus)» в настройках прячет всё это вместе с блоками-призраками, которые Litematica Plus рисует на карте. Litematica Plus также читает через этот мод блоки, сохранённые Voxy, чтобы сверять части схемы в непрогруженных чанках.
@@ -193,33 +223,44 @@ Minecraft 26.3, Java 25, Fabric Loader 0.19.5 или новее, Fabric API и V
 | ПКМ, перетаскивание | Поворот и наклон камеры |
 | Колесо / `+` / `-` | Масштаб к курсору |
 | `W/A/S/D` или стрелки | Двигать камеру, `Shift` — быстрее |
+| `V` | Переключить 3D- и 2D-карту |
+| `G` | Перейти к введённым координатам |
+| `N` (клавиша метки) | Поставить метку под курсором |
+| ПКМ, клик | Меню: метка, временная метка, копировать координаты, телепорт |
+| `H` | Подсказка по клавишам |
 | `C` | Вернуться к игроку |
 | `O` | Панель объектов |
 | `F` | Следить за выбранным игроком; ручное движение отменяет слежение |
 | `F2` | Скриншот карты без интерфейса |
 
-Во время обычной игры: удерживайте `Z`, чтобы увеличить миникарту (клавиша «Увеличить миникарту (удерживать)» в настройках управления), и клавишу списка игроков (`Tab`), чтобы вместо точек видеть головы игроков и мобов.
+Во время обычной игры: удерживайте `Z`, чтобы увеличить миникарту (клавиша «Увеличить миникарту (удерживать)» в настройках управления), `=` и `-` меняют масштаб миникарты, `N` ставит метку на месте игрока, `U` открывает список меток, а клавиша «Временная метка туда, куда смотрю» (по умолчанию не назначена) ставит временную метку, которая исчезает, когда до неё дошёл. Головы игроков и мобов на миникарте по умолчанию видны всегда; в настройках их можно показывать только при зажатом `Tab` или заменить точками.
 
 ### Метки
 
-- Двойной клик по рельефу ставит именованную метку точно на видимый блок, в том числе в пещерах и на многоэтажных постройках. Цвет выбирается в окне ввода имени.
+- Двойной клик по рельефу (или клавиша метки `N`) ставит именованную метку точно на видимый блок под курсором, в том числе в пещерах и на многоэтажных постройках. Цвет и символ из 1–2 букв выбираются в форме метки; Enter сохраняет, Esc отменяет.
+- Для каждой метки выбирается, где её показывать: везде, только на картах, только на большой карте или нигде (она остаётся в списке `U`); для новых меток есть своя настройка. Вид меток: значок квадратом, кругом или ромбом, четыре размера, фон подписи сплошной, прозрачный или без фона, размер подписи 75–200 %, строка с расстоянием и дальность, на которой метки плавно исчезают.
+- Метки Верхнего мира видны в Незере и наоборот (координаты пересчитываются в 8 раз). Меткой можно поделиться в чате в формате Xaero со ссылкой [Добавить], метки Xaero's Minimap и JourneyMap импортируются кнопкой в списке `U`.
 - В мире у каждой метки ближе 512 блоков светится луч маяка её цвета. Если скрыть метки в настройках, лучи тоже пропадут.
 - После смерти ставится метка «Точка смерти». Для каждого мира хранятся пять последних.
 - Метки хранятся отдельно для каждого мира Voxy.
 
 ### Миникарта
 
-Работает полностью на клиенте по уже загруженным чанкам и раскрашена как ванильная карта. На поверхности показывает верхний слой, а под сплошной крышей (пещеры, постройки) и всегда в Нижнем мире — слой на высоте игрока. Текстура перестраивается при переходе в новый чанк, а в фоне несколько тайлов обновляются четыре раза в секунду, поэтому изменения блоков видны через пару секунд. Можно включить вращение вместе с игроком, мобов и сетку чанков. Моб, чья модель ещё не попадала на экран в этой сессии, остаётся точкой, пока его не увидите.
+Работает полностью на клиенте по уже загруженным чанкам и раскрашена по текстурам блоков (или как ванильная карта). Квадратная или круглая, четыре размера, любой угол экрана или своё место перетаскиванием, прозрачность, затемнение ночью, режим пещер (автоматически, никогда, всегда); прячется на F1 и, по выбору, за инвентарём или любым экраном. Под миникартой — строки на выбор: координаты, координаты Незера и Верхнего мира, биом, освещённость, время, чанк, направление. Радар показывает враждебных, нейтральных и мирных мобов, предметы и игроков отдельными категориями; слои слайм-чанков (на сервере нужен сид: `/voxymap seed <сид>`), мест спавна мобов и биомов. На поверхности показывает верхний слой, а под сплошной крышей (пещеры, постройки) и всегда в Нижнем мире — слой на высоте игрока. Текстура перестраивается при переходе в новый чанк, а в фоне несколько тайлов обновляются четыре раза в секунду, поэтому изменения блоков видны через пару секунд. Можно включить вращение вместе с игроком, мобов и сетку чанков. Моб, чья модель ещё не попадала на экран в этой сессии, остаётся точкой, пока его не увидите.
 
 ### Настройки
 
-Группы одинаковы в панели «Настройки» на карте и в экране Mod Menu (Моды → VoxyMap LTS → Настроить):
+Группы одинаковы в панели «Настройки» на карте и в экране Mod Menu (Моды → VoxyMap LTS → Настроить). В обоих есть поиск, категории, подсказка к настройке под курсором, сброс у каждой строки и «Сбросить всё»:
 
 | Группа | Что внутри |
 | --- | --- |
-| Общие | Пауза в одиночной игре, скорость камеры, освещение карты, подавление тумана (вкл., только Нижний мир, выкл.), скриншот карты; при установленном Spatial GUI: M открывает окно карты, 3D-вид в этом окне |
-| Слои карты | Метки, точки смерти, направление взгляда; игроки, флаги и карта VanillaSquad — только при подключении к VanillaSquad; схемы — только при установленном Litematica Plus LTS |
-| Миникарта | Миникарта, вращение, мобы, сетка чанков |
+| Общие | Пауза в одиночной игре, скорость камеры, освещение карты, погода на карте, LOD Voxy вне карты, анимации интерфейса, подавление тумана (вкл., только Нижний мир, выкл.), скриншот карты; при установленном Spatial GUI: M открывает окно карты, 3D-вид в этом окне |
+| Слои карты | Метки, метки Верхнего мира в Незере и обратно, точки смерти, направление взгляда, модели на 3D-карте; игроки, флаги и карта VanillaSquad — только при подключении к VanillaSquad; схемы — только при установленном Litematica Plus LTS |
+| Вид меток | Где показывать новые метки, форма и размер значка, метки в мире, фон и размер подписи, расстояние, дальность, лучи маяка |
+| Миникарта | Миникарта, вращение, цвета, форма, размер, угол, масштаб, положение, прозрачность, затемнение ночью, режим пещер, при открытом экране, сетка чанков |
+| Под миникартой | Координаты, координаты Незера / Верхнего мира, биом, освещённость, время, чанк, направление |
+| Радар миникарты | Враждебные, нейтральные, мирные мобы, предметы, игроки, значки |
+| Наложения на карту | Слайм-чанки, места спавна мобов, цвета биомов |
 | Синхронизация и обмен | Адрес, пароль и статус синхронизации, «Поделиться картой», «Получить карту» |
 | Диагностика | Загрузились ли патчи шейдеров Voxy |
 
