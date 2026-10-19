@@ -1663,6 +1663,12 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         waypointForm.extractOverlay(g, minecraft.font);
     }
 
+    @Override
+    public boolean isInputCaptured() {
+        return super.isInputCaptured() || textInputKind != null || objectPanel.searchFocused()
+                || settingsOpen && settingsView.typing(getFocused());
+    }
+
     private void syncTextInput() {
         if (minecraft == null) return;
         if (textInputKind != null || objectPanel.searchFocused() || (settingsOpen && settingsView.typing(getFocused()))) {
@@ -2727,8 +2733,21 @@ public class MapScreen extends Screen implements SettingsModel.Host {
             return true;
         }
         setFocused(null);
-        if (toolbarWidgetAt(event.x(), event.y()) != null || objectPanel.contains(event.x(), event.y())
-                || settingsOpen && settingsView.contains(event.x(), event.y())) {
+        if (objectPanel.contains(event.x(), event.y())) {
+            MapObjectPanel.Action panelAction = objectPanel.click(event.x(), event.y(), event.button());
+            if (panelAction != null && panelAction.type() != MapObjectPanel.ActionType.CONSUMED) {
+                closeWaypointForm();
+                handleObjectPanelAction(panelAction);
+            }
+            return true;
+        }
+        AbstractWidget toolbarHit = toolbarWidgetAt(event.x(), event.y());
+        if (toolbarHit != null) {
+            closeWaypointForm();
+            toolbarHit.mouseClicked(event, isInside);
+            return true;
+        }
+        if (settingsOpen && settingsView.contains(event.x(), event.y())) {
             return true;
         }
         if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
