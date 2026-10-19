@@ -3,7 +3,7 @@
 [![Minecraft](https://img.shields.io/badge/Minecraft-26.3-62B47A)](https://www.minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Fabric-0.19.5+-DBD0B4)](https://fabricmc.net/)
 [![Java](https://img.shields.io/badge/Java-25-E76F00)](https://adoptium.net/)
-[![Version](https://img.shields.io/badge/version-1.0.5--LTS.01-4C8BF5)](gradle.properties)
+[![Version](https://img.shields.io/badge/version-1.0.7--LTS.01-4C8BF5)](gradle.properties)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://github.com/raben12paste/3D-maps-Voxy-Addon). It opens a full-screen 3D map backed by Voxy LOD data for Minecraft 26.3.
