@@ -41,6 +41,10 @@ import com.voxymap.client.map.WaypointDisplay;
 import com.voxymap.client.map.WaypointManager;
 import com.voxymap.client.map.WaypointSyncSettings;
 import com.voxymap.client.map.WaypointWorlds;
+import com.voxymap.client.nav.Navigator;
+import com.voxymap.client.nav.Route;
+import com.voxymap.client.nav.RouteCommands;
+import com.voxymap.client.nav.RouteHud;
 import me.cortex.voxy.commonImpl.WorldIdentifier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -55,7 +59,7 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.permissions.Permissions;
+import com.voxymap.client.map.TeleportCommand;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.entity.player.Player;
@@ -192,6 +196,8 @@ public class MapScreen extends Screen implements SettingsModel.Host {
     private static final int MAX_GRID_LINES = 160;
     private static final long MAX_SLIME_CHUNKS = 6400L;
     private static final int CHUNK_GRID_COLOR = 0x44FFFFFF;
+    private static final double ROUTE_LIFT = 0.6;
+    private static final int ROUTE_FAINT_ALPHA = 0x90000000;
     private static final int SLIME_OUTLINE_COLOR = 0xDD55FF55;
     private static final int SLIME_INNER_COLOR = 0x8855FF55;
 
@@ -781,15 +787,15 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         if (progress >= 0.995) return;
 
         int alpha = (int) (185 * (1.0 - progress));
-        int dim = (alpha << 24) | 0x030914;
+        int dim = (alpha << 24) | 0x000000;
         g.fill(0, 0, width, height, dim);
 
         int bandHeight = (int) ((height * 0.28) * (1.0 - progress));
         if (bandHeight > 0) {
-            g.fill(0, 0, width, bandHeight, 0xDD030914);
-            g.fill(0, height - bandHeight, width, height, 0xDD030914);
-            g.fill(0, bandHeight, width, bandHeight + 2, 0xFF3BA4FF);
-            g.fill(0, height - bandHeight - 2, width, height - bandHeight, 0xFF3BA4FF);
+            g.fill(0, 0, width, bandHeight, 0xDD000000);
+            g.fill(0, height - bandHeight, width, height, 0xDD000000);
+            g.fill(0, bandHeight, width, bandHeight + 1, 0x33FFFFFF);
+            g.fill(0, height - bandHeight - 1, width, height - bandHeight, 0x33FFFFFF);
         }
 
         int scanY = (int) (height * progress);
@@ -805,6 +811,7 @@ public class MapScreen extends Screen implements SettingsModel.Host {
     private void drawWorldViewerOverlay(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
         drawMapGrids(g);
         drawFlagMarkers(g);
+        drawRoute(g);
         drawSchematicPlacements(g, mouseX, mouseY);
         drawWaypoints(g, mouseX, mouseY);
         drawPlayerMarkers(g, mouseX, mouseY);
@@ -860,8 +867,7 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         UiDraw.card(g, x, y, cardWidth, cardHeight);
         g.text(minecraft.font, "VoxyMap", x + UiTheme.SPACE_M, y + 6, UiTheme.TEXT);
         int chipX = x + UiTheme.SPACE_M + minecraft.font.width("VoxyMap") + UiTheme.SPACE_S + 2;
-        UiDraw.panel(g, chipX, y + 4, minecraft.font.width(mode) + 8, 12, UiTheme.CONTROL_SELECTED);
-        g.text(minecraft.font, mode, chipX + 4, y + 6, UiTheme.ACCENT_BRIGHT);
+        g.text(minecraft.font, mode, chipX + 4, y + 6, UiTheme.TEXT_MUTED);
         String zoom = String.format(java.util.Locale.ROOT, "%.2f", blocksPerPixel);
         g.text(minecraft.font, zoom, x + cardWidth - UiTheme.SPACE_M - minecraft.font.width(zoom), y + 6, UiTheme.TEXT_MUTED);
         int lineY = y + 20;
@@ -1116,6 +1122,13 @@ public class MapScreen extends Screen implements SettingsModel.Host {
             viewCenterZ = entry.z();
             moveVelocityX = moveVelocityZ = 0.0;
             syncWorldCamera();
+        } else if (action.type() == MapObjectPanel.ActionType.ROUTE) {
+            selectObject(entry);
+            WaypointManager.Waypoint waypoint = selectedWaypoint();
+            String worldId = currentWaypointWorldId();
+            if (waypoint != null && worldId != null) {
+                startRoute(RouteCommands.toWaypoint(waypoint, worldId));
+            }
         } else if (action.type() == MapObjectPanel.ActionType.FOLLOW) {
             selectObject(entry);
             followingPlayerId = followingPlayerId != null && followingPlayerId.equals(entry.id()) ? null : entry.id();
@@ -1239,13 +1252,13 @@ public class MapScreen extends Screen implements SettingsModel.Host {
             int labelY = labelPoint.y - 14;
             ScreenRect rect = new ScreenRect(labelX, labelY, labelWidth, 11);
             boolean hovered = rect.contains(mouseX, mouseY) || schematicObjectId(placement).equals(selectedObjectId);
-            g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, hovered ? 0xEE030914 : 0xCC030914);
+            g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, hovered ? 0xEE000000 : 0xCC000000);
             g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, color);
             if (placement.progress() >= 0.0) {
                 g.fill(labelX, labelY + 10, labelX + (int) Math.round(labelWidth * Math.min(1.0, placement.progress())),
                         labelY + 11, 0xFF55FF55);
             }
-            g.text(minecraft.font, label, labelX + 4, labelY + 2, 0xFFE9F2FF);
+            g.text(minecraft.font, label, labelX + 4, labelY + 2, 0xFFFFFFFF);
             rects.add(rect);
             ids.add(placement.id());
         }
@@ -1365,9 +1378,9 @@ public class MapScreen extends Screen implements SettingsModel.Host {
             int labelWidth = minecraft.font.width(territory.name()) + 8;
             int labelX = Mth.clamp(labelPoint.x - labelWidth / 2, 3, Math.max(3, width - labelWidth - 3));
             int labelY = labelPoint.y - 5;
-            g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, 0x99030914);
+            g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, 0x99000000);
             g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, territory.color());
-            g.text(minecraft.font, territory.name(), labelX + 4, labelY + 2, 0xFFE9F2FF);
+            g.text(minecraft.font, territory.name(), labelX + 4, labelY + 2, 0xFFFFFFFF);
         }
     }
 
@@ -1416,10 +1429,10 @@ public class MapScreen extends Screen implements SettingsModel.Host {
             boolean overlaps = claimedLabels.stream().anyMatch(existing -> rectanglesOverlap(existing, labelBounds));
             if (overlaps && !hovered) continue;
             g.fill(entry.labelX, entry.labelY, entry.labelX + entry.labelW, entry.labelY + entry.labelH,
-                    hovered ? 0xEE030914 : 0xCC030914);
+                    hovered ? 0xEE000000 : 0xCC000000);
             g.fill(entry.labelX, entry.labelY + entry.labelH - 1, entry.labelX + entry.labelW, entry.labelY + entry.labelH,
                     entry.waypoint.color());
-            g.text(minecraft.font, entry.label, entry.labelX + 4, entry.labelY + 2, 0xFFE9F2FF);
+            g.text(minecraft.font, entry.label, entry.labelX + 4, entry.labelY + 2, 0xFFFFFFFF);
             claimedLabels.add(labelBounds);
             drawnLabels.add(entry);
         }
@@ -1513,10 +1526,9 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         int boxW = Math.min(width - HUD_MARGIN * 2, minecraft.font.width(message) + 24);
         int boxX = (width - boxW) / 2;
         int boxY = footerTop - UiTheme.SPACE_M - 22;
-        UiDraw.panel(g, boxX, boxY, boxW, 22, UiTheme.SURFACE_RAISED);
-        UiDraw.outline(g, boxX, boxY, boxW, 22, UiTheme.BORDER);
-        g.fill(boxX + 3, boxY + 5, boxX + 5, boxY + 17, accent);
-        UiDraw.centeredText(g, minecraft.font, message, width / 2 + 2, boxY + 7, boxW - 16, UiTheme.TEXT);
+        UiDraw.card(g, boxX, boxY, boxW, 22);
+        UiDraw.centeredText(g, minecraft.font, message, width / 2, boxY + 7, boxW - 16,
+                accent == UiTheme.ACCENT_BRIGHT ? UiTheme.TEXT : accent);
     }
 
     private ScreenRect textInputBox() {
@@ -1546,8 +1558,7 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         int fieldY = boxY + 20;
         int fieldW = boxW - 20;
         int fieldH = 20;
-        UiDraw.panel(g, fieldX, fieldY, fieldW, fieldH, UiTheme.SURFACE_SUNKEN);
-        UiDraw.outline(g, fieldX, fieldY, fieldW, fieldH, UiTheme.ACCENT_BRIGHT);
+        UiDraw.field(g, fieldX, fieldY, fieldW, fieldH, true);
         g.text(minecraft.font, UiDraw.ellipsize(minecraft.font, text, fieldW - 12), fieldX + 6, fieldY + 6, UiTheme.TEXT);
         minecraft.textInputManager().setTextInputArea(fieldX, fieldY, fieldX + fieldW, fieldY + fieldH);
         if ((System.nanoTime() / 500_000_000L) % 2 == 0) {
@@ -1703,14 +1714,21 @@ public class MapScreen extends Screen implements SettingsModel.Host {
                     showTransientMessage(Component.translatable("message.voxymap.waypoint.temporary_placed", bx, by, bz));
                 }
             }));
+            items.add(new MapContextMenu.Item(Component.translatable("screen.voxymap.context.route"), true, () ->
+                    startRoute(new Navigator.Target(bx + " / " + bz, wx, wy, wz, worldId))));
+            if (Navigator.active()) {
+                items.add(new MapContextMenu.Item(Component.translatable("screen.voxymap.context.route_stop"), true,
+                        () -> Navigator.stop(minecraft)));
+            }
             items.add(new MapContextMenu.Item(Component.translatable("screen.voxymap.context.copy"), true, () -> {
                 minecraft.keyboardHandler.setClipboard(bx + " " + by + " " + bz);
                 showTransientMessage(Component.translatable("screen.voxymap.context.copied", bx, by, bz));
             }));
-            if (canTeleport()) {
+            if (TeleportCommand.available(minecraft)) {
                 items.add(new MapContextMenu.Item(Component.translatable("screen.voxymap.context.teleport"), true, () -> {
-                    minecraft.getConnection().sendCommand("tp @s " + bx + " " + by + " " + bz);
-                    onClose();
+                    if (TeleportCommand.send(minecraft, bx, by, bz)) {
+                        onClose();
+                    }
                 }));
             }
             contextMenu.open(mouseX, mouseY, Component.literal(bx + " / " + by + " / " + bz), items,
@@ -1718,9 +1736,9 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         });
     }
 
-    private boolean canTeleport() {
-        return minecraft != null && minecraft.player != null && minecraft.getConnection() != null
-                && minecraft.player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
+    private void startRoute(Navigator.Target target) {
+        Navigator.start(minecraft, target);
+        showTransientMessage(Component.translatable("message.voxymap.route.planning", target.name()));
     }
 
     private void addWaypointAtCursor() {
@@ -1947,7 +1965,7 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         int headGap = skin == null ? 0 : 13;
         ScreenRect bounds = collapsedPlayerClusterBounds(cluster);
         int color = representative.local ? 0xFF55E7FF : (representative.remote ? 0xFFF2B33D : 0xFFFF62D4);
-        g.fill(bounds.x, bounds.y, bounds.right(), bounds.bottom(), hovered ? 0xEE030914 : 0xCC030914);
+        g.fill(bounds.x, bounds.y, bounds.right(), bounds.bottom(), hovered ? 0xEE000000 : 0xCC000000);
         g.fill(bounds.x, bounds.bottom() - 1, bounds.right(), bounds.bottom(), color);
         if (skin != null) {
             PlayerHeadIcon.draw(g, skin, bounds.x + 3, bounds.y, 10);
@@ -1959,8 +1977,7 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         int visibleRows = Math.min(cluster.members.size(), PLAYER_CLUSTER_MAX_EXPANDED_ROWS);
         boolean truncated = visibleRows < cluster.members.size();
         ScreenRect bounds = expandedPlayerClusterBounds(cluster);
-        g.fill(bounds.x, bounds.y, bounds.right(), bounds.bottom(), 0xF0030914);
-        g.fill(bounds.x, bounds.y, bounds.x + 2, bounds.bottom(), 0xFF55E7FF);
+        g.fill(bounds.x, bounds.y, bounds.right(), bounds.bottom(), UiTheme.LABEL_HOVER);
         for (int i = 0; i < visibleRows; i++) {
             PlayerMarker marker = cluster.members.get(i).marker;
             int rowY = bounds.y + 2 + i * 12;
@@ -1973,7 +1990,7 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         }
         if (truncated) {
             g.text(minecraft.font, "… +" + (cluster.members.size() - visibleRows), bounds.x + 5,
-                    bounds.y + 2 + visibleRows * 12, 0xFF9FB2C4);
+                    bounds.y + 2 + visibleRows * 12, 0xFFA0A0A0);
         }
     }
 
@@ -2060,7 +2077,7 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         int labelWidth = minecraft.font.width(label) + 8 + headGap;
         int labelX = Mth.clamp(point.x - labelWidth / 2, 3, Math.max(3, width - labelWidth - 3));
         int labelY = modelTop != null ? Math.min(point.y - radius - 15, modelTop.y - 14) : point.y - radius - 15;
-        g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, hovered ? 0xEE030914 : 0xCC030914);
+        g.fill(labelX, labelY, labelX + labelWidth, labelY + 11, hovered ? 0xEE000000 : 0xCC000000);
         g.fill(labelX, labelY + 10, labelX + labelWidth, labelY + 11, color);
         if (skin != null) {
             PlayerHeadIcon.draw(g, skin, labelX + 3, labelY, headSize);
@@ -2386,16 +2403,10 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         double raw = (System.nanoTime() - xaeroTransitionStartedAt) / (double) XAERO_TRANSITION_NANOS;
         raw = Mth.clamp(raw, 0.0, 1.0);
         double eased = 1.0 - Math.pow(1.0 - raw, 3.0);
-        int maxRadius = Math.max(width, height) + 120;
-        int radius = (int) (maxRadius * eased);
-        int originX = xaeroButton != null ? xaeroButton.getX() + xaeroButton.getWidth() / 2 : width - 80;
-        int originY = xaeroButton != null ? xaeroButton.getY() + xaeroButton.getHeight() / 2 : 24;
-
-        g.fill(0, 0, width, height, (int) (0x55000000 | ((long) (80 * eased) << 24)));
-        g.fill(originX - radius, originY - radius / 3, originX + radius, originY + radius / 3, 0xDD07111F);
-        g.fill(originX - radius / 3, originY - radius, originX + radius / 3, originY + radius, 0xAA0B3148);
+        int alpha = (int) Math.round(eased * 0xE0);
+        g.fill(0, 0, width, height, alpha << 24);
         g.centeredText(minecraft.font, Component.translatable("overlay.voxymap.xaero.transition"),
-                width / 2, height / 2 + 22, 0xFFE9F2FF);
+                width / 2, height / 2 + 22, 0xFFFFFFFF);
     }
 
     private void beginMapShareSelection(String address) {
@@ -2474,18 +2485,49 @@ public class MapScreen extends Screen implements SettingsModel.Host {
             int textW = minecraft.font.width(instruction);
             int boxX = (width - textW) / 2 - 10;
             int boxY = HUD_MARGIN + 52;
-            g.fill(boxX, boxY, boxX + textW + 20, boxY + 22, 0xD907111F);
-            g.fill(boxX, boxY, boxX + 2, boxY + 22, 0xFF55E7FF);
-            g.centeredText(minecraft.font, instruction, width / 2, boxY + 7, 0xFFDFF8FF);
+            g.fill(boxX, boxY, boxX + textW + 20, boxY + 22, 0xD9000000);
+            g.centeredText(minecraft.font, instruction, width / 2, boxY + 7, 0xFFFFFFFF);
+        }
+    }
+
+    private void drawRoute(GuiGraphicsExtractor g) {
+        Route alternative = Navigator.alternative();
+        if (alternative != null) {
+            drawRoutePath(g, alternative, true);
+        }
+        Route route = Navigator.route();
+        if (route != null) {
+            drawRoutePath(g, route, false);
+        }
+    }
+
+    private void drawRoutePath(GuiGraphicsExtractor g, Route route, boolean faint) {
+        List<Route.Point> points = route.points();
+        for (int i = 0; i < points.size() - 1; i++) {
+            Route.Point a = points.get(i);
+            Route.Point b = points.get(i + 1);
+            int color = RouteHud.color(a);
+            if (faint || a.unknown()) {
+                color = (color & 0x00FFFFFF) | ROUTE_FAINT_ALPHA;
+            }
+            double ay = a.y() + ROUTE_LIFT;
+            double by = b.y() + ROUTE_LIFT;
+            draw3DLine(g, a.x(), ay, a.z(), b.x(), by, b.z(), UiTheme.ROUTE_CASING, faint ? 3 : 5);
+            draw3DLine(g, a.x(), ay, a.z(), b.x(), by, b.z(), color, faint ? 1 : 3);
         }
     }
 
     private void draw3DLine(GuiGraphicsExtractor g, double x1, double y1, double z1,
                             double x2, double y2, double z2, int color) {
+        draw3DLine(g, x1, y1, z1, x2, y2, z2, color, 1);
+    }
+
+    private void draw3DLine(GuiGraphicsExtractor g, double x1, double y1, double z1,
+                            double x2, double y2, double z2, int color, int thickness) {
         if (flat) {
             ScreenPoint p1 = projectToScreen(x1, y1, z1);
             ScreenPoint p2 = projectToScreen(x2, y2, z2);
-            drawSegment(g, p1.x, p1.y, p2.x, p2.y, color);
+            drawSegment(g, p1.x, p1.y, p2.x, p2.y, color, thickness);
             return;
         }
         double cameraX = VoxyMapCameraController.cameraX();
@@ -2515,7 +2557,7 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         double[] p1 = projectExact(x1, y1, z1);
         double[] p2 = projectExact(x2, y2, z2);
         if (p1 != null && p2 != null) {
-            drawSegment(g, p1[0], p1[1], p2[0], p2[1], color);
+            drawSegment(g, p1[0], p1[1], p2[0], p2[1], color, thickness);
         }
     }
 
@@ -2530,6 +2572,10 @@ public class MapScreen extends Screen implements SettingsModel.Host {
     }
 
     private void drawSegment(GuiGraphicsExtractor g, double x1, double y1, double x2, double y2, int color) {
+        drawSegment(g, x1, y1, x2, y2, color, 1);
+    }
+
+    private void drawSegment(GuiGraphicsExtractor g, double x1, double y1, double x2, double y2, int color, int thickness) {
         double[] clipped = clipLineToViewport(x1, y1, x2, y2);
         if (clipped == null) {
             return;
@@ -2543,7 +2589,8 @@ public class MapScreen extends Screen implements SettingsModel.Host {
         g.pose().pushMatrix();
         g.pose().translate((float) clipped[0], (float) clipped[1]);
         g.pose().rotate((float) Math.atan2(dy, dx));
-        g.fill(0, 0, (int) Math.ceil(length) + 1, 1, color);
+        int half = thickness / 2;
+        g.fill(-half, -half, (int) Math.ceil(length) + 1 + half, thickness - half, color);
         g.pose().popMatrix();
     }
 

@@ -1,5 +1,7 @@
 package com.voxymap.client;
 
+import com.voxymap.client.nav.Navigator;
+import com.voxymap.client.nav.RouteCommands;
 import com.voxymap.client.gui.WaypointEditScreen;
 import com.voxymap.client.gui.WaypointListScreen;
 import com.voxymap.client.gui.WindowMapScreen;
@@ -80,6 +82,7 @@ public class VoxyMapClient implements ClientModInitializer {
         WaypointBeaconRenderer.register();
         WaypointChatShare.register();
         MinimapOverlays.register();
+        RouteCommands.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openMapKey.consumeClick()) {
@@ -128,6 +131,7 @@ public class VoxyMapClient implements ClientModInitializer {
             DeathWaypointTracker.tick(client);
             MobMarkerCache.tick(client);
             MapEnvironmentRefresh.tick(client);
+            Navigator.tick(client);
             watchHudHook(client);
         });
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> AtomicPropertiesWriter.flush());

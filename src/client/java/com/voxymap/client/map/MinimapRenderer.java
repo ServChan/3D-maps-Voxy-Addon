@@ -30,6 +30,9 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
+import com.voxymap.client.nav.Navigator;
+import com.voxymap.client.nav.Route;
+import com.voxymap.client.nav.RouteHud;
 
 public final class MinimapRenderer {
 
@@ -43,6 +46,8 @@ public final class MinimapRenderer {
     private static final int MOB_MARKER_RADIUS = 1;
     private static final int PLAYER_HEAD_SIZE = 8;
     private static final int MOB_ICON_MAX = 12;
+    private static final int ROUTE_MAX_STEPS = 2048;
+    private static final int ROUTE_UNKNOWN_ALPHA = 0x99000000;
     private static final int PASSIVE_OUTLINE = 0xE0101418;
     private static final int[][] OUTLINE_OFFSETS = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
     private static final double OFFSCREEN_EDGE_INSET = 9.0;
@@ -247,6 +252,7 @@ public final class MinimapRenderer {
         drawTerrain(g, view, blitRadius, rotation);
         g.enableScissor(screenX, screenY, screenX + displaySize, screenY + displaySize);
         drawChunkGrid(g, view, worldRadius);
+        drawRoute(g, view, worldRadius);
         drawMarkers(g, minecraft, view, worldRadius, yaw);
         drawCardinalLetters(g, minecraft, view);
         g.disableScissor();
@@ -784,6 +790,67 @@ public final class MinimapRenderer {
         return (scaled << 24) | (argb & 0x00FFFFFF);
     }
 
+    private static void drawRoute(GuiGraphicsExtractor g, View view, double worldRadius) {
+        Route route = Navigator.route();
+        if (route == null) {
+            return;
+        }
+        List<Route.Point> points = route.points();
+        double half = worldRadius * 1.5;
+        for (int i = 0; i < points.size() - 1; i++) {
+            Route.Point a = points.get(i);
+            Route.Point b = points.get(i + 1);
+            double[] clipped = clipToBox(a.x() - renderX, a.z() - renderZ, b.x() - renderX, b.z() - renderZ, half);
+            if (clipped == null) {
+                continue;
+            }
+            double sx1 = view.centerX() + rotatedX(clipped[0], clipped[1], view.cosA(), view.sinA()) * view.scale();
+            double sy1 = view.centerY() + rotatedZ(clipped[0], clipped[1], view.cosA(), view.sinA()) * view.scale();
+            double sx2 = view.centerX() + rotatedX(clipped[2], clipped[3], view.cosA(), view.sinA()) * view.scale();
+            double sy2 = view.centerY() + rotatedZ(clipped[2], clipped[3], view.cosA(), view.sinA()) * view.scale();
+            int color = RouteHud.color(a);
+            if (a.unknown()) {
+                color = (color & 0x00FFFFFF) | ROUTE_UNKNOWN_ALPHA;
+            }
+            int steps = (int) Math.min(ROUTE_MAX_STEPS, Math.ceil(Math.hypot(sx2 - sx1, sy2 - sy1)));
+            for (int step = 0; step <= steps; step++) {
+                double t = steps == 0 ? 0.0 : step / (double) steps;
+                int px = (int) Math.floor(sx1 + (sx2 - sx1) * t);
+                int py = (int) Math.floor(sy1 + (sy2 - sy1) * t);
+                if (view.contains(px, py)) {
+                    g.fill(px, py, px + 2, py + 2, color);
+                }
+            }
+        }
+    }
+
+    static double[] clipToBox(double x1, double z1, double x2, double z2, double half) {
+        double t0 = 0.0;
+        double t1 = 1.0;
+        double dx = x2 - x1;
+        double dz = z2 - z1;
+        double[] p = {-dx, dx, -dz, dz};
+        double[] q = {x1 + half, half - x1, z1 + half, half - z1};
+        for (int i = 0; i < 4; i++) {
+            if (p[i] == 0.0) {
+                if (q[i] < 0.0) {
+                    return null;
+                }
+                continue;
+            }
+            double r = q[i] / p[i];
+            if (p[i] < 0.0) {
+                t0 = Math.max(t0, r);
+            } else {
+                t1 = Math.min(t1, r);
+            }
+            if (t0 > t1) {
+                return null;
+            }
+        }
+        return new double[]{x1 + t0 * dx, z1 + t0 * dz, x1 + t1 * dx, z1 + t1 * dz};
+    }
+
     static double rotatedX(double dx, double dz, double cosA, double sinA) {
         return dx * cosA - dz * sinA;
     }
@@ -931,7 +998,7 @@ public final class MinimapRenderer {
         int nameWidth = minecraft.font.width(name);
         int nameX = px - nameWidth / 2;
         int nameY = py - MARKER_RADIUS - 11;
-        g.fill(nameX - 2, nameY - 1, nameX + nameWidth + 2, nameY + 8, scaleAlpha(0x99030914, alpha));
+        g.fill(nameX - 2, nameY - 1, nameX + nameWidth + 2, nameY + 8, scaleAlpha(0x99000000, alpha));
         g.text(minecraft.font, name, nameX, nameY, scaleAlpha(0xFFFFFFFF, alpha));
     }
 

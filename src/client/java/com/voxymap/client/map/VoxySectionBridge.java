@@ -23,7 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-final class VoxySectionBridge {
+public final class VoxySectionBridge {
     private static final int BLOCK_STATE_TYPE = 1;
     private static final int BIOME_TYPE = 2;
     private static final int TYPE_SHIFT = 30;
@@ -37,7 +37,7 @@ final class VoxySectionBridge {
         return minecraft.level == null ? null : WorldIdentifier.of(minecraft.level);
     }
 
-    static boolean holdRef(WorldEngine engine) {
+    public static boolean holdRef(WorldEngine engine) {
         try {
             engine.acquireRef();
             return true;
@@ -46,7 +46,7 @@ final class VoxySectionBridge {
         }
     }
 
-    static void dropRef(WorldEngine engine) {
+    public static void dropRef(WorldEngine engine) {
         try {
             engine.releaseRef();
         } catch (IllegalStateException alreadyFreed) {

@@ -94,7 +94,13 @@ targets Iris must use that prefix; any other optional target (Xaero) uses `@Pseu
   extra viewport (`ViewportSelector.getOrCreate(VIEWPORT_KEY)`, by reflection) so the player's viewport and its
   occlusion state stay untouched, `VoxyRenderSystemMixin` skips `RenderDistanceTracker.setCenterAndProcess` so LOD
   loading stays centred on the player, and `VoxyClientMixin` reports `disableSodiumChunkRender` so LODs fill the near
-  zone. The camera is `VoxyMapCameraController.pose(...)`, the same maths as the full map. The Nether roof cut works there too:
+  zone. The camera is `VoxyMapCameraController.pose(...)`, the same maths as the full map. Voxy picks a 0.1 block
+  near plane whenever `disableSodiumChunkRender` is true; with the map camera at least 1024 blocks from its focus that
+  leaves almost no depth precision, and shader packs that rebuild positions from Voxy depth (Solas shadows) draw
+  screen-aligned stripes over the LODs, so `VoxyRenderSystemMixin` swaps it for `LOD_NEAR_PLANE` (16) while either map
+  view renders. `CameraMixin` also raises the game's own `depthFar` to `DEPTH_FAR` on the big map: Solas keeps Voxy water
+  only where it is nearer than the vanilla depth, which is the vanilla far plane over open sky, so water past that
+  distance vanished along a straight line. The Nether roof cut works there too:
   `NetherRoofController.isActive()` is also true while `WindowMapRenderer.rendering()`, and the screen feeds
   `NetherRoofController.tick/updateViewContext` like `MapScreen` does. Any exception turns the 3D
   view off for the session (`Status.FAILED`) and the screen falls back to the flat view with a footer note; with an
@@ -296,6 +302,28 @@ with `Xm*`-style code copied from Xaero's (see the VoxyMap Bobby fork notes).
   (default `>=0.9.2- <0.10`); before widening further, diff `javap -p -s -c` of every Sodium class Voxy references
   between the old and the new Sodium jar (0.9.2 and 0.9.3-alpha.1 were identical for all 57 classes).
 
+## Navigation (`nav`)
+
+A route to a waypoint or a point starts from the big map (right click -> "Route here", or the "Route" button of a
+waypoint in the object panel) or from `/voxymap route <x> <z>`, `/voxymap route waypoint <name>` and
+`/voxymap route stop`. `Navigator` keeps the one active route and plans on its own background thread:
+`NavArea.around` sizes the grid (1-block cells under 400 blocks, 2 under 1500, then 4..16, at most
+`MAX_CELLS`), `NavTerrain` reads Voxy sections of that level top-down (holding an engine reference per section
+column) and classifies the first surface voxel through `NavBlocks` (leaves and the logs under them, plants and other
+blocks without collision are skipped; water, ice, dirt paths and rails, hazards and lava get their own kinds; columns
+Voxy never saw stay `UNKNOWN`). In dimensions with a ceiling the scan starts 24 blocks above the player and looks for
+the first floor below open air. `RoutePlanner` is an A* over cells with a second layer for "in a boat" when the player
+carries a boat: seconds per block per kind, a climb limit of one voxel per cell, drops up to two voxels (any drop
+into water), boarding and leaving cost a few seconds, and the result is cut into legs by mode (walk, swim, boat,
+unknown) and simplified within one cell. `ElytraPlanner` adds a straight flight above the highest known terrain
+plus 32 blocks when the player has an elytra and rockets, and `ElytraPlanner.prefer` picks it when it is faster; the
+ground route is then drawn faintly. No path, no Voxy data or a route past the coarsest grid gives a straight line
+(`Route.direct`). `RouteProgress` follows the player along the legs, `Navigator.tick` re-plans after 2 s more than
+16 blocks off the route (96 in flight) or when a boat or rockets appear or run out, clears the route on arrival
+(6 blocks) or when the waypoint world changes. `RouteHud` draws a card at the top of the screen (mode, distance,
+time, the next change of travel, an arrow) and a marker on the route ahead; the big map and the minimap draw the
+legs in `UiTheme.ROUTE_*` colours. Movement is never automated.
+
 ## Minimap smoothness
 
 `MinimapRenderer` interpolates the player, mobs (`MobSnapshot.source`) and other players with the partial tick, shifts
@@ -305,12 +333,15 @@ chunks are queued by `ClientLevelMixin` (`blockChanged`/`markDirty`) and repaint
 ## Interface components (`gui/ui`)
 
 Every screen draws with the shared kit instead of hand-picked colours: `UiTheme` (colour, spacing and size tokens;
-`UiThemeTest` checks WCAG contrast of text and controls), `UiDraw` (cut-corner panels and outlines, focus ring,
-ellipsized text, key caps), `UiIcons` (9x9 pixel icons drawn with `fill`, no textures, so they work on Vulkan too; no
+`UiThemeTest` checks WCAG contrast of text and controls), `UiDraw` (square panels and outlines, vanilla separator
+pairs, focus ring, ellipsized text, key caps), `UiIcons` (9x9 pixel icons drawn with `fill`, no textures, so they work on Vulkan too; no
 emoji or font glyphs as icons), `UiMotion` (eased hover/toggle/compass motion, switched off by `uiAnimations`). Widgets
 extend vanilla ones so keyboard focus, Enter/Space and narration keep working: `UiButton` (primary, secondary, ghost,
 danger; selected, loading), `UiToggle`, `UiCycler` (Left/Right or a click on the left third steps back), `UiSlider`,
 `UiTextField` (an `EditBox` inside its own frame). The focus ring shows only after keyboard input.
+The look is vanilla-native (since 2026-10-17): buttons, toggles, cyclers and sliders draw the vanilla `widget/button`
+and `widget/slider` sprites, text fields `widget/text_field`, lists sit on `0x70000000` between vanilla header/footer
+separators, text is white with `0xFFA0A0A0` for secondary; no navy palette, cyan accent bars or cut corners.
 
 Settings are one `SettingsView` used by the big map drawer and the Mod Menu screen (`VoxyMapConfigScreen`): category
 column (or a cycler when narrow), search across all groups, a "changed" mark and per-row reset, "Reset all", and a

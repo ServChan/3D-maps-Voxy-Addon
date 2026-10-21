@@ -4,6 +4,7 @@ import com.voxymap.client.map.MapScreenshot;
 import com.voxymap.client.map.MinimapRenderer;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.WaypointLabels;
+import com.voxymap.client.nav.RouteHud;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -40,6 +41,7 @@ public abstract class HudMixin {
     @Inject(method = "extractRenderState", at = @At("HEAD"), remap = false, require = 0)
     private void voxymap$extractWaypointLabels(GuiGraphicsExtractor g, DeltaTracker deltaTracker, CallbackInfo ci) {
         WaypointLabels.extract(g, Minecraft.getInstance());
+        RouteHud.extract(g, Minecraft.getInstance());
     }
 
     @Inject(method = "extractRenderState", at = @At("TAIL"), remap = false, require = 0)

@@ -3,6 +3,7 @@ package com.voxymap.client.map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MinimapRendererTest {
@@ -134,5 +135,16 @@ class MinimapRendererTest {
         assertEquals(1, MinimapRenderer.heightHint(3.5));
         assertEquals(-1, MinimapRenderer.heightHint(-10.0));
         assertEquals(0, MinimapRenderer.heightHint(-2.0));
+    }
+
+    @Test
+    void routeSegmentsAreClippedToTheMinimapBox() {
+        double[] clipped = MinimapRenderer.clipToBox(-500.0, 0.0, 500.0, 0.0, 100.0);
+        assertEquals(-100.0, clipped[0], 1.0e-9);
+        assertEquals(100.0, clipped[2], 1.0e-9);
+        assertNull(MinimapRenderer.clipToBox(-500.0, 300.0, 500.0, 300.0, 100.0));
+        double[] inside = MinimapRenderer.clipToBox(10.0, 20.0, 30.0, 40.0, 100.0);
+        assertEquals(10.0, inside[0], 1.0e-9);
+        assertEquals(40.0, inside[3], 1.0e-9);
     }
 }
