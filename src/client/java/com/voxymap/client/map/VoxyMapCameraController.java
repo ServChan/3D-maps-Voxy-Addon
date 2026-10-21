@@ -4,6 +4,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 
 public final class VoxyMapCameraController {
+    public static final float LOD_NEAR_PLANE = 16.0f;
+    public static final float DEPTH_FAR = 65536.0f;
     private static boolean active;
     private static double cameraX;
     private static double cameraY;

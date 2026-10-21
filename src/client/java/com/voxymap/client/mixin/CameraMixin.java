@@ -3,6 +3,7 @@ package com.voxymap.client.mixin;
 import com.voxymap.client.map.VoxyMapCameraController;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
+import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -22,6 +23,9 @@ public abstract class CameraMixin {
     private float hudFov;
 
     @Shadow(remap = false)
+    private float depthFar;
+
+    @Shadow(remap = false)
     protected abstract void setPosition(double x, double y, double z);
 
     @Shadow(remap = false)
@@ -30,6 +34,13 @@ public abstract class CameraMixin {
     @Inject(method = "update", at = @At("RETURN"), remap = false, require = 0)
     private void voxymap$useMapCamera(DeltaTracker deltaTracker, CallbackInfo ci) {
         voxymap$applyMapCamera();
+    }
+
+    @Inject(method = "update", at = @At(value = "FIELD", target = "Lnet/minecraft/client/Camera;depthFar:F", opcode = Opcodes.PUTFIELD, shift = At.Shift.AFTER), remap = false, require = 0)
+    private void voxymap$reachMapHorizon(DeltaTracker deltaTracker, CallbackInfo ci) {
+        if (VoxyMapCameraController.isActive()) {
+            this.depthFar = Math.max(this.depthFar, VoxyMapCameraController.DEPTH_FAR);
+        }
     }
 
     @ModifyArg(method = "update", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Camera;setupPerspective(FFFFF)V"), index = 2, remap = false, require = 0)

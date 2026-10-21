@@ -2,13 +2,16 @@ package com.voxymap.client.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyRenderGate;
 import com.voxymap.client.map.WindowMapRenderer;
 import me.cortex.voxy.client.core.VoxyRenderSystem;
 import me.cortex.voxy.client.core.rendering.RenderDistanceTracker;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(value = VoxyRenderSystem.class, remap = false)
@@ -27,5 +30,13 @@ public abstract class VoxyRenderSystemMixin {
         if (VoxyRenderGate.skipHiddenFrame()) {
             ci.cancel();
         }
+    }
+
+    @ModifyConstant(method = "computeProjectionMat", constant = @Constant(floatValue = 0.1F), require = 0)
+    private static float voxymap$mapNearPlane(float original) {
+        if (VoxyMapCameraController.isActive() || WindowMapRenderer.rendering()) {
+            return VoxyMapCameraController.LOD_NEAR_PLANE;
+        }
+        return original;
     }
 }
