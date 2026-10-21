@@ -88,6 +88,7 @@ public final class VoxyMapSettings {
     private static boolean voxyInWorld = true;
     private static boolean map2d = false;
     private static boolean uiAnimations = true;
+    private static String serverTeleportCommand = TeleportCommand.DEFAULT_SERVER_TEMPLATE;
     private static final Set<String> hiddenPlayers = ConcurrentHashMap.newKeySet();
     private static final Properties DEFAULTS = toProperties();
     private static int batchDepth;
@@ -212,6 +213,8 @@ public final class VoxyMapSettings {
         voxyInWorld = readBoolean(properties.getProperty("voxyInWorld"), voxyInWorld);
         map2d = readBoolean(properties.getProperty("map2d"), map2d);
         uiAnimations = readBoolean(properties.getProperty("uiAnimations"), uiAnimations);
+        String teleport = properties.getProperty("serverTeleportCommand");
+        serverTeleportCommand = teleport == null ? TeleportCommand.DEFAULT_SERVER_TEMPLATE : TeleportCommand.normalize(teleport);
         hiddenPlayers.clear();
         String hidden = properties.getProperty("hiddenPlayers");
         if (hidden != null) {
@@ -324,6 +327,7 @@ public final class VoxyMapSettings {
         properties.setProperty("voxyInWorld", Boolean.toString(voxyInWorld));
         properties.setProperty("map2d", Boolean.toString(map2d));
         properties.setProperty("uiAnimations", Boolean.toString(uiAnimations));
+        properties.setProperty("serverTeleportCommand", serverTeleportCommand);
         properties.setProperty("hiddenPlayers", String.join(",", new java.util.TreeSet<>(hiddenPlayers)));
         return properties;
     }
@@ -1016,6 +1020,19 @@ public final class VoxyMapSettings {
     public static void toggleUiAnimations() {
         load();
         uiAnimations = !uiAnimations;
+        save();
+    }
+
+    public static String serverTeleportCommand() {
+        load();
+        return serverTeleportCommand;
+    }
+
+    public static void setServerTeleportCommand(String template) {
+        load();
+        String value = TeleportCommand.normalize(template);
+        if (value.equals(serverTeleportCommand)) return;
+        serverTeleportCommand = value;
         save();
     }
 

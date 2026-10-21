@@ -16,7 +16,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.permissions.Permissions;
+import com.voxymap.client.map.TeleportCommand;
 import net.minecraft.util.FormattedCharSequence;
 
 import java.util.ArrayList;
@@ -39,10 +39,9 @@ public final class WaypointForm {
     private static final int SWATCH_SIZE = 16;
     private static final int SWATCH_GAP = 4;
     private static final int MESSAGE_LINES = 2;
-    private static final int ACCENT = 0xFF3BA4FF;
-    private static final int ACCENT_LIGHT = 0xFF7DEBFF;
-    private static final int LABEL_COLOR = 0xFF9FD8FF;
-    private static final int ERROR_COLOR = 0xFFFF7A6B;
+    private static final int LABEL_COLOR = com.voxymap.client.gui.ui.UiTheme.TEXT_MUTED;
+    private static final int HINT_COLOR = com.voxymap.client.gui.ui.UiTheme.TEXT_SECONDARY;
+    private static final int ERROR_COLOR = com.voxymap.client.gui.ui.UiTheme.DANGER;
 
     private final String worldId;
     private final WaypointManager.Waypoint existing;
@@ -329,9 +328,8 @@ public final class WaypointForm {
     }
 
     public void extractPanel(GuiGraphicsExtractor graphics, Font font) {
-        graphics.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xF00D141F);
-        graphics.outline(panelX, panelY, panelW, panelH, ACCENT);
-        graphics.fill(panelX, panelY, panelX + 3, panelY + panelH, ACCENT);
+        graphics.fill(panelX, panelY, panelX + panelW, panelY + panelH, com.voxymap.client.gui.ui.UiTheme.SURFACE_RAISED);
+        graphics.outline(panelX, panelY, panelW, panelH, com.voxymap.client.gui.ui.UiTheme.BORDER);
         graphics.text(font, title(), panelX + 10, panelY + 8, 0xFFFFFFFF);
         int left = panelX + 10;
         graphics.text(font, Component.translatable("screen.voxymap.waypoint.field.name"), left, panelY + 24, LABEL_COLOR);
@@ -359,7 +357,7 @@ public final class WaypointForm {
         int lineY = messageY;
         List<FormattedCharSequence> lines = font.split(message, panelW - 20);
         for (int i = 0; i < Math.min(MESSAGE_LINES, lines.size()); i++) {
-            graphics.text(font, lines.get(i), panelX + 10, lineY, error != null ? ERROR_COLOR : ACCENT_LIGHT);
+            graphics.text(font, lines.get(i), panelX + 10, lineY, error != null ? ERROR_COLOR : HINT_COLOR);
             lineY += font.lineHeight + 2;
         }
     }
@@ -410,8 +408,7 @@ public final class WaypointForm {
         if (minecraft.player == null || minecraft.getConnection() == null) {
             return false;
         }
-        return worldId.equals(MinimapRenderer.currentWorldId(minecraft))
-                && minecraft.player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
+        return worldId.equals(MinimapRenderer.currentWorldId(minecraft)) && TeleportCommand.available(minecraft);
     }
 
     private void teleport() {
@@ -424,8 +421,9 @@ public final class WaypointForm {
             error = Component.translatable("screen.voxymap.waypoint.error.coordinates");
             return;
         }
-        minecraft.getConnection().sendCommand("tp @s " + x + " " + y + " " + z);
-        listener.teleported();
+        if (TeleportCommand.send(minecraft, x, y, z)) {
+            listener.teleported();
+        }
     }
 
     private static String nullToEmpty(String value) {

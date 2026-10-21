@@ -51,6 +51,7 @@ public final class SettingsCatalog {
         UI_ANIMATIONS(Group.GENERAL, "screen.voxymap.settings.uianimations", Availability.EVERYWHERE, false),
         FOG_SUPPRESSION(Group.GENERAL, "screen.voxymap.settings.fogsuppression", Availability.EVERYWHERE, false),
         SCREENSHOT(Group.GENERAL, "screen.voxymap.settings.screenshot", Availability.EVERYWHERE, false),
+        TELEPORT_COMMAND(Group.GENERAL, "screen.voxymap.settings.teleportcommand", Availability.EVERYWHERE, false),
         SPATIAL_GUI_FLAT_MAP(Group.GENERAL, "screen.voxymap.settings.spatialgui", Availability.EVERYWHERE, false),
         SPATIAL_GUI_3D(Group.GENERAL, "screen.voxymap.settings.spatialgui3d", Availability.EVERYWHERE, false),
 

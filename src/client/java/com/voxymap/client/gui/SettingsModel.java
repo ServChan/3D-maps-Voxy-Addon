@@ -5,6 +5,7 @@ import com.voxymap.client.map.MapOverlay;
 import com.voxymap.client.map.MinimapRenderer;
 import com.voxymap.client.map.MinimapInfoLine;
 import com.voxymap.client.map.RadarCategory;
+import com.voxymap.client.map.TeleportCommand;
 import com.voxymap.client.map.VoxyMapSettings;
 import com.voxymap.client.map.WaypointDisplay;
 import com.voxymap.client.map.WaypointManager;
@@ -48,7 +49,7 @@ public final class SettingsModel {
             implements Control {
     }
 
-    public record Text(Supplier<String> value, Consumer<String> commit, boolean secret, int maxLength)
+    public record Text(Supplier<String> value, Consumer<String> commit, boolean secret, int maxLength, String hintKey)
             implements Control {
     }
 
@@ -72,6 +73,7 @@ public final class SettingsModel {
         key(SettingsCatalog.Entry.UI_ANIMATIONS, "uiAnimations");
         key(SettingsCatalog.Entry.FOG_SUPPRESSION, "fogSuppressionMode");
         key(SettingsCatalog.Entry.SCREENSHOT, "screenshotContent");
+        key(SettingsCatalog.Entry.TELEPORT_COMMAND, "serverTeleportCommand");
         key(SettingsCatalog.Entry.SPATIAL_GUI_FLAT_MAP, "spatialGuiFlatMap");
         key(SettingsCatalog.Entry.SPATIAL_GUI_3D, "windowMap3d");
         key(SettingsCatalog.Entry.WAYPOINTS, "waypointsEnabled");
@@ -207,6 +209,9 @@ public final class SettingsModel {
                     VoxyMapSettings::cycleFogSuppression, VoxyMapSettings.FogSuppression.values().length);
             case SCREENSHOT -> cycle(() -> tr(VoxyMapSettings.screenshotContent().translationKey()),
                     VoxyMapSettings::cycleScreenshotContent, VoxyMapSettings.ScreenshotContent.values().length);
+            case TELEPORT_COMMAND -> new Text(VoxyMapSettings::serverTeleportCommand,
+                    VoxyMapSettings::setServerTeleportCommand, false, TeleportCommand.MAX_LENGTH,
+                    "screen.voxymap.settings.teleportcommand.off");
             case SPATIAL_GUI_FLAT_MAP -> new Toggle(VoxyMapSettings::spatialGuiFlatMap, VoxyMapSettings::toggleSpatialGuiFlatMap);
             case SPATIAL_GUI_3D -> new Toggle(VoxyMapSettings::windowMap3d, VoxyMapSettings::toggleWindowMap3d);
             case WAYPOINTS -> new Toggle(VoxyMapSettings::waypointsEnabled, VoxyMapSettings::toggleWaypointsVisible);
@@ -275,9 +280,11 @@ public final class SettingsModel {
                     : overlayToggle(entry.mapOverlay());
             case OVERLAY_LIGHT, OVERLAY_BIOMES -> overlayToggle(entry.mapOverlay());
             case SYNC_ADDRESS -> new Text(() -> nullToEmpty(WaypointSyncSettings.address(host.worldId())),
-                    value -> WaypointSyncSettings.setAddress(host.worldId(), value), false, 128);
+                    value -> WaypointSyncSettings.setAddress(host.worldId(), value), false, 128,
+                    "screen.voxymap.settings.sync.not_set");
             case SYNC_PASSWORD -> new Text(() -> nullToEmpty(WaypointSyncSettings.password(host.worldId())),
-                    value -> WaypointSyncSettings.setPassword(host.worldId(), value), true, 128);
+                    value -> WaypointSyncSettings.setPassword(host.worldId(), value), true, 128,
+                    "screen.voxymap.settings.sync.not_set");
             case SYNC_STATUS -> new Status(() -> syncStatusText(host.worldId()), () -> syncStatusColor(host.worldId()));
             case MAP_SHARE, MAP_RECEIVE -> new Action(() -> host.actionValue(entry), () -> host.runAction(entry));
             case DIAGNOSTICS -> new Status(() -> tr(SettingsValues.diagnosticsKey()),
