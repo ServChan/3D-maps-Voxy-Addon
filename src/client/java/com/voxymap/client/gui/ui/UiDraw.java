@@ -2,9 +2,16 @@ package com.voxymap.client.gui.ui;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.resources.Identifier;
 
 public final class UiDraw {
     private static final String ELLIPSIS = "…";
+    private static final Identifier BUTTON = Identifier.withDefaultNamespace("widget/button");
+    private static final Identifier BUTTON_DISABLED = Identifier.withDefaultNamespace("widget/button_disabled");
+    private static final Identifier BUTTON_HIGHLIGHTED = Identifier.withDefaultNamespace("widget/button_highlighted");
+    private static final Identifier FIELD = Identifier.withDefaultNamespace("widget/text_field");
+    private static final Identifier FIELD_HIGHLIGHTED = Identifier.withDefaultNamespace("widget/text_field_highlighted");
 
     private UiDraw() {
     }
@@ -13,43 +20,43 @@ public final class UiDraw {
         if (width <= 0 || height <= 0) {
             return;
         }
-        if (width < 5 || height < 5) {
-            g.fill(x, y, x + width, y + height, fill);
-            return;
-        }
-        g.fill(x + 2, y, x + width - 2, y + 1, fill);
-        g.fill(x + 1, y + 1, x + width - 1, y + 2, fill);
-        g.fill(x, y + 2, x + width, y + height - 2, fill);
-        g.fill(x + 1, y + height - 2, x + width - 1, y + height - 1, fill);
-        g.fill(x + 2, y + height - 1, x + width - 2, y + height, fill);
+        g.fill(x, y, x + width, y + height, fill);
     }
 
     public static void outline(GuiGraphicsExtractor g, int x, int y, int width, int height, int color) {
-        if (width < 5 || height < 5) {
-            g.outline(x, y, width, height, color);
+        if (width <= 0 || height <= 0) {
             return;
         }
-        g.fill(x + 2, y, x + width - 2, y + 1, color);
-        g.fill(x + 2, y + height - 1, x + width - 2, y + height, color);
-        g.fill(x, y + 2, x + 1, y + height - 2, color);
-        g.fill(x + width - 1, y + 2, x + width, y + height - 2, color);
-        g.fill(x + 1, y + 1, x + 2, y + 2, color);
-        g.fill(x + width - 2, y + 1, x + width - 1, y + 2, color);
-        g.fill(x + 1, y + height - 2, x + 2, y + height - 1, color);
-        g.fill(x + width - 2, y + height - 2, x + width - 1, y + height - 1, color);
+        g.outline(x, y, width, height, color);
     }
 
     public static void card(GuiGraphicsExtractor g, int x, int y, int width, int height) {
-        panel(g, x, y, width, height, UiTheme.SURFACE);
-        outline(g, x, y, width, height, UiTheme.BORDER);
+        panel(g, x, y, width, height, UiTheme.LABEL);
+    }
+
+    public static void button(GuiGraphicsExtractor g, int x, int y, int width, int height, boolean highlighted,
+                              boolean enabled) {
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        g.blitSprite(RenderPipelines.GUI_TEXTURED, !enabled ? BUTTON_DISABLED : highlighted ? BUTTON_HIGHLIGHTED : BUTTON,
+                x, y, width, height);
+    }
+
+    public static void field(GuiGraphicsExtractor g, int x, int y, int width, int height, boolean focused) {
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        g.blitSprite(RenderPipelines.GUI_TEXTURED, focused ? FIELD_HIGHLIGHTED : FIELD, x, y, width, height);
     }
 
     public static void focusRing(GuiGraphicsExtractor g, int x, int y, int width, int height) {
-        outline(g, x - 2, y - 2, width + 4, height + 4, UiTheme.FOCUS);
+        outline(g, x - 1, y - 1, width + 2, height + 2, UiTheme.FOCUS);
     }
 
     public static void divider(GuiGraphicsExtractor g, int x, int y, int width) {
-        g.fill(x, y, x + width, y + 1, UiTheme.BORDER);
+        g.fill(x, y, x + width, y + 1, UiTheme.SEPARATOR_DARK);
+        g.fill(x, y + 1, x + width, y + 2, UiTheme.SEPARATOR_LIGHT);
     }
 
     public static String ellipsize(Font font, String text, int maxWidth) {
@@ -83,7 +90,8 @@ public final class UiDraw {
 
     public static void keyCap(GuiGraphicsExtractor g, Font font, String key, String action, int x, int y) {
         int keyWidth = font.width(key) + 8;
-        panel(g, x, y, keyWidth, 14, UiTheme.CONTROL_SELECTED);
+        panel(g, x, y, keyWidth, 14, 0xFF000000);
+        outline(g, x, y, keyWidth, 14, UiTheme.BORDER_STRONG);
         g.text(font, key, x + 4, y + 3, UiTheme.TEXT);
         g.text(font, action, x + keyWidth + 4, y + 3, UiTheme.TEXT_SECONDARY);
     }

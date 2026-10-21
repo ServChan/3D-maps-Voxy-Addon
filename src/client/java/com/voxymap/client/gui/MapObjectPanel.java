@@ -89,11 +89,14 @@ final class MapObjectPanel {
         panelH = Math.max(128, screenHeight - panelY - 44);
 
         boolean toggleHovered = inside(mouseX, mouseY, toggleX, toggleY, toggleW, TOGGLE_H);
-        UiDraw.panel(g, toggleX, toggleY, toggleW, TOGGLE_H,
-                open ? UiTheme.CONTROL_SELECTED : toggleHovered ? UiTheme.CONTROL_HOVER : UiTheme.SURFACE);
-        UiDraw.outline(g, toggleX, toggleY, toggleW, TOGGLE_H, open ? UiTheme.ACCENT_BRIGHT : UiTheme.BORDER);
-        UiIcons.draw(g, UiIcons.Icon.LAYERS, toggleX + 7, toggleY + (TOGGLE_H - UiTheme.ICON_SIZE) / 2, UiTheme.TEXT_SECONDARY);
-        g.text(font, toggleLabel, toggleX + 7 + UiTheme.ICON_SIZE + 5, UiDraw.textY(font, toggleY, TOGGLE_H), UiTheme.TEXT);
+        UiDraw.button(g, toggleX, toggleY, toggleW, TOGGLE_H, open || toggleHovered, true);
+        int toggleTextX = toggleX + 7 + UiTheme.ICON_SIZE + 5;
+        int toggleTextY = UiDraw.textY(font, toggleY, TOGGLE_H);
+        UiIcons.draw(g, UiIcons.Icon.LAYERS, toggleX + 7, toggleY + (TOGGLE_H - UiTheme.ICON_SIZE) / 2, UiTheme.TEXT);
+        g.text(font, toggleLabel, toggleTextX, toggleTextY, UiTheme.TEXT);
+        if (open) {
+            g.fill(toggleTextX, toggleTextY + 9, toggleTextX + font.width(toggleLabel), toggleTextY + 10, UiTheme.TEXT);
+        }
         if (!open) return;
 
         UiDraw.card(g, panelX, panelY, WIDTH, panelH);
@@ -102,8 +105,7 @@ final class MapObjectPanel {
         g.text(font, count, panelX + WIDTH - 10 - font.width(count), panelY + 9, UiTheme.TEXT_MUTED);
 
         int searchY = panelY + 24;
-        UiDraw.panel(g, panelX + 8, searchY, WIDTH - 16, 20, UiTheme.SURFACE_SUNKEN);
-        UiDraw.outline(g, panelX + 8, searchY, WIDTH - 16, 20, searchFocused ? UiTheme.ACCENT_BRIGHT : UiTheme.BORDER);
+        UiDraw.field(g, panelX + 8, searchY, WIDTH - 16, 20, searchFocused);
         UiIcons.draw(g, UiIcons.Icon.SEARCH, panelX + 13, searchY + 6, searchFocused ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_MUTED);
         boolean placeholder = query.isEmpty() && !searchFocused;
         String search = placeholder
@@ -114,7 +116,7 @@ final class MapObjectPanel {
 
         int filterY = searchY + 25;
         boolean filterHovered = inside(mouseX, mouseY, panelX + 8, filterY, WIDTH - 16, 18);
-        UiDraw.panel(g, panelX + 8, filterY, WIDTH - 16, 18, filterHovered ? UiTheme.CONTROL_HOVER : UiTheme.CONTROL);
+        UiDraw.button(g, panelX + 8, filterY, WIDTH - 16, 18, filterHovered, true);
         UiIcons.draw(g, UiIcons.Icon.CHEVRON_LEFT, panelX + 10, filterY + 5, UiTheme.TEXT_MUTED);
         UiIcons.draw(g, UiIcons.Icon.CHEVRON_RIGHT, panelX + WIDTH - 19, filterY + 5, UiTheme.TEXT_MUTED);
         String filterLabel = Component.translatable("screen.voxymap.objects.filter." + filter.key).getString();
@@ -131,8 +133,11 @@ final class MapObjectPanel {
             int y = listY + (i - scroll) * ROW_H;
             boolean selectedRow = entry.id.equals(selectedId);
             boolean hovered = inside(mouseX, mouseY, panelX + 8, y, WIDTH - 16, ROW_H - 2);
-            if (selectedRow || hovered) {
-                UiDraw.panel(g, panelX + 8, y, WIDTH - 16, ROW_H - 2, selectedRow ? UiTheme.CONTROL_SELECTED : UiTheme.ROW_HOVER);
+            if (selectedRow) {
+                UiDraw.panel(g, panelX + 8, y, WIDTH - 16, ROW_H - 2, UiTheme.CONTROL_SELECTED);
+                UiDraw.outline(g, panelX + 8, y, WIDTH - 16, ROW_H - 2, UiTheme.BORDER_STRONG);
+            } else if (hovered) {
+                UiDraw.panel(g, panelX + 8, y, WIDTH - 16, ROW_H - 2, UiTheme.ROW_HOVER);
             }
             g.fill(panelX + 8, y + 3, panelX + 10, y + ROW_H - 5, entry.color);
             UiIcons.draw(g, kindIcon(entry.kind), panelX + 14, y + 8, entry.hidden ? UiTheme.TEXT_DISABLED : entry.color);
@@ -171,8 +176,12 @@ final class MapObjectPanel {
         UiDraw.text(g, font, selected.detail, panelX + 12, detailsY + 19, WIDTH - 28, UiTheme.TEXT_SECONDARY);
         int buttonY = panelY + panelH - BUTTON_H - 8;
         drawActionButton(g, font, panelX + 9, buttonY, 51, "screen.voxymap.objects.center", true, mouseX, mouseY, false);
-        drawActionButton(g, font, panelX + 63, buttonY, 51, "screen.voxymap.objects.follow", selected.followable,
-                mouseX, mouseY, false);
+        if (selected.kind == Kind.WAYPOINT) {
+            drawActionButton(g, font, panelX + 63, buttonY, 51, "screen.voxymap.objects.route", true, mouseX, mouseY, false);
+        } else {
+            drawActionButton(g, font, panelX + 63, buttonY, 51, "screen.voxymap.objects.follow", selected.followable,
+                    mouseX, mouseY, false);
+        }
         drawActionButton(g, font, panelX + 117, buttonY, 51, "screen.voxymap.objects.edit", selected.editable,
                 mouseX, mouseY, false);
         drawActionButton(g, font, panelX + 171, buttonY, 72, "screen.voxymap.objects.delete",
@@ -229,6 +238,7 @@ final class MapObjectPanel {
         if (selected != null) {
             int buttonY = panelY + panelH - BUTTON_H - 8;
             if (inside(mouseX, mouseY, panelX + 9, buttonY, 51, BUTTON_H)) return new Action(ActionType.CENTER, selected);
+            if (inside(mouseX, mouseY, panelX + 63, buttonY, 51, BUTTON_H) && selected.kind == Kind.WAYPOINT) return new Action(ActionType.ROUTE, selected);
             if (inside(mouseX, mouseY, panelX + 63, buttonY, 51, BUTTON_H) && selected.followable) return new Action(ActionType.FOLLOW, selected);
             if (inside(mouseX, mouseY, panelX + 117, buttonY, 51, BUTTON_H) && selected.editable) return new Action(ActionType.EDIT, selected);
             if (inside(mouseX, mouseY, panelX + 171, buttonY, 72, BUTTON_H) && selected.editable
@@ -280,15 +290,9 @@ final class MapObjectPanel {
     private static void drawActionButton(GuiGraphicsExtractor g, Font font, int x, int y, int w, String key,
                                          boolean enabled, int mouseX, int mouseY, boolean danger) {
         boolean hovered = enabled && inside(mouseX, mouseY, x, y, w, BUTTON_H);
-        int fill = !enabled ? UiTheme.CONTROL_DISABLED
-                : danger ? (hovered ? UiTheme.DANGER_FILL_HOVER : UiTheme.DANGER_FILL)
-                : hovered ? UiTheme.CONTROL_HOVER : UiTheme.CONTROL;
-        UiDraw.panel(g, x, y, w, BUTTON_H, fill);
-        if (enabled && !danger) {
-            UiDraw.outline(g, x, y, w, BUTTON_H, hovered ? UiTheme.BORDER_STRONG : UiTheme.BORDER);
-        }
+        UiDraw.button(g, x, y, w, BUTTON_H, hovered, enabled);
         UiDraw.centeredText(g, font, Component.translatable(key).getString(), x + w / 2, UiDraw.textY(font, y, BUTTON_H),
-                w - 6, enabled ? UiTheme.TEXT : UiTheme.TEXT_DISABLED);
+                w - 6, !enabled ? UiTheme.TEXT_DISABLED : danger ? UiTheme.DANGER : UiTheme.TEXT);
     }
 
     private static UiIcons.Icon kindIcon(Kind kind) {
@@ -302,7 +306,7 @@ final class MapObjectPanel {
 
     enum Kind { PLAYER, WAYPOINT, TERRITORY, SCHEMATIC }
 
-    enum ActionType { CONSUMED, REFILTER, SELECT, CENTER, FOLLOW, EDIT, DELETE, HIDE }
+    enum ActionType { CONSUMED, REFILTER, SELECT, CENTER, FOLLOW, ROUTE, EDIT, DELETE, HIDE }
 
     record Entry(String id, Kind kind, String name, String detail, double x, double y, double z,
                  int color, boolean followable, boolean editable, boolean hideable, boolean hidden) {

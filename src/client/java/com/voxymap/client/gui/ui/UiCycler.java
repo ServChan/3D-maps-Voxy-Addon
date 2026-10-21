@@ -56,18 +56,24 @@ public class UiCycler extends UiControl {
     }
 
     @Override
+    protected boolean drawsOwnFocus() {
+        return true;
+    }
+
+    @Override
     protected void drawControl(GuiGraphicsExtractor g, Font font, int mouseX, int mouseY, double seconds) {
         int x = getX();
         int y = getY();
         int w = getWidth();
         int h = getHeight();
-        UiDraw.panel(g, x, y, w, h, fill(UiTheme.CONTROL, UiTheme.CONTROL_HOVER, UiTheme.CONTROL_PRESSED));
-        UiDraw.outline(g, x, y, w, h, UiTheme.mix(UiTheme.BORDER, UiTheme.BORDER_STRONG, hoverAmount));
-        int arrowColor = active ? UiTheme.mix(UiTheme.TEXT_MUTED, UiTheme.ACCENT_BRIGHT, hoverAmount) : UiTheme.TEXT_DISABLED;
-        int iconY = y + (h - UiTheme.ICON_SIZE) / 2;
-        UiIcons.draw(g, UiIcons.Icon.CHEVRON_LEFT, x + 2, iconY, arrowColor);
-        UiIcons.draw(g, UiIcons.Icon.CHEVRON_RIGHT, x + w - UiTheme.ICON_SIZE - 2, iconY, arrowColor);
+        vanillaSprite(g, isHoveredOrFocused());
         int textColor = active ? UiTheme.TEXT : UiTheme.TEXT_DISABLED;
+        int iconY = y + (h - UiTheme.ICON_SIZE) / 2;
+        if (active && hoverAmount > 0.0f) {
+            int arrowColor = UiTheme.scaleAlpha(UiTheme.TEXT_MUTED, hoverAmount);
+            UiIcons.draw(g, UiIcons.Icon.CHEVRON_LEFT, x + 3, iconY, arrowColor);
+            UiIcons.draw(g, UiIcons.Icon.CHEVRON_RIGHT, x + w - UiTheme.ICON_SIZE - 3, iconY, arrowColor);
+        }
         int inner = w - (UiTheme.ICON_SIZE + 4) * 2;
         String text = value.get().getString();
         if (icon != null) {
@@ -75,9 +81,11 @@ public class UiCycler extends UiControl {
             int contentWidth = UiTheme.ICON_SIZE + UiTheme.SPACE_S + font.width(fitted);
             int startX = x + (w - contentWidth) / 2;
             UiIcons.draw(g, icon, startX, iconY, UiTheme.TEXT_SECONDARY);
-            g.text(font, fitted, startX + UiTheme.ICON_SIZE + UiTheme.SPACE_S, UiDraw.textY(font, y, h), textColor);
+            g.text(font, fitted, startX + UiTheme.ICON_SIZE + UiTheme.SPACE_S, UiDraw.textY(font, y, h), textColor, true);
             return;
         }
-        UiDraw.centeredText(g, font, text, x + w / 2, UiDraw.textY(font, y, h), inner, textColor);
+        String fitted = UiDraw.ellipsize(font, text, inner);
+        g.text(font, fitted, x + w / 2 - font.width(fitted) / 2, UiDraw.textY(font, y, h), textColor, true);
     }
+
 }

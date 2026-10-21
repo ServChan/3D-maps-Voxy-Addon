@@ -75,15 +75,16 @@ public final class MinimapLayoutScreen extends Screen {
         boolean hot = dragging || inside(mouseX, mouseY, placement, size);
         UiDraw.outline(graphics, placement.x() - 4, placement.y() - 4, size + 8, size + 8,
                 hot ? UiTheme.FOCUS : UiTheme.ACCENT_BRIGHT);
-        int cardX = (width - CARD_WIDTH) / 2;
+        String hint = Component.translatable("screen.voxymap.layout.hint").getString();
+        String snap = Component.translatable("screen.voxymap.layout.snap").getString();
+        int cardWidth = Math.max(CARD_WIDTH, Math.min(width - 32, Math.max(font.width(hint), font.width(snap)) + 24));
+        int cardX = (width - cardWidth) / 2;
         int cardY = (height - CARD_HEIGHT) / 2;
-        UiDraw.panel(graphics, cardX, cardY, CARD_WIDTH, CARD_HEIGHT, UiTheme.SURFACE_RAISED);
-        UiDraw.outline(graphics, cardX, cardY, CARD_WIDTH, CARD_HEIGHT, UiTheme.BORDER_STRONG);
-        UiDraw.centeredText(graphics, font, title.getString(), width / 2, cardY + 9, CARD_WIDTH - 16, UiTheme.TEXT);
-        UiDraw.centeredText(graphics, font, Component.translatable("screen.voxymap.layout.hint").getString(), width / 2,
-                cardY + 22, CARD_WIDTH - 16, UiTheme.TEXT_SECONDARY);
-        UiDraw.centeredText(graphics, font, Component.translatable("screen.voxymap.layout.snap").getString(), width / 2,
-                cardY + 33, CARD_WIDTH - 16, UiTheme.TEXT_MUTED);
+        UiDraw.panel(graphics, cardX, cardY, cardWidth, CARD_HEIGHT, UiTheme.SURFACE_RAISED);
+        UiDraw.outline(graphics, cardX, cardY, cardWidth, CARD_HEIGHT, UiTheme.BORDER_STRONG);
+        UiDraw.centeredText(graphics, font, title.getString(), width / 2, cardY + 9, cardWidth - 16, UiTheme.TEXT);
+        UiDraw.centeredText(graphics, font, hint, width / 2, cardY + 22, cardWidth - 16, UiTheme.TEXT_SECONDARY);
+        UiDraw.centeredText(graphics, font, snap, width / 2, cardY + 33, cardWidth - 16, UiTheme.TEXT_MUTED);
         super.extractRenderState(graphics, mouseX, mouseY, tickDelta);
     }
 

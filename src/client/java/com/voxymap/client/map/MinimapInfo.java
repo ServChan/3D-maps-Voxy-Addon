@@ -17,8 +17,8 @@ public final class MinimapInfo {
     static final double NETHER_SCALE = 8.0;
     static final long TICKS_PER_DAY = 24000L;
 
-    private static final int PRIMARY_COLOR = 0xFFDFF8FF;
-    private static final int SECONDARY_COLOR = 0xFFB8C7D9;
+    private static final int PRIMARY_COLOR = 0xFFFFFFFF;
+    private static final int SECONDARY_COLOR = 0xFFC6C6C6;
     private static final int DARK_COLOR = 0xFFFF7A6B;
 
     public record Line(String text, int color) {

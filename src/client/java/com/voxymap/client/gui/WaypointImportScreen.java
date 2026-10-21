@@ -1,5 +1,6 @@
 package com.voxymap.client.gui;
 
+import com.voxymap.client.gui.ui.UiTheme;
 import com.voxymap.client.map.WaypointChatShare;
 import com.voxymap.client.map.WaypointImport;
 import com.voxymap.client.map.WaypointLabels;
@@ -25,8 +26,7 @@ public final class WaypointImportScreen extends Screen {
     private static final int CONTROL_HEIGHT = 20;
     private static final int MAX_CONTENT_WIDTH = 520;
     private static final int SCROLL_STEP = 28;
-    private static final int ACCENT = 0xFF3BA4FF;
-    private static final int MUTED = 0xFF9AA7B8;
+    private static final int MUTED = UiTheme.TEXT_MUTED;
 
     private enum State { LOADING, READY, FAILED }
 
@@ -168,14 +168,9 @@ public final class WaypointImportScreen extends Screen {
     }
 
     @Override
-    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float tickDelta) {
-        graphics.fill(0, 0, width, height, 0xF00D141F);
-    }
-
-    @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float tickDelta) {
-        graphics.fill(0, 0, width, TITLE_BAR_HEIGHT, 0xFF182638);
-        graphics.centeredText(font, title, width / 2, 9, 0xFFFFFFFF);
+        graphics.fill(0, viewportTop, width, viewportBottom, UiTheme.SURFACE_SUNKEN);
+        graphics.centeredText(font, title, width / 2, (TITLE_BAR_HEIGHT - 9) / 2, UiTheme.TEXT);
         graphics.text(font, Component.translatable("screen.voxymap.import.where"), contentLeft, TITLE_BAR_HEIGHT + 6, MUTED);
         graphics.enableScissor(0, viewportTop, width, viewportBottom);
         WaypointText.Dimension here = minecraft == null ? null : WaypointChatShare.currentDimension(minecraft);
@@ -186,8 +181,6 @@ public final class WaypointImportScreen extends Screen {
             }
             WaypointImport.Found entry = row.found();
             boolean sameDimension = entry.dimension() == here;
-            graphics.fill(contentLeft, y, contentLeft + contentWidth, y + ROW_HEIGHT - 2, 0x66102034);
-            graphics.fill(contentLeft, y, contentLeft + 2, y + ROW_HEIGHT - 2, sameDimension ? ACCENT : MUTED);
             String source = entry.source() == WaypointImport.Source.XAERO ? "Xaero" : "JourneyMap";
             String set = entry.set().isEmpty() ? "" : " / " + entry.set();
             graphics.text(font, source + "  " + entry.world() + set, contentLeft + 8, y + 4,
@@ -205,8 +198,13 @@ public final class WaypointImportScreen extends Screen {
             graphics.centeredText(font, message, width / 2, centerY - 4, 0xFFFFFFFF);
         }
         graphics.disableScissor();
+        boolean inWorld = minecraft != null && minecraft.level != null;
+        graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                inWorld ? Screen.INWORLD_HEADER_SEPARATOR : Screen.HEADER_SEPARATOR, 0, viewportTop - 2, 0.0F, 0.0F, width, 2, 32, 2);
+        graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                inWorld ? Screen.INWORLD_FOOTER_SEPARATOR : Screen.FOOTER_SEPARATOR, 0, viewportBottom, 0.0F, 0.0F, width, 2, 32, 2);
         if (status != null) {
-            graphics.text(font, status, contentLeft, height - FOOTER_HEIGHT + 4, 0xFF7DEBFF);
+            graphics.text(font, status, contentLeft, height - FOOTER_HEIGHT + 4, UiTheme.TEXT_SECONDARY);
         }
         super.extractRenderState(graphics, mouseX, mouseY, tickDelta);
     }

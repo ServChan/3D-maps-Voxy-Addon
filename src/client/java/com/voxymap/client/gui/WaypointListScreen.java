@@ -1,5 +1,6 @@
 package com.voxymap.client.gui;
 
+import com.voxymap.client.gui.ui.UiTheme;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.voxymap.client.map.DimensionLinks;
 import com.voxymap.client.map.WaypointChatShare;
@@ -34,9 +35,7 @@ public final class WaypointListScreen extends Screen {
     private static final int SIDE_GUTTER = 16;
     private static final int SCROLL_STEP = 30;
     private static final int ICON_SIZE = 16;
-    private static final int ACCENT = 0xFF3BA4FF;
-    private static final int ACCENT_LIGHT = 0xFF7DEBFF;
-    private static final int MUTED = 0xFF9AA7B8;
+    private static final int MUTED = UiTheme.TEXT_MUTED;
 
     public enum Sort {
         DISTANCE("screen.voxymap.waypoints.sort.distance"),
@@ -321,14 +320,9 @@ public final class WaypointListScreen extends Screen {
     }
 
     @Override
-    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float tickDelta) {
-        graphics.fill(0, 0, width, height, 0xF00D141F);
-    }
-
-    @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float tickDelta) {
-        graphics.fill(0, 0, width, TITLE_BAR_HEIGHT, 0xFF182638);
-        graphics.centeredText(font, title, width / 2, 9, 0xFFFFFFFF);
+        graphics.fill(0, viewportTop, width, viewportBottom, UiTheme.SURFACE_SUNKEN);
+        graphics.centeredText(font, title, width / 2, (TITLE_BAR_HEIGHT - 9) / 2, UiTheme.TEXT);
 
         graphics.enableScissor(0, viewportTop, width, viewportBottom);
         Player player = minecraft == null ? null : minecraft.player;
@@ -350,20 +344,25 @@ public final class WaypointListScreen extends Screen {
             int trackH = viewportHeight();
             int thumbH = Math.max(18, trackH * trackH / Math.max(1, contentHeight));
             int thumbY = viewportTop + (trackH - thumbH) * scroll / maxScroll;
-            graphics.fill(trackX, viewportTop, trackX + 2, viewportTop + trackH, 0x553BA4FF);
-            graphics.fill(trackX, thumbY, trackX + 2, thumbY + thumbH, ACCENT_LIGHT);
+            graphics.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                    net.minecraft.resources.Identifier.withDefaultNamespace("widget/scroller_background"), trackX, viewportTop, 6, trackH);
+            graphics.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                    net.minecraft.resources.Identifier.withDefaultNamespace("widget/scroller"), trackX, thumbY, 6, thumbH);
         }
 
+        boolean inWorld = minecraft != null && minecraft.level != null;
+        graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                inWorld ? Screen.INWORLD_HEADER_SEPARATOR : Screen.HEADER_SEPARATOR, 0, viewportTop - 2, 0.0F, 0.0F, width, 2, 32, 2);
+        graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                inWorld ? Screen.INWORLD_FOOTER_SEPARATOR : Screen.FOOTER_SEPARATOR, 0, viewportBottom, 0.0F, 0.0F, width, 2, 32, 2);
         if (status != null) {
-            graphics.text(font, status, contentLeft, height - FOOTER_HEIGHT + 4, ACCENT_LIGHT);
+            graphics.text(font, status, contentLeft, height - FOOTER_HEIGHT + 4, UiTheme.TEXT_SECONDARY);
         }
         super.extractRenderState(graphics, mouseX, mouseY, tickDelta);
     }
 
     private void drawRow(GuiGraphicsExtractor graphics, Row row, int y, Player player) {
         WaypointManager.Waypoint waypoint = row.waypoint();
-        graphics.fill(contentLeft, y, contentLeft + contentWidth, y + ROW_HEIGHT - 2, 0x66102034);
-        graphics.fill(contentLeft, y, contentLeft + 2, y + ROW_HEIGHT - 2, ACCENT);
         int iconX = contentLeft + 8;
         int iconY = y + (ROW_HEIGHT - 2 - ICON_SIZE) / 2;
         boolean foreign = row.listed().source() != null;
@@ -382,7 +381,7 @@ public final class WaypointListScreen extends Screen {
         if (!tag.isEmpty()) {
             int nameWidth = font.width(fit(waypoint.name(), textRight - textX - tagWidth));
             graphics.text(font, tag, textX + nameWidth + 6, y + 5,
-                    hidden ? MUTED : foreign ? 0xFFFF8A5C : waypoint.temporary() ? 0xFFFFC94D : 0xFF55FF55);
+                    hidden ? MUTED : foreign ? 0xFFFF7F50 : waypoint.temporary() ? UiTheme.WARNING : UiTheme.SUCCESS);
         }
         String detail = (int) Math.floor(waypoint.x()) + ", " + (int) Math.floor(waypoint.y()) + ", "
                 + (int) Math.floor(waypoint.z());

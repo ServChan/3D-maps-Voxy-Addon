@@ -12,9 +12,6 @@ public class UiButton extends UiControl {
 
     public enum Align { CENTER, START }
 
-    private static final int PRIMARY_FILL = 0xFF2B6FB8;
-    private static final int PRIMARY_HOVER = 0xFF3586DA;
-    private static final int PRIMARY_PRESSED = 0xFF235C99;
 
     private final Variant variant;
     private final Consumer<UiButton> action;
@@ -80,18 +77,25 @@ public class UiButton extends UiControl {
     }
 
     @Override
+    protected boolean drawsOwnFocus() {
+        return variant != Variant.GHOST;
+    }
+
+    @Override
     protected void drawControl(GuiGraphicsExtractor g, Font font, int mouseX, int mouseY, double seconds) {
         int x = getX();
         int y = getY();
         int w = getWidth();
         int h = getHeight();
-        int background = background();
-        if ((background >>> 24) != 0) {
-            UiDraw.panel(g, x, y, w, h, background);
-        }
-        int border = border();
-        if ((border >>> 24) != 0) {
-            UiDraw.outline(g, x, y, w, h, border);
+        if (variant == Variant.GHOST) {
+            if (selected) {
+                g.fill(x, y, x + w, y + h, UiTheme.BORDER_STRONG);
+                g.fill(x + 1, y + 1, x + w - 1, y + h - 1, UiTheme.CONTROL_SELECTED);
+            } else if (active && hoverAmount > 0.0f) {
+                g.fill(x, y, x + w, y + h, UiTheme.scaleAlpha(UiTheme.ROW_HOVER, hoverAmount));
+            }
+        } else {
+            vanillaSprite(g, selected || isHoveredOrFocused());
         }
         int textColor = textColor();
         String label = showLabel ? getMessage().getString() : "";
@@ -110,42 +114,21 @@ public class UiButton extends UiControl {
             UiIcons.draw(g, icon, startX, iconY, textColor);
         }
         if (!fitted.isEmpty()) {
-            g.text(font, fitted, startX + iconWidth + gap, UiDraw.textY(font, y, h), textColor);
+            g.text(font, fitted, startX + iconWidth + gap, UiDraw.textY(font, y, h), textColor, true);
+            if (selected && variant != Variant.GHOST) {
+                int lineY = UiDraw.textY(font, y, h) + 9;
+                int lineX = startX + iconWidth + gap;
+                g.fill(lineX, lineY, lineX + font.width(fitted), lineY + 1, textColor);
+            }
         }
-    }
-
-    private int background() {
-        if (!active) {
-            return variant == Variant.GHOST ? 0 : UiTheme.CONTROL_DISABLED;
-        }
-        if (selected) {
-            return fill(UiTheme.CONTROL_SELECTED, UiTheme.CONTROL_SELECTED, UiTheme.CONTROL_PRESSED);
-        }
-        return switch (variant) {
-            case PRIMARY -> fill(PRIMARY_FILL, PRIMARY_HOVER, PRIMARY_PRESSED);
-            case SECONDARY -> fill(UiTheme.CONTROL, UiTheme.CONTROL_HOVER, UiTheme.CONTROL_PRESSED);
-            case GHOST -> fill(0x00000000, UiTheme.ROW_HOVER, UiTheme.CONTROL_PRESSED);
-            case DANGER -> fill(UiTheme.DANGER_FILL, UiTheme.DANGER_FILL_HOVER, UiTheme.DANGER_FILL);
-        };
-    }
-
-    private int border() {
-        if (!active) {
-            return 0;
-        }
-        if (selected) {
-            return UiTheme.ACCENT_BRIGHT;
-        }
-        return switch (variant) {
-            case SECONDARY -> UiTheme.mix(UiTheme.BORDER, UiTheme.BORDER_STRONG, hoverAmount);
-            case GHOST -> 0;
-            case PRIMARY, DANGER -> UiTheme.withAlpha(0xFFFFFF, Math.round(40 * hoverAmount));
-        };
     }
 
     private int textColor() {
         if (!active) {
             return UiTheme.TEXT_DISABLED;
+        }
+        if (variant == Variant.DANGER) {
+            return UiTheme.DANGER;
         }
         if (variant == Variant.GHOST && !selected) {
             return UiTheme.mix(UiTheme.TEXT_SECONDARY, UiTheme.TEXT, hoverAmount);

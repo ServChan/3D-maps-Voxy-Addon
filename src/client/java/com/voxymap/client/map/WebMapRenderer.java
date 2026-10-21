@@ -17,7 +17,7 @@ import java.util.List;
 public final class WebMapRenderer {
     static final int MAX_VISIBLE_TILES = 160;
     private static final int MAX_TILE_SPAN = 24;
-    private static final int LABEL_BACKGROUND = 0x99030914;
+    private static final int LABEL_BACKGROUND = 0x99000000;
     private static final int SPAWN_COLOR = 0xFFFFD84D;
     private static final int OUTLINE = 0xEE0A0A12;
 
@@ -224,7 +224,7 @@ public final class WebMapRenderer {
         int y = WebMapGeometry.screenCoordinate(centerY) - 5;
         g.fill(x, y, x + width, y + 11, LABEL_BACKGROUND);
         g.fill(x, y + 10, x + width, y + 11, accent);
-        g.text(minecraft.font, text, x + 4, y + 2, 0xFFE9F2FF);
+        g.text(minecraft.font, text, x + 4, y + 2, 0xFFFFFFFF);
     }
 
     private static void drawDashedLine(GuiGraphicsExtractor g, FlatMapRenderer.View view, double x1, double y1,

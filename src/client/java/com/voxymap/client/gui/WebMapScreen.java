@@ -33,13 +33,13 @@ public final class WebMapScreen extends Screen {
     private static final double MAX_PIXELS_PER_BLOCK = 8.0;
     private static final double ZOOM_STEP = 1.25;
     private static final double MAX_KEYBOARD_SPEED = 2048.0;
-    private static final int BACKGROUND = 0xFF0B1220;
-    private static final int HEADER_BACKGROUND = 0xF0030914;
-    private static final int FRAME = 0xFF3BA4FF;
-    private static final int SELECTED = 0xFF7DEBFF;
-    private static final int TEXT = 0xFFDFF8FF;
-    private static final int MUTED_TEXT = 0xFF9FB4C8;
-    private static final int WARNING_TEXT = 0xFFFFC266;
+    private static final int BACKGROUND = 0xFF101010;
+    private static final int HEADER_BACKGROUND = 0xE0101010;
+    private static final int FRAME = 0xFF808080;
+    private static final int SELECTED = 0xFFFFFFFF;
+    private static final int TEXT = 0xFFFFFFFF;
+    private static final int MUTED_TEXT = 0xFFA0A0A0;
+    private static final int WARNING_TEXT = 0xFFFFAA00;
 
     private final String preferredMapId;
     private final String preferredDimension;

@@ -5,15 +5,20 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 import java.util.function.DoubleConsumer;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 
 public class UiSlider extends AbstractSliderButton {
-    private static final int KNOB_WIDTH = 6;
-    private static final int VALUE_WIDTH = 40;
+    private static final int KNOB_WIDTH = 8;
+    private static final Identifier TRACK = Identifier.withDefaultNamespace("widget/slider");
+    private static final Identifier TRACK_HIGHLIGHTED = Identifier.withDefaultNamespace("widget/slider_highlighted");
+    private static final Identifier HANDLE = Identifier.withDefaultNamespace("widget/slider_handle");
+    private static final Identifier HANDLE_HIGHLIGHTED = Identifier.withDefaultNamespace("widget/slider_handle_highlighted");
 
     private final Component label;
     private final Supplier<Component> valueText;
@@ -63,21 +68,15 @@ public class UiSlider extends AbstractSliderButton {
         Font font = Minecraft.getInstance().font;
         int x = getX();
         int y = getY();
+        int w = getWidth();
         int h = getHeight();
-        int trackWidth = Math.max(16, getWidth() - VALUE_WIDTH - UiTheme.SPACE_S);
-        int trackY = y + h / 2 - 1;
         boolean hovered = active && isHoveredOrFocused();
-        UiDraw.panel(g, x, trackY - 1, trackWidth, 4, UiTheme.SURFACE_SUNKEN);
-        int filled = (int) Math.round((trackWidth - KNOB_WIDTH) * value);
-        g.fill(x + 1, trackY, x + filled + KNOB_WIDTH / 2, trackY + 2, active ? UiTheme.ACCENT : UiTheme.TEXT_DISABLED);
-        int knobX = x + filled;
-        UiDraw.panel(g, knobX, y + 3, KNOB_WIDTH, h - 6, !active ? UiTheme.TEXT_DISABLED
-                : hovered ? UiTheme.ACCENT_BRIGHT : UiTheme.TEXT);
-        if (active && isFocused() && Minecraft.getInstance().getLastInputType().isKeyboard()) {
-            UiDraw.focusRing(g, x, y, getWidth(), h);
-        }
-        g.text(font, valueText.get().getString(), x + trackWidth + UiTheme.SPACE_S + 2, UiDraw.textY(font, y, h),
-                active ? UiTheme.TEXT : UiTheme.TEXT_DISABLED);
+        g.blitSprite(RenderPipelines.GUI_TEXTURED, hovered ? TRACK_HIGHLIGHTED : TRACK, x, y, w, h);
+        int knobX = x + (int) Math.round((w - KNOB_WIDTH) * value);
+        g.blitSprite(RenderPipelines.GUI_TEXTURED, hovered ? HANDLE_HIGHLIGHTED : HANDLE, knobX, y, KNOB_WIDTH, h);
+        String text = UiDraw.ellipsize(font, valueText.get().getString(), w - 8);
+        g.text(font, text, x + w / 2 - font.width(text) / 2, UiDraw.textY(font, y, h),
+                active ? UiTheme.TEXT : UiTheme.TEXT_DISABLED, true);
     }
 
     public void refresh(double fraction) {

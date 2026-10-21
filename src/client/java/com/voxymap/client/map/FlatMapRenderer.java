@@ -138,7 +138,7 @@ public final class FlatMapRenderer {
             int nameWidth = minecraft.font.width(waypoint.name());
             int nameX = px - nameWidth / 2;
             int nameY = py + 7;
-            g.fill(nameX - 2, nameY - 1, nameX + nameWidth + 2, nameY + 8, 0x99030914);
+            g.fill(nameX - 2, nameY - 1, nameX + nameWidth + 2, nameY + 8, 0x99000000);
             g.text(minecraft.font, waypoint.name(), nameX, nameY, 0xFFFFFFFF);
         }
     }

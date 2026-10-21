@@ -30,8 +30,7 @@ final class CompassButton extends UiControl {
         int x = getX();
         int y = getY();
         int size = getWidth();
-        UiDraw.panel(g, x, y, size, size, UiTheme.mix(UiTheme.SURFACE, UiTheme.CONTROL_HOVER, hoverAmount));
-        UiDraw.outline(g, x, y, size, size, UiTheme.mix(UiTheme.BORDER, UiTheme.BORDER_STRONG, hoverAmount));
+        UiDraw.button(g, x, y, size, size, hoverAmount > 0.5, true);
         double centerX = x + size / 2.0;
         double centerY = y + size / 2.0;
         double angle = northAngle.getAsDouble();

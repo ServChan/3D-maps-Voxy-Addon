@@ -3,10 +3,14 @@ package com.voxymap.client.gui.ui;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 public class UiTextField extends EditBox {
     private static final int PADDING_X = 5;
+    private static final Identifier FIELD = Identifier.withDefaultNamespace("widget/text_field");
+    private static final Identifier FIELD_HIGHLIGHTED = Identifier.withDefaultNamespace("widget/text_field_highlighted");
 
     private final UiIcons.Icon icon;
     private int frameX;
@@ -64,9 +68,8 @@ public class UiTextField extends EditBox {
         }
         boolean focused = isFocused();
         boolean hovered = isMouseOver(mouseX, mouseY);
-        UiDraw.panel(g, frameX, frameY, frameWidth, frameHeight, UiTheme.SURFACE_SUNKEN);
-        UiDraw.outline(g, frameX, frameY, frameWidth, frameHeight,
-                focused ? UiTheme.ACCENT_BRIGHT : hovered ? UiTheme.BORDER_STRONG : UiTheme.BORDER);
+        g.blitSprite(RenderPipelines.GUI_TEXTURED, focused || hovered ? FIELD_HIGHLIGHTED : FIELD,
+                frameX, frameY, frameWidth, frameHeight);
         if (icon != null) {
             UiIcons.draw(g, icon, frameX + PADDING_X, frameY + (frameHeight - UiTheme.ICON_SIZE) / 2,
                     focused ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_MUTED);

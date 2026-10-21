@@ -104,10 +104,10 @@ public final class VoxyMapConfigScreen extends Screen implements SettingsModel.H
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float tickDelta) {
-        graphics.fill(0, 0, width, height, 0xF00D141F);
-        graphics.fill(0, 0, width, TITLE_BAR_HEIGHT, UiTheme.SURFACE_RAISED);
-        graphics.fill(0, TITLE_BAR_HEIGHT - 1, width, TITLE_BAR_HEIGHT, UiTheme.BORDER);
-        graphics.centeredText(font, title, width / 2, 10, UiTheme.TEXT);
+        boolean inWorld = minecraft != null && minecraft.level != null;
+        graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                inWorld ? Screen.INWORLD_HEADER_SEPARATOR : Screen.HEADER_SEPARATOR, 0, TITLE_BAR_HEIGHT - 2, 0.0F, 0.0F, width, 2, 32, 2);
+        graphics.centeredText(font, title, width / 2, (TITLE_BAR_HEIGHT - 9) / 2, UiTheme.TEXT);
         view.extract(graphics, mouseX, mouseY, tickDelta, getFocused());
         String noteKey = worldId != null ? "screen.voxymap.config.map_note" : "screen.voxymap.config.world_note";
         List<FormattedCharSequence> note = font.split(Component.translatable(noteKey), Math.max(80, width / 2 - 100));
@@ -115,7 +115,8 @@ public final class VoxyMapConfigScreen extends Screen implements SettingsModel.H
             graphics.text(font, note.getFirst(), SIDE_GUTTER, height - 22, UiTheme.TEXT_MUTED);
         }
         doneButton.extractRenderState(graphics, mouseX, mouseY, tickDelta);
-        UiDraw.divider(graphics, 0, height - FOOTER_HEIGHT, width);
+        graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                inWorld ? Screen.INWORLD_FOOTER_SEPARATOR : Screen.FOOTER_SEPARATOR, 0, height - FOOTER_HEIGHT, 0.0F, 0.0F, width, 2, 32, 2);
     }
 
     @Override

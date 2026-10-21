@@ -156,7 +156,10 @@ public final class SettingsView {
         if (selected == null || available.stream().noneMatch(section -> section.group() == selected)) {
             selected = available.isEmpty() ? null : available.getFirst().group();
         }
-        categoryWidth = width >= MIN_CATEGORY_LAYOUT_WIDTH ? Math.min(132, Math.max(96, width * 3 / 10)) : 0;
+        int categoryColumnHeight = available.size() * (UiTheme.CONTROL_HEIGHT + UiTheme.SPACE_XS);
+        int bodyHeight = height - PADDING * 3 - UiTheme.CONTROL_HEIGHT;
+        categoryWidth = width >= MIN_CATEGORY_LAYOUT_WIDTH && categoryColumnHeight <= bodyHeight
+                ? Math.min(132, Math.max(96, width * 3 / 10)) : 0;
 
         String resetLabel = Component.translatable("screen.voxymap.settings.reset_all").getString();
         int resetWidth = font.width(resetLabel) + UiTheme.ICON_SIZE + UiTheme.SPACE_XL + UiTheme.SPACE_M;
@@ -328,7 +331,7 @@ public final class SettingsView {
                 UiTextField field = new UiTextField(font, 0, 0, controlWidth, h, label, null);
                 field.setMaxLength(text.maxLength());
                 field.setValue(text.value().get());
-                field.setHint(Component.translatable("screen.voxymap.settings.sync.not_set")
+                field.setHint(Component.translatable(text.hintKey())
                         .withStyle(Style.EMPTY.withColor(UiTheme.TEXT_MUTED)));
                 if (text.secret()) {
                     field.addFormatter((value, offset) -> FormattedCharSequence.forward("*".repeat(value.length()), Style.EMPTY));
@@ -464,12 +467,12 @@ public final class SettingsView {
             }
         }
         placeRows();
-        UiDraw.panel(g, x, y, width, height, UiTheme.SURFACE);
-        UiDraw.outline(g, x, y, width, height, UiTheme.BORDER);
+        UiDraw.panel(g, x, y, width, height, UiTheme.SURFACE_SUNKEN);
         search.extractRenderState(g, mouseX, mouseY, delta);
         resetAll.extractRenderState(g, mouseX, mouseY, delta);
         if (categoryWidth > 0) {
-            g.fill(x + categoryWidth, viewportTop, x + categoryWidth + 1, y + height - PADDING, UiTheme.BORDER);
+            g.fill(x + categoryWidth, viewportTop, x + categoryWidth + 1, y + height - PADDING, UiTheme.SEPARATOR_DARK);
+            g.fill(x + categoryWidth + 1, viewportTop, x + categoryWidth + 2, y + height - PADDING, UiTheme.SEPARATOR_LIGHT);
             for (UiButton button : categoryButtons) {
                 button.extractRenderState(g, mouseX, mouseY, delta);
             }
@@ -486,11 +489,7 @@ public final class SettingsView {
             }
             if (row.kind == RowKind.HEADER) {
                 String title = Component.translatable(row.group.titleKey()).getString();
-                g.text(font, title, rowsX, rowY + 5, UiTheme.ACCENT_BRIGHT);
-                int lineX = rowsX + font.width(title) + UiTheme.SPACE_S + 2;
-                if (lineX < rowsX + rowsWidth) {
-                    g.fill(lineX, rowY + 9, rowsX + rowsWidth, rowY + 10, UiTheme.BORDER);
-                }
+                UiDraw.centeredText(g, font, title, rowsX + rowsWidth / 2, rowY + 6, rowsWidth, UiTheme.TEXT);
                 continue;
             }
             drawSettingRow(g, font, row, rowY, mouseX, mouseY, delta, focused);
@@ -510,13 +509,10 @@ public final class SettingsView {
         }
         boolean changed = row.reset != null && !row.reset.isDefault().getAsBoolean();
         int labelX = rowsX + UiTheme.SPACE_S;
-        if (changed) {
-            g.fill(rowsX, rowY + row.height / 2 - 2, rowsX + 3, rowY + row.height / 2 + 2, UiTheme.WARNING);
-            labelX += 2;
-        }
         int labelLimit = rowsX + rowsWidth - controlWidth - RESET_SIZE - UiTheme.SPACE_M * 2 - labelX;
-        UiDraw.text(g, font, Component.translatable(row.entry.labelKey()).getString(), labelX,
-                UiDraw.textY(font, rowY, row.height), labelLimit, UiTheme.TEXT);
+        String label = UiDraw.ellipsize(font, Component.translatable(row.entry.labelKey()).getString(), labelLimit);
+        g.text(font, changed ? Component.literal(label).withStyle(net.minecraft.ChatFormatting.ITALIC) : Component.literal(label),
+                labelX, UiDraw.textY(font, rowY, row.height), UiTheme.TEXT, true);
         if (row.widget != null) {
             row.widget.extractRenderState(g, mouseX, mouseY, delta);
         } else if (row.control instanceof SettingsModel.Status status) {
@@ -541,8 +537,10 @@ public final class SettingsView {
         int trackHeight = viewportHeight();
         int thumbHeight = Math.max(16, trackHeight * trackHeight / Math.max(1, contentHeight));
         int thumbY = viewportTop + (trackHeight - thumbHeight) * scroll / max;
-        g.fill(trackX, viewportTop, trackX + 2, viewportBottom, UiTheme.BORDER);
-        g.fill(trackX, thumbY, trackX + 2, thumbY + thumbHeight, UiTheme.ACCENT_BRIGHT);
+        g.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                net.minecraft.resources.Identifier.withDefaultNamespace("widget/scroller_background"), trackX, viewportTop, 6, trackHeight);
+        g.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                net.minecraft.resources.Identifier.withDefaultNamespace("widget/scroller"), trackX, thumbY, 6, thumbHeight);
     }
 
     private void drawDescription(GuiGraphicsExtractor g, Font font, Row focusedRow) {

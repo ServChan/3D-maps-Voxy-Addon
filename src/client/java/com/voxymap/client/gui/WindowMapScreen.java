@@ -41,11 +41,11 @@ public final class WindowMapScreen extends Screen {
     private static final double ZOOM_STEP = 1.25;
     private static final double MAX_PITCH_CONTROL = 1.285;
     private static final double MAX_KEYBOARD_SPEED = 640.0;
-    private static final int BACKGROUND = 0xF00B1220;
-    private static final int FRAME = 0xFF3BA4FF;
-    private static final int TEXT = 0xFFDFF8FF;
-    private static final int MUTED_TEXT = 0xFF9FB4C8;
-    private static final int WARNING_TEXT = 0xFFFFC266;
+    private static final int BACKGROUND = 0xE0101010;
+    private static final int FRAME = 0xFF808080;
+    private static final int TEXT = 0xFFFFFFFF;
+    private static final int MUTED_TEXT = 0xFFA0A0A0;
+    private static final int WARNING_TEXT = 0xFFFFAA00;
 
     private static double pixelsPerBlock = 1.0;
     private static double blocksPerPixel = 4.0;
@@ -224,7 +224,7 @@ public final class WindowMapScreen extends Screen {
         int nameWidth = font.width(name);
         int nameX = x - nameWidth / 2;
         int nameY = y - 14;
-        g.fill(nameX - 2, nameY - 1, nameX + nameWidth + 2, nameY + 8, 0x99030914);
+        g.fill(nameX - 2, nameY - 1, nameX + nameWidth + 2, nameY + 8, 0x99000000);
         g.text(font, name, nameX, nameY, 0xFFFFFFFF);
     }
 
