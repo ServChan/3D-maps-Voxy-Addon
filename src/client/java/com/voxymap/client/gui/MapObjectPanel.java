@@ -141,7 +141,7 @@ final class MapObjectPanel {
             }
             g.fill(panelX + 8, y + 3, panelX + 10, y + ROW_H - 5, entry.color);
             UiIcons.draw(g, kindIcon(entry.kind), panelX + 14, y + 8, entry.hidden ? UiTheme.TEXT_DISABLED : entry.color);
-            int textRight = WIDTH - 54;
+            int textRight = entry.id.equals(followedId) ? WIDTH - 66 : WIDTH - 54;
             Component name = Component.literal(UiDraw.ellipsize(font, entry.name, textRight));
             if (entry.hidden) {
                 name = name.copy().withStyle(net.minecraft.ChatFormatting.STRIKETHROUGH);
