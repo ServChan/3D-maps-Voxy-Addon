@@ -1,7 +1,7 @@
 # VoxyMap runtime regression checklist
 
 Run this checklist against the exact JAR intended for release in a Minecraft 26.3
-profile (the Everything Voxy profile was set up for 26.2; switch its game version first). A successful Gradle build is required first, but does not replace these checks.
+profile. A successful Gradle build is required first, but does not replace these checks.
 
 ## Startup and compatibility
 

@@ -8,6 +8,8 @@
 
 VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://github.com/raben12paste/3D-maps-Voxy-Addon). It opens a full-screen 3D map backed by Voxy LOD data for Minecraft 26.3.
 
+**Руководство / User guide:** [Русский](docs/USER_GUIDE_RU.md) · [English](docs/USER_GUIDE_EN.md)
+
 ## Features
 
 ### Full-screen map
@@ -31,6 +33,11 @@ VoxyMap LTS is a maintained client-side fork of [3D Maps Voxy Addon](https://git
 - Optional singleplayer pause and adjustable camera speed.
 - Optional handoff to Xaero's World Map with a return button.
 - With Litematica Plus LTS installed, schematic placements appear on the map as outlined boxes with their name and build progress, in the Objects panel (filter Schematics) and as a footprint on the minimap. Click a label to select the placement, click it again or press Edit to open its editor; Center flies the map camera to it. The Schematics (Litematica Plus) layer setting hides all of it, including the ghost blocks Litematica Plus draws on the map. Litematica Plus also reads the blocks Voxy has stored through this mod to verify schematic parts whose chunks are not loaded.
+
+### Routes
+
+- A route to a waypoint or any point: right click on the map → "Route here", the "Route" button of a waypoint, or `/voxymap route <x> <z>` / `/voxymap route waypoint <name>`.
+- Walking, swimming, boat and elytra legs; a card at the top of the screen shows the mode, distance, travel time and the next step, and the line shows on the big map and the minimap. The route is re-planned when you leave it and disappears on arrival. Nothing is automated.
 
 ### Waypoints
 
@@ -234,6 +241,11 @@ Minecraft 26.3, Java 25, Fabric Loader 0.19.5 или новее, Fabric API и V
 | `F2` | Скриншот карты без интерфейса |
 
 Во время обычной игры: удерживайте `Z`, чтобы увеличить миникарту (клавиша «Увеличить миникарту (удерживать)» в настройках управления), `=` и `-` меняют масштаб миникарты, `N` ставит метку на месте игрока, `U` открывает список меток, а клавиша «Временная метка туда, куда смотрю» (по умолчанию не назначена) ставит временную метку, которая исчезает, когда до неё дошёл. Головы игроков и мобов на миникарте по умолчанию видны всегда; в настройках их можно показывать только при зажатом `Tab` или заменить точками.
+
+### Маршруты
+
+- Маршрут до метки или любой точки: ПКМ на карте → «Проложить маршрут сюда», кнопка «Маршрут» у метки или `/voxymap route <x> <z>` / `/voxymap route waypoint <название>`.
+- Учитывает ходьбу, плавание, лодку и элитры; карточка вверху экрана показывает способ, расстояние, время и следующий шаг, линия видна на большой карте и на миникарте. Маршрут перестраивается, если вы сошли с пути, и исчезает по прибытии. Двигаться мод не заставляет.
 
 ### Метки
 
